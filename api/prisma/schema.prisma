@@ -1,0 +1,450 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Todo {
+  id        String    @id @default(uuid())
+  text      String
+  done      Boolean   @default(false)
+  doneAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model CalendarEvent {
+  id        String   @id @default(uuid())
+  title     String
+  when      DateTime
+  createdAt DateTime @default(now())
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  title     String?
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model ShoppingItem {
+  id        String    @id @default(uuid())
+  text      String
+  bought    Boolean   @default(false)
+  boughtAt  DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model PendingAction {
+  id        String   @id @default(uuid())
+  sessionId String   @unique
+  name      String
+  argsJson  String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model JarvisLog {
+  id         String   @id @default(uuid())
+  sessionId  String?
+  userText   String
+  modelRaw   String
+  toolName   String?
+  toolArgs   String?
+  result     String?
+  simulation Boolean
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+model GoogleOAuthToken {
+  id           String    @id @default(uuid())
+  sessionId    String    @unique
+  refreshToken String
+  accessToken  String?
+  tokenType    String?
+  scope        String?
+  expiryDate   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model JarvisHumanProfile {
+  sessionId     String   @id
+  speechMode    String
+  verbosity     String
+  preferredName String?
+  turnCount     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model JarvisMemoryFact {
+  id         String   @id @default(uuid())
+  sessionId  String
+  layer      String
+  key        String
+  label      String
+  value      String
+  confidence Float    @default(0.7)
+  source     String   @default("user")
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([sessionId, layer, key])
+  @@index([sessionId, layer, updatedAt])
+}
+
+model JarvisSessionSummary {
+  sessionId      String   @id
+  summary        String
+  highlightsJson String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model JarvisMission {
+  id             String   @id @default(uuid())
+  sessionId      String
+  objective      String
+  objectiveKey   String
+  horizon        String?
+  status         String   @default("active")
+  summary        String
+  nextStep       String?
+  planText       String
+  keySignalsJson String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([sessionId, status, updatedAt])
+  @@index([sessionId, objectiveKey, status])
+}
+
+model JarvisActionEvent {
+  id              String    @id @default(uuid())
+  sessionId       String
+  pendingActionId String?   @unique
+  source          String    @default("chat")
+  toolName        String
+  summary         String
+  argsJson        String?
+  planner         String?
+  confidence      String?
+  risk            String?
+  status          String
+  resultPreview   String?
+  errorMessage    String?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([sessionId, createdAt])
+  @@index([sessionId, status, updatedAt])
+}
+
+model JarvisWorkflowMemory {
+  id                String   @id @default(uuid())
+  sessionId         String
+  triggerToolName   String
+  triggerSummary    String
+  followUpToolName  String
+  followUpPrompt    String
+  followUpPromptKey String
+  usageCount        Int      @default(1)
+  lastUsedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([sessionId, triggerToolName, followUpPromptKey])
+  @@index([sessionId, triggerToolName, updatedAt])
+  @@index([sessionId, usageCount, updatedAt])
+}
+
+model JarvisGoal {
+  id           String   @id @default(uuid())
+  sessionId    String
+  title        String
+  description  String?
+  priority     Int      @default(0)
+  targetDate   DateTime?
+  status       String   @default("active")
+  parentGoalId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([sessionId, status, updatedAt])
+  @@index([sessionId, parentGoalId])
+}
+
+model JarvisTaskDependency {
+  id              String   @id @default(uuid())
+  sessionId       String
+  sourceTaskId    String
+  targetTaskId    String
+  dependencyType  String   @default("blocks")
+  estimatedDays   Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sessionId, sourceTaskId, targetTaskId])
+  @@index([sessionId, sourceTaskId])
+  @@index([sessionId, targetTaskId])
+}
+
+model JarvisResourceAllocation {
+  id              String   @id @default(uuid())
+  sessionId       String
+  resourceType    String
+  resourceName    String
+  allocatedHours  Float
+  usedHours       Float    @default(0)
+  allocationDate  DateTime
+  expiryDate      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId, resourceType, allocationDate])
+}
+
+model JarvisPredictiveMetric {
+  id              String   @id @default(uuid())
+  sessionId       String
+  metricType      String
+  historicalData  String
+  forecast        String
+  accuracy        Float    @default(0.0)
+  forecastedAt    DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId, metricType, forecastedAt])
+}
+
+model JarvisSchedulingSuggestion {
+  id              String   @id @default(uuid())
+  sessionId       String
+  taskId          String?
+  suggestedTime   DateTime
+  rationale       String
+  priority        Int      @default(0)
+  applied         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId, suggestedTime])
+  @@index([sessionId, applied])
+}
+
+model JarvisContextualHelp {
+  id              String   @id @default(uuid())
+  sessionId       String
+  context         String
+  contentType     String
+  content         String
+  relevanceScore  Float    @default(0.0)
+  viewedCount     Int      @default(0)
+  helpful         Boolean?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId, context, createdAt])
+  @@index([sessionId, viewedCount])
+}
+
+model JarvisKnowledgeEntry {
+  id          String   @id @default(uuid())
+  sessionId   String
+  title       String
+  content     String
+  tags        String   @default("[]")
+  category    String   @default("general")
+  useCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId, category, updatedAt])
+  @@index([sessionId, useCount])
+}
+
+model JarvisTimeInsight {
+  id              String   @id @default(uuid())
+  sessionId       String
+  metricName      String
+  value           Float
+  unit            String   @default("minutes")
+  period          String
+  periodStart     DateTime
+  periodEnd       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId, metricName, periodStart])
+  @@index([sessionId, period])
+}
+
+model JarvisDelegation {
+  id              String   @id @default(uuid())
+  sessionId       String
+  taskDescription String
+  delegateTo      String
+  reason          String?
+  priority        String   @default("normal")
+  status          String   @default("pending")
+  dueDate         DateTime?
+  resolvedAt      DateTime?
+  resolutionNote  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId, status, createdAt])
+  @@index([sessionId, delegateTo])
+}
+
+model Reminder {
+  id           String    @id @default(uuid())
+  sessionId    String
+  text         String
+  triggerAt    DateTime
+  done         Boolean   @default(false)
+  doneAt       DateTime?
+  snoozedUntil DateTime?
+  recurring    Boolean   @default(false)
+  rrule        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([sessionId, done, triggerAt])
+}
+
+model Habit {
+  id        String     @id @default(uuid())
+  sessionId String
+  name      String
+  emoji     String?
+  frequency String     @default("daily")
+  archived  Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  logs      HabitLog[]
+
+  @@index([sessionId, archived])
+}
+
+model HabitLog {
+  id        String   @id @default(uuid())
+  habitId   String
+  date      String
+  note      String?
+  createdAt DateTime @default(now())
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, date])
+  @@index([habitId, date])
+}
+
+model Contact {
+  id                String    @id @default(uuid())
+  sessionId         String
+  name              String
+  email             String?
+  phone             String?
+  company           String?
+  role              String?
+  notes             String?
+  tags              String    @default("[]")
+  lastInteractionAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([sessionId, name])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  sessionId   String
+  amount      Float
+  currency    String   @default("EUR")
+  category    String
+  description String
+  date        String
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId, date])
+  @@index([sessionId, category])
+}
+
+model Budget {
+  id        String   @id @default(uuid())
+  sessionId String
+  category  String
+  limit     Float
+  period    String   @default("monthly")
+  currency  String   @default("EUR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, category, period])
+}
+
+model InboxZeroSession {
+  sessionId String   @id
+  status    String   @default("active")
+  step      String   @default("urgent")
+  query     String   @default("in:inbox is:unread")
+  startedAt DateTime @default(now())
+  scannedAt DateTime?
+  updatedAt DateTime @updatedAt
+
+  items   InboxZeroItem[]
+  actions InboxZeroAction[]
+
+  @@index([status, updatedAt])
+}
+
+model InboxZeroItem {
+  id           String   @id @default(uuid())
+  sessionId    String
+  messageId    String
+  threadId     String
+  subject      String
+  from         String
+  to           String
+  date         DateTime
+  snippet      String
+  labelsJson   String   @default("[]")
+  gmailCategory String?
+  unread       Boolean
+  category     String
+  priority     Int      @default(0)
+  reason       String?
+  suggestedJson String?
+  status       String   @default("pending")
+  lastActionAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  session InboxZeroSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+
+  @@unique([sessionId, messageId])
+  @@index([sessionId, category, status, updatedAt])
+}
+
+model InboxZeroAction {
+  id          String   @id @default(uuid())
+  sessionId   String
+  messageId   String?
+  actionType  String
+  payloadJson String?
+  status      String   @default("completed")
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  session InboxZeroSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}

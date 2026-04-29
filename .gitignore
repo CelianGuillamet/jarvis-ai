@@ -1,0 +1,32 @@
+# OS files
+.DS_Store
+
+# Editors and local tooling
+.vscode/
+.idea/
+.claude/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+**/node_modules/
+
+# Build and cache outputs
+**/dist/
+**/build/
+**/coverage/
+**/.cache/
+**/.temp/
+**/.tmp/
+**/.vite/

@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#09090b" />
+    <title>Jarvis</title>
+    <link rel="stylesheet" href="./jarvis-dev.css" />
+    <script src="./jarvis-dev.js" defer></script>
+  </head>
+  <body>
+    <div class="app" id="deck" aria-busy="false">
+
+      <!-- ═══ TOPBAR ═══ -->
+      <header class="topbar">
+        <div class="topbar-brand">
+          <div class="brand-mark">J</div>
+          <span class="brand-name">Jarvis</span>
+        </div>
+
+        <div class="topbar-divider"></div>
+
+        <div class="topbar-status">
+          <span class="dot" id="heroDot"></span>
+          <span class="topbar-state" id="heroState">Initialisation</span>
+        </div>
+
+        <div class="topbar-meta">
+          <span class="meta-pill">
+            <span class="meta-label">Session</span>
+            <strong id="heroSession">default</strong>
+          </span>
+          <span class="meta-pill">
+            <span class="meta-label">Fuseau</span>
+            <strong id="heroTimezone">Europe/Paris</strong>
+          </span>
+          <span class="meta-pill clock">
+            <span id="liveClock">--:--:--</span>
+          </span>
+          <span class="meta-pill">
+            <span class="meta-label">Attention</span>
+            <strong id="heroAttention">-</strong>
+          </span>
+          <span class="meta-pill">
+            <span class="meta-label">LLM</span>
+            <strong id="heroLlm">-</strong>
+          </span>
+          <span hidden id="heroWeb"></span>
+          <span hidden id="heroSync"></span>
+        </div>
+
+        <div class="topbar-toolbar">
+          <span class="sync-label" id="toolbarStatus">Synchro indisponible</span>
+          <button type="button" id="refreshDeck" class="btn-sm btn-ghost">↻ Sync</button>
+          <button type="button" id="hydrateHistory" class="btn-sm btn-ghost">Historique</button>
+          <button type="button" id="clearLocalChat" class="btn-sm btn-ghost">Effacer</button>
+        </div>
+      </header>
+
+      <!-- ═══ WORKSPACE ═══ -->
+      <div class="workspace">
+
+        <!-- ─── CHAT ─── -->
+        <main class="chat-zone">
+
+          <!-- Quick chips -->
+          <div class="chips-strip" id="quickChips" aria-label="Raccourcis rapides">
+            <button type="button" data-quick="Fais mon briefing du jour">☀ Briefing</button>
+            <button type="button" data-quick="Donne-moi mes priorités du jour">→ Priorités</button>
+            <button type="button" data-prefill="Prépare un plan de mission pour ">⊹ Mission</button>
+            <button type="button" data-quick="Montre-moi mon agenda d'aujourd'hui">◎ Agenda</button>
+            <button type="button" data-quick="Résume mes emails non lus">✉ Emails</button>
+            <button type="button" data-quick="Liste mes todos">□ Todos</button>
+            <button type="button" data-quick="Liste mes objectifs actifs">◈ Objectifs</button>
+            <button type="button" data-quick="Détecte tous les conflits et doublons">⚑ Conflits</button>
+            <button type="button" data-quick="Trouve mon prochain créneau libre d'une heure">⊞ Créneau</button>
+            <button type="button" data-prefill="Recherche dans toutes mes données: ">⌕ Recherche</button>
+            <button type="button" data-quick="Montre-moi l'historique des actions">≡ Audit</button>
+          </div>
+
+          <!-- Messages -->
+          <div
+            id="messages"
+            class="messages"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions text"
+          ></div>
+
+          <!-- Typing indicator -->
+          <div id="typingIndicator" class="typing-row" hidden>
+            <div class="typing-bubble">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+            <span class="typing-label">Jarvis analyse la demande…</span>
+          </div>
+
+          <!-- Composer -->
+          <div class="composer">
+            <div class="composer-context">
+              <span>Session <strong id="composerSession">default</strong></span>
+              <span class="sep">·</span>
+              <span>API <span id="composerApi">local</span></span>
+            </div>
+            <div class="composer-box">
+              <label class="sr-only" for="prompt">Message</label>
+              <textarea
+                id="prompt"
+                placeholder="Dis quelque chose à Jarvis… Ex: planifie une démo demain à 15h"
+              ></textarea>
+              <div class="composer-bar">
+                <div class="composer-bar-left">
+                  <button type="button" id="micToggle" class="btn-icon button-ghost" title="Microphone">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    <span class="btn-label">Micro</span>
+                  </button>
+                  <button type="button" id="speakNow" class="btn-icon button-ghost" title="Lire la réponse">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                    <span class="btn-label">Lire</span>
+                  </button>
+                </div>
+                <div class="composer-bar-right">
+                  <label class="toggle-chip">
+                    <input id="speakEnabled" type="checkbox" />
+                    <span>Voix</span>
+                  </label>
+                  <label class="toggle-chip">
+                    <input id="autoSendVoice" type="checkbox" />
+                    <span>Auto-envoi</span>
+                  </label>
+                  <button type="button" id="send" class="btn-send">
+                    Envoyer
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="status" class="status-line">Console prête.</div>
+          </div>
+        </main>
+
+        <!-- ─── SIDEBAR ─── -->
+        <aside class="sidebar" aria-label="Panneau de contrôle">
+
+          <!-- SNAPSHOT METRICS -->
+          <section class="s-card" id="cardSnapshot">
+            <div class="s-head">
+              <span class="s-icon-text">◈</span>
+              <span class="s-title">Situation</span>
+            </div>
+            <div class="metrics-grid">
+              <div class="metric-cell">
+                <div class="metric-val" id="metricTodos">—</div>
+                <div class="metric-lbl">Todos</div>
+                <div class="metric-sub" id="metricTodosSub"></div>
+              </div>
+              <div class="metric-cell">
+                <div class="metric-val" id="metricEmails">—</div>
+                <div class="metric-lbl">Emails</div>
+                <div class="metric-sub" id="metricEmailsSub"></div>
+              </div>
+              <div class="metric-cell">
+                <div class="metric-val" id="metricEvents">—</div>
+                <div class="metric-lbl">Agenda</div>
+                <div class="metric-sub" id="metricEventsSub"></div>
+              </div>
+              <div class="metric-cell">
+                <div class="metric-val" id="metricNotes">—</div>
+                <div class="metric-lbl">Notes</div>
+                <div class="metric-sub" id="metricNotesSub"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- FOCUS -->
+          <section class="s-card card" id="cardFocus">
+            <div class="s-head collapsible card-head" data-target="cardFocus">
+              <span class="s-icon-text">⊙</span>
+              <span class="s-title">Points chauds</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div class="focus-row">
+                <span class="focus-lbl">Prochain RDV</span>
+                <p id="nextEvent" class="focus-val">Aucun signal.</p>
+              </div>
+              <div class="focus-row">
+                <span class="focus-lbl">Email prioritaire</span>
+                <p id="topEmail" class="focus-val">Aucun email prioritaire.</p>
+              </div>
+              <div class="focus-row">
+                <span class="focus-lbl">Mission active</span>
+                <p id="activeMission" class="focus-val">Aucune mission active.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- VALIDATION -->
+          <section class="s-card card" id="cardValidation">
+            <div class="s-head collapsible card-head" data-target="cardValidation">
+              <span class="s-icon-text accent-warn">!</span>
+              <span class="s-title">Validation</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="pendingBox" class="pending-box">
+                <p>Aucune confirmation requise.</p>
+              </div>
+              <div id="pendingActions" class="pending-actions"></div>
+            </div>
+          </section>
+
+          <!-- CHOIX -->
+          <section class="s-card card" id="cardChoices">
+            <div class="s-head collapsible card-head" data-target="cardChoices">
+              <span class="s-icon-text">↓</span>
+              <span class="s-title">Choix rapides</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="choices" class="choices"></div>
+              <p class="s-empty" id="choicesEmpty">Aucun choix en attente.</p>
+            </div>
+          </section>
+
+          <!-- RADAR -->
+          <section class="s-card card" id="cardRadar">
+            <div class="s-head collapsible card-head" data-target="cardRadar">
+              <span class="s-icon-text">◎</span>
+              <span class="s-title">Radar proactif</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="proactiveList" class="suggestion-list"></div>
+              <p class="s-empty" id="proactiveEmpty">Aucun signal proactif.</p>
+            </div>
+          </section>
+
+          <!-- QUICK ACTIONS -->
+          <section class="s-card card" id="cardActions">
+            <div class="s-head collapsible card-head" data-target="cardActions">
+              <span class="s-icon-text">⚡</span>
+              <span class="s-title">Actions rapides</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="quickActions" class="action-grid"></div>
+              <p class="s-empty" id="quickActionsEmpty">Aucune action suggérée.</p>
+            </div>
+          </section>
+
+          <!-- OBJECTIFS -->
+          <section class="s-card card" id="cardObjectifs">
+            <div class="s-head collapsible card-head" data-target="cardObjectifs">
+              <span class="s-icon-text accent">◈</span>
+              <span class="s-title">Objectifs</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="goalsList" class="goals-list"></div>
+              <p class="s-empty" id="goalsEmpty">Aucun objectif actif.</p>
+              <div class="s-actions">
+                <button type="button" data-quick="Liste mes objectifs actifs avec leur hiérarchie">Afficher</button>
+                <button type="button" data-prefill="Crée un objectif: ">+ Nouveau</button>
+                <button type="button" data-prefill="Décompose l'objectif ">Décomposer</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- CONFLITS -->
+          <section class="s-card card" id="cardConflits">
+            <div class="s-head collapsible card-head" data-target="cardConflits">
+              <span class="s-icon-text accent-danger">⚑</span>
+              <span class="s-title">Conflits & Santé</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="conflictsList" class="conflicts-list"></div>
+              <p class="s-empty" id="conflictsEmpty">Lance une analyse pour détecter les conflits.</p>
+              <div class="s-actions">
+                <button type="button" data-quick="Détecte tous les conflits, doublons et contradictions dans ma session">Analyser</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- PLANIFICATION -->
+          <section class="s-card card" id="cardPlanification">
+            <div class="s-head collapsible card-head" data-target="cardPlanification">
+              <span class="s-icon-text">⊞</span>
+              <span class="s-title">Planification</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="scheduleList" class="schedule-list"></div>
+              <p class="s-empty" id="scheduleEmpty">Aucune suggestion active.</p>
+              <div class="s-actions">
+                <button type="button" data-quick="Trouve mon prochain créneau libre d'une heure">Prochain créneau</button>
+                <button type="button" data-quick="Liste mes suggestions de planification non appliquées">Suggestions</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- RESSOURCES -->
+          <section class="s-card card" id="cardRessources">
+            <div class="s-head collapsible card-head" data-target="cardRessources">
+              <span class="s-icon-text">▦</span>
+              <span class="s-title">Ressources</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="resourcesList" class="resources-list"></div>
+              <p class="s-empty" id="resourcesEmpty">Aucune allocation active.</p>
+              <div class="s-actions">
+                <button type="button" data-quick="Affiche la capacité et l'utilisation de mes ressources">Capacité</button>
+                <button type="button" data-quick="Suggère des optimisations pour mes ressources">Optimiser</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- DÉPENDANCES -->
+          <section class="s-card card" id="cardDependances">
+            <div class="s-head collapsible card-head" data-target="cardDependances">
+              <span class="s-icon-text">→</span>
+              <span class="s-title">Dépendances</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <p class="s-empty" id="depsEmpty">Utilise le chat pour gérer les dépendances entre tâches.</p>
+              <div class="s-actions">
+                <button type="button" data-prefill="Ajoute une dépendance entre ">Ajouter</button>
+                <button type="button" data-prefill="Liste les dépendances de la tâche ">Voir</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- MÉMOIRE -->
+          <section class="s-card card" id="cardMemoire">
+            <div class="s-head collapsible card-head" data-target="cardMemoire">
+              <span class="s-icon-text">≋</span>
+              <span class="s-title">Mémoire active</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="memoryList" class="memory-list"></div>
+              <p class="s-empty" id="memoryEmpty">Aucune mémoire récente.</p>
+            </div>
+          </section>
+
+          <!-- WORKFLOWS -->
+          <section class="s-card card" id="cardRoutines">
+            <div class="s-head collapsible card-head" data-target="cardRoutines">
+              <span class="s-icon-text">⟳</span>
+              <span class="s-title">Workflows appris</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="workflowList" class="workflow-list"></div>
+              <p class="s-empty" id="workflowEmpty">Aucune routine observable.</p>
+            </div>
+          </section>
+
+          <!-- AUDIT -->
+          <section class="s-card card" id="cardAudit">
+            <div class="s-head collapsible card-head" data-target="cardAudit">
+              <span class="s-icon-text">≡</span>
+              <span class="s-title">Journal d'audit</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="auditFeed" class="audit-feed"></div>
+              <p class="s-empty" id="auditEmpty">Aucun événement structuré.</p>
+            </div>
+          </section>
+
+          <!-- ACTIVITÉ -->
+          <section class="s-card card" id="cardActivite">
+            <div class="s-head collapsible card-head" data-target="cardActivite">
+              <span class="s-icon-text">◷</span>
+              <span class="s-title">Activité récente</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="timeline" class="timeline"></div>
+              <p class="s-empty" id="timelineEmpty">Aucune activité récupérée.</p>
+            </div>
+          </section>
+
+          <!-- CONFIG -->
+          <section class="s-card card" id="cardConfig">
+            <div class="s-head collapsible card-head" data-target="cardConfig">
+              <span class="s-icon-text">⚙</span>
+              <span class="s-title">Configuration</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div class="config-grid">
+                <div class="field full">
+                  <label for="apiBase">API Base URL</label>
+                  <input id="apiBase" />
+                </div>
+                <div class="field">
+                  <label for="sessionId">Session ID</label>
+                  <input id="sessionId" placeholder="default" />
+                </div>
+                <div class="field">
+                  <label for="voiceLang">Langue voix</label>
+                  <input id="voiceLang" value="fr-FR" />
+                </div>
+              </div>
+              <div class="s-actions">
+                <button type="button" id="saveSession" class="btn-primary">Sauvegarder</button>
+                <button type="button" id="openGoogleAuth" class="btn-ghost">Connecter Google</button>
+              </div>
+              <p class="s-note" id="configSummary">Session locale mémorisée dans le navigateur.</p>
+              <div class="badges" id="integrationBadges"></div>
+              <p class="s-note" id="profileSummary">Chargement…</p>
+            </div>
+          </section>
+
+          <!-- DEBUG META -->
+          <section class="s-card card" id="cardMeta">
+            <div class="s-head collapsible card-head" data-target="cardMeta">
+              <span class="s-icon-text">{ }</span>
+              <span class="s-title">Debug payload</span>
+              <button type="button" class="collapse-btn" aria-label="Replier">▾</button>
+            </div>
+            <div class="card-body s-body">
+              <div id="meta" class="meta-box">—</div>
+            </div>
+          </section>
+
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>
