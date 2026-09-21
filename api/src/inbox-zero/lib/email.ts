@@ -23,4 +23,3 @@ export function compactText(value: string, maxChars: number) {
   if (clean.length <= maxChars) return clean;
   return `${clean.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }
-

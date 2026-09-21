@@ -29,7 +29,6 @@ import {
   GMAIL_CATEGORY_LABELS_FR,
   getGmailCategoryFromLabels,
   getGmailCategoryLabel,
-  getGmailCategoryPriority,
 } from '../../gmail/gmail-category';
 import { JarvisGoalService } from '../services/jarvis-goal.service';
 import { ConflictDetectionService } from '../services/conflict-detection.service';
@@ -56,13 +55,13 @@ export type ToolCall =
   | { type: 'tool'; name: 'todo.list'; args: { show?: 'open' | 'all' } }
   | { type: 'tool'; name: 'todo.done'; args: { query: string } }
   | { type: 'tool'; name: 'todo.reopen'; args: { query: string } }
-  | { type: 'tool'; name: 'todo.done_all'; args: {} }
+  | { type: 'tool'; name: 'todo.done_all'; args: Record<string, never> }
   | { type: 'tool'; name: 'todo.update'; args: { query: string; text: string } }
   | { type: 'tool'; name: 'todo.delete'; args: { query: string } }
   | { type: 'tool'; name: 'todo.bulk_done'; args: { refs: number[] } }
   | { type: 'tool'; name: 'todo.bulk_delete'; args: { refs: number[] } }
-  | { type: 'tool'; name: 'todo.clear_done'; args: {} }
-  | { type: 'tool'; name: 'todo.clear_all'; args: {} }
+  | { type: 'tool'; name: 'todo.clear_done'; args: Record<string, never> }
+  | { type: 'tool'; name: 'todo.clear_all'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'calendar.create';
@@ -117,7 +116,7 @@ export type ToolCall =
   | { type: 'tool'; name: 'shopping.list'; args: { show?: 'open' | 'all' } }
   | { type: 'tool'; name: 'shopping.bought'; args: { query: string } }
   | { type: 'tool'; name: 'shopping.unbought'; args: { query: string } }
-  | { type: 'tool'; name: 'shopping.bought_all'; args: {} }
+  | { type: 'tool'; name: 'shopping.bought_all'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'shopping.update';
@@ -126,8 +125,8 @@ export type ToolCall =
   | { type: 'tool'; name: 'shopping.delete'; args: { query: string } }
   | { type: 'tool'; name: 'shopping.bulk_bought'; args: { refs: number[] } }
   | { type: 'tool'; name: 'shopping.bulk_delete'; args: { refs: number[] } }
-  | { type: 'tool'; name: 'shopping.clear_bought'; args: {} }
-  | { type: 'tool'; name: 'shopping.clear_all'; args: {} }
+  | { type: 'tool'; name: 'shopping.clear_bought'; args: Record<string, never> }
+  | { type: 'tool'; name: 'shopping.clear_all'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'weather.forecast';
@@ -212,8 +211,8 @@ export type ToolCall =
       name: 'gmail.delete';
       args: { ref?: number; query?: string };
     }
-  | { type: 'tool'; name: 'undo.last_action'; args: {} }
-  | { type: 'tool'; name: 'daily.briefing'; args: {} }
+  | { type: 'tool'; name: 'undo.last_action'; args: Record<string, never> }
+  | { type: 'tool'; name: 'daily.briefing'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'action.history';
@@ -285,7 +284,7 @@ export type ToolCall =
     }
   | { type: 'tool'; name: 'goal.done'; args: { goalId: string } }
   // ===== CONFLICTS =====
-  | { type: 'tool'; name: 'conflict.detect'; args: {} }
+  | { type: 'tool'; name: 'conflict.detect'; args: Record<string, never> }
   // ===== DEPENDENCIES =====
   | {
       type: 'tool';
@@ -312,7 +311,7 @@ export type ToolCall =
       };
     }
   | { type: 'tool'; name: 'resource.capacity'; args: { resourceType?: string } }
-  | { type: 'tool'; name: 'resource.optimize'; args: {} }
+  | { type: 'tool'; name: 'resource.optimize'; args: Record<string, never> }
   // ===== ANALYTICS =====
   | {
       type: 'tool';
@@ -460,7 +459,7 @@ export type ToolCall =
       name: 'habit.log';
       args: { ref: number; date?: string; note?: string };
     }
-  | { type: 'tool'; name: 'habit.streak'; args: {} }
+  | { type: 'tool'; name: 'habit.streak'; args: Record<string, never> }
   | { type: 'tool'; name: 'habit.archive'; args: { ref: number } }
   // ===== CONTACTS =====
   | {
@@ -1495,9 +1494,8 @@ export async function previewTool(
               .map((ref) => list[ref - 1])
               .filter((item): item is GmailListItem => !!item)
           : list;
-        const filtered = (unreadOnly
-          ? picked.filter((item) => item.unread)
-          : picked
+        const filtered = (
+          unreadOnly ? picked.filter((item) => item.unread) : picked
         ).slice(0, limit);
 
         if (!filtered.length) {
@@ -1506,12 +1504,10 @@ export async function previewTool(
             : 'Aucun email dans la sélection.';
         }
 
-        const sample = filtered
-          .slice(0, 5)
-          .map((item) => {
-            const ref = list.findIndex((row) => row.id === item.id) + 1;
-            return `#${ref} ${formatMailCategoryTag(item)} "${compactText(item.subject, 120)}"`;
-          });
+        const sample = filtered.slice(0, 5).map((item) => {
+          const ref = list.findIndex((row) => row.id === item.id) + 1;
+          return `#${ref} ${formatMailCategoryTag(item)} "${compactText(item.subject, 120)}"`;
+        });
         const rest = filtered.length - sample.length;
 
         return formatPreviewLines([
@@ -1773,8 +1769,7 @@ function scoreMailUrgency(mail: GmailMessageItem, now: DateTime) {
   }
 
   const ageHours = Math.abs(
-    now.diff(DateTime.fromJSDate(mail.date).setZone(now.zoneName), 'hours')
-      .hours,
+    now.diff(DateTime.fromJSDate(mail.date).setZone(now.zone), 'hours').hours,
   );
   if (ageHours <= 24) score += 1;
   if (mail.unread) score += 1;
@@ -1959,7 +1954,9 @@ function resolveCalendarInterval(
     endIso?: string;
   },
   tz: string,
-) {
+):
+  | { error: string; startIso: null; endIso: null }
+  | { error: null; startIso: string; endIso: string } {
   const hasIso = !!(input.startIso && input.endIso);
   if (hasIso) {
     const start = DateTime.fromISO(input.startIso!, { zone: tz });
@@ -1979,9 +1976,9 @@ function resolveCalendarInterval(
       };
     }
     return {
-      error: null as string | null,
-      startIso: start.toISO({ suppressMilliseconds: true })!,
-      endIso: end.toISO({ suppressMilliseconds: true })!,
+      error: null,
+      startIso: start.toISO({ suppressMilliseconds: true }),
+      endIso: end.toISO({ suppressMilliseconds: true }),
     };
   }
 
@@ -1996,7 +1993,7 @@ function resolveCalendarInterval(
   }
 
   const { startIso, endIso } = resolveRange(text, tz);
-  return { error: null as string | null, startIso, endIso };
+  return { error: null, startIso, endIso };
 }
 
 function formatDurationMinutes(totalMinutes: number) {
@@ -2509,6 +2506,9 @@ export async function runTool(
       const nowDt = DateTime.now().setZone(tz);
       const fallbackStart = nowDt.minus({ days: 30 }).startOf('day');
       const fallbackEnd = nowDt.plus({ days: 180 }).endOf('day');
+      if (!fallbackStart.isValid || !fallbackEnd.isValid) {
+        throw new RangeParseError('Fuseau horaire invalide.');
+      }
       const fallbackEvents = await ctx.calendar.listEventsInterval(
         sessionId,
         fallbackStart.toISO({ suppressMilliseconds: true }),
@@ -3140,7 +3140,7 @@ export async function runTool(
         case 'calendar.list': {
           try {
             const interval = resolveCalendarInterval(call.args, tz);
-            if (interval.error) return interval.error;
+            if (interval.error !== null) return interval.error;
             const limit = call.args.limit ?? 20;
 
             const events = await ctx.calendar.listEventsInterval(
@@ -3178,7 +3178,7 @@ export async function runTool(
         case 'calendar.has': {
           try {
             const interval = resolveCalendarInterval(call.args, tz);
-            if (interval.error) return interval.error;
+            if (interval.error !== null) return interval.error;
             const events = await ctx.calendar.listEventsInterval(
               sessionId,
               interval.startIso,
@@ -3474,14 +3474,8 @@ export async function runTool(
           if (error) return error;
           if (!row) return `Aucune note trouvée pour "${call.args.query}".`;
 
-          const hasTitle = Object.prototype.hasOwnProperty.call(
-            call.args,
-            'title',
-          );
-          const hasText = Object.prototype.hasOwnProperty.call(
-            call.args,
-            'text',
-          );
+          const hasTitle = Object.hasOwn(call.args, 'title');
+          const hasText = Object.hasOwn(call.args, 'text');
           if (!hasTitle && !hasText) {
             return 'Rien à modifier: envoie au moins title ou text.';
           }
@@ -3943,7 +3937,8 @@ export async function runTool(
           if (unreadOnly) queryParts.push('is:unread');
           if (category) queryParts.push(`category:${category}`);
           const restrictToInbox =
-            !requestedQuery || (!!category && !/\bin:\w+/i.test(requestedQuery));
+            !requestedQuery ||
+            (!!category && !/\bin:\w+/i.test(requestedQuery));
           if (restrictToInbox) queryParts.push('in:inbox');
           if (requestedQuery) queryParts.push(requestedQuery);
           const q = queryParts.join(' ').trim();
@@ -4057,7 +4052,8 @@ export async function runTool(
             });
 
             setLastGmailList(sessionId, messages);
-            if (messages.length === 1) setLastGmailFocus(sessionId, messages[0]);
+            if (messages.length === 1)
+              setLastGmailFocus(sessionId, messages[0]);
 
             if (!messages.length) {
               const categoryLabel = category
@@ -4118,7 +4114,10 @@ export async function runTool(
 
             const senderCounts = new Map<string, number>();
             for (const item of messages) {
-              senderCounts.set(item.from, (senderCounts.get(item.from) ?? 0) + 1);
+              senderCounts.set(
+                item.from,
+                (senderCounts.get(item.from) ?? 0) + 1,
+              );
             }
             const topSenders = [...senderCounts.entries()]
               .sort((a, b) => b[1] - a[1])
@@ -4274,7 +4273,9 @@ export async function runTool(
 
           for (const item of items) {
             await ctx.gmail.modifyLabels(sessionId, item.id, [], ['UNREAD']);
-            const nextLabels = item.labels.filter((label) => label !== 'UNREAD');
+            const nextLabels = item.labels.filter(
+              (label) => label !== 'UNREAD',
+            );
             patchGmailInCache(sessionId, item.id, {
               unread: false,
               labels: nextLabels,
@@ -5656,8 +5657,11 @@ export async function runTool(
 
         case 'reminder.done': {
           if (!ctx.reminders) return 'Service rappels non disponible.';
-          const reminders = await ctx.reminders.list(sessionId, { done: false, limit: 50 });
-          const idx = (call.args.ref as number) - 1;
+          const reminders = await ctx.reminders.list(sessionId, {
+            done: false,
+            limit: 50,
+          });
+          const idx = call.args.ref - 1;
           const target = reminders[idx];
           if (!target) return `Rappel #${call.args.ref} introuvable.`;
           await ctx.reminders.markDone(sessionId, target.id);
@@ -5666,8 +5670,11 @@ export async function runTool(
 
         case 'reminder.snooze': {
           if (!ctx.reminders) return 'Service rappels non disponible.';
-          const reminders = await ctx.reminders.list(sessionId, { done: false, limit: 50 });
-          const idx = (call.args.ref as number) - 1;
+          const reminders = await ctx.reminders.list(sessionId, {
+            done: false,
+            limit: 50,
+          });
+          const idx = call.args.ref - 1;
           const target = reminders[idx];
           if (!target) return `Rappel #${call.args.ref} introuvable.`;
           const until = new Date(call.args.until);
@@ -5683,8 +5690,11 @@ export async function runTool(
 
         case 'reminder.delete': {
           if (!ctx.reminders) return 'Service rappels non disponible.';
-          const reminders = await ctx.reminders.list(sessionId, { done: false, limit: 50 });
-          const idx = (call.args.ref as number) - 1;
+          const reminders = await ctx.reminders.list(sessionId, {
+            done: false,
+            limit: 50,
+          });
+          const idx = call.args.ref - 1;
           const target = reminders[idx];
           if (!target) return `Rappel #${call.args.ref} introuvable.`;
           await ctx.reminders.delete(sessionId, target.id);
@@ -5705,11 +5715,14 @@ export async function runTool(
 
         case 'habit.list': {
           if (!ctx.habits) return 'Service habitudes non disponible.';
-          const habits = await ctx.habits.list(sessionId, call.args.includeArchived ?? false);
+          const habits = await ctx.habits.list(
+            sessionId,
+            call.args.includeArchived ?? false,
+          );
           if (!habits.length) return 'Aucune habitude enregistrée.';
           return habits
             .map((h, i) => {
-              const today = h.loggedToday ? ' ✓ (fait aujourd\'hui)' : '';
+              const today = h.loggedToday ? " ✓ (fait aujourd'hui)" : '';
               const streak = h.streak > 1 ? ` 🔥 ${h.streak}j` : '';
               return `#${i + 1} ${h.emoji ? `${h.emoji} ` : ''}${h.name}${today}${streak}`;
             })
@@ -5719,13 +5732,19 @@ export async function runTool(
         case 'habit.log': {
           if (!ctx.habits) return 'Service habitudes non disponible.';
           const habits = await ctx.habits.list(sessionId);
-          const idx = (call.args.ref as number) - 1;
+          const idx = call.args.ref - 1;
           const target = habits[idx];
           if (!target) return `Habitude #${call.args.ref} introuvable.`;
           const date = call.args.date ?? new Date().toISOString().slice(0, 10);
-          const updated = await ctx.habits.log(sessionId, target.id, date, call.args.note);
+          const updated = await ctx.habits.log(
+            sessionId,
+            target.id,
+            date,
+            call.args.note,
+          );
           if (!updated) return "Impossible d'enregistrer le log.";
-          const streakMsg = updated.streak > 1 ? ` 🔥 Série: ${updated.streak} jours!` : '';
+          const streakMsg =
+            updated.streak > 1 ? ` 🔥 Série: ${updated.streak} jours!` : '';
           return `OK. "${updated.name}" — fait le ${date}.${streakMsg}`;
         }
 
@@ -5735,7 +5754,9 @@ export async function runTool(
           if (!habits.length) return 'Aucune habitude.';
           return habits
             .map((h) => {
-              const bar = '█'.repeat(Math.min(h.streak, 10)) + '░'.repeat(Math.max(0, 10 - h.streak));
+              const bar =
+                '█'.repeat(Math.min(h.streak, 10)) +
+                '░'.repeat(Math.max(0, 10 - h.streak));
               return `${h.emoji ?? '•'} ${h.name}: ${bar} ${h.streak}j (total: ${h.totalLogs})`;
             })
             .join('\n');
@@ -5744,7 +5765,7 @@ export async function runTool(
         case 'habit.archive': {
           if (!ctx.habits) return 'Service habitudes non disponible.';
           const habits = await ctx.habits.list(sessionId);
-          const idx = (call.args.ref as number) - 1;
+          const idx = call.args.ref - 1;
           const target = habits[idx];
           if (!target) return `Habitude #${call.args.ref} introuvable.`;
           await ctx.habits.archive(sessionId, target.id);
@@ -5756,17 +5777,22 @@ export async function runTool(
           if (!ctx.contacts) return 'Service contacts non disponible.';
           const c = await ctx.contacts.save(sessionId, call.args);
           if (!c) return 'Impossible de sauvegarder le contact.';
-          const details = [c.email, c.company, c.role].filter(Boolean).join(' · ');
+          const details = [c.email, c.company, c.role]
+            .filter(Boolean)
+            .join(' · ');
           return `OK. Contact sauvegardé: ${c.name}${details ? ` (${details})` : ''}`;
         }
 
         case 'contact.find': {
           if (!ctx.contacts) return 'Service contacts non disponible.';
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
-          if (!contacts.length) return `Aucun contact trouvé pour "${call.args.query}".`;
+          if (!contacts.length)
+            return `Aucun contact trouvé pour "${call.args.query}".`;
           return contacts
             .map((c) => {
-              const details = [c.email, c.phone, c.company].filter(Boolean).join(' · ');
+              const details = [c.email, c.phone, c.company]
+                .filter(Boolean)
+                .join(' · ');
               return `- ${c.name}${details ? `: ${details}` : ''}`;
             })
             .join('\n');
@@ -5774,19 +5800,34 @@ export async function runTool(
 
         case 'contact.list': {
           if (!ctx.contacts) return 'Service contacts non disponible.';
-          const contacts = await ctx.contacts.list(sessionId, call.args.limit ?? 20);
+          const contacts = await ctx.contacts.list(
+            sessionId,
+            call.args.limit ?? 20,
+          );
           if (!contacts.length) return 'Aucun contact enregistré.';
-          return `${contacts.length} contact(s):\n` +
-            contacts.map((c) => `- ${c.name}${c.email ? ` <${c.email}>` : ''}${c.company ? ` (${c.company})` : ''}`).join('\n');
+          return (
+            `${contacts.length} contact(s):\n` +
+            contacts
+              .map(
+                (c) =>
+                  `- ${c.name}${c.email ? ` <${c.email}>` : ''}${c.company ? ` (${c.company})` : ''}`,
+              )
+              .join('\n')
+          );
         }
 
         case 'contact.update': {
           if (!ctx.contacts) return 'Service contacts non disponible.';
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
-          if (!contacts.length) return `Contact "${call.args.query}" introuvable.`;
+          if (!contacts.length)
+            return `Contact "${call.args.query}" introuvable.`;
           const target = contacts[0];
           if (!target) return `Contact "${call.args.query}" introuvable.`;
-          const updated = await ctx.contacts.update(sessionId, target.id, call.args.patch ?? {});
+          const updated = await ctx.contacts.update(
+            sessionId,
+            target.id,
+            call.args.patch ?? {},
+          );
           if (!updated) return 'Impossible de mettre à jour le contact.';
           return `OK. Contact mis à jour: ${updated.name}`;
         }
@@ -5794,7 +5835,8 @@ export async function runTool(
         case 'contact.delete': {
           if (!ctx.contacts) return 'Service contacts non disponible.';
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
-          if (!contacts.length) return `Contact "${call.args.query}" introuvable.`;
+          if (!contacts.length)
+            return `Contact "${call.args.query}" introuvable.`;
           const target = contacts[0];
           if (!target) return `Contact "${call.args.query}" introuvable.`;
           await ctx.contacts.delete(sessionId, target.id);
@@ -5814,20 +5856,28 @@ export async function runTool(
           const expenses = await ctx.finance.listExpenses(sessionId, call.args);
           if (!expenses.length) return 'Aucune dépense trouvée.';
           const total = expenses.reduce((s, e) => s + e.amount, 0);
-          const lines = expenses.map((e) => `- ${e.date} | ${e.amount.toFixed(2)} ${e.currency} | ${e.category} | ${e.description}`);
+          const lines = expenses.map(
+            (e) =>
+              `- ${e.date} | ${e.amount.toFixed(2)} ${e.currency} | ${e.category} | ${e.description}`,
+          );
           return `${expenses.length} dépense(s) — Total: ${total.toFixed(2)} EUR\n${lines.join('\n')}`;
         }
 
         case 'expense.summary': {
           if (!ctx.finance) return 'Service finance non disponible.';
-          const summary = await ctx.finance.summary(sessionId, call.args.period);
+          const summary = await ctx.finance.summary(
+            sessionId,
+            call.args.period,
+          );
           const catLines = summary.byCategory.map(
-            (c) => `- ${c.category}: ${c.amount.toFixed(2)} EUR (${c.count} dép.)`,
+            (c) =>
+              `- ${c.category}: ${c.amount.toFixed(2)} EUR (${c.count} dép.)`,
           );
           const budgetLines = summary.budgetStatus
             .filter((b) => b.limit > 0)
             .map((b) => {
-              const bar = b.percent >= 100 ? '🔴' : b.percent >= 80 ? '🟠' : '🟢';
+              const bar =
+                b.percent >= 100 ? '🔴' : b.percent >= 80 ? '🟠' : '🟢';
               return `  ${bar} ${b.category}: ${b.spent.toFixed(0)}/${b.limit.toFixed(0)} EUR (${b.percent}%)`;
             });
           const out = [
@@ -5847,11 +5897,19 @@ export async function runTool(
 
         case 'budget.status': {
           if (!ctx.finance) return 'Service finance non disponible.';
-          const summary = await ctx.finance.summary(sessionId, call.args.period ?? 'month');
+          const summary = await ctx.finance.summary(
+            sessionId,
+            call.args.period ?? 'month',
+          );
           if (!summary.budgetStatus.length) return 'Aucun budget configuré.';
           return summary.budgetStatus
             .map((b) => {
-              const bar = b.percent >= 100 ? '🔴 Dépassé' : b.percent >= 80 ? '🟠 Attention' : '🟢 OK';
+              const bar =
+                b.percent >= 100
+                  ? '🔴 Dépassé'
+                  : b.percent >= 80
+                    ? '🟠 Attention'
+                    : '🟢 OK';
               return `${bar} ${b.category}: ${b.spent.toFixed(0)}/${b.limit.toFixed(0)} EUR (${b.percent}%)`;
             })
             .join('\n');

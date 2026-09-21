@@ -96,7 +96,9 @@ export class DefaultWeatherProvider implements WeatherProvider {
       'https://geocoding-api.open-meteo.com',
     private readonly forecastBaseUrl = process.env.WEATHER_BASE_URL ||
       'https://api.open-meteo.com',
-    private readonly timeoutMs = Number(process.env.WEATHER_TIMEOUT_MS || 6_000),
+    private readonly timeoutMs = Number(
+      process.env.WEATHER_TIMEOUT_MS || 6_000,
+    ),
   ) {}
 
   private async fetchJson<T>(url: string): Promise<T> {
@@ -132,7 +134,9 @@ export class DefaultWeatherProvider implements WeatherProvider {
       format: 'json',
     }).toString();
 
-    const payload = await this.fetchJson<OpenMeteoGeocodeResponse>(url.toString());
+    const payload = await this.fetchJson<OpenMeteoGeocodeResponse>(
+      url.toString(),
+    );
     const first = payload.results?.[0];
     const latitude =
       typeof first?.latitude === 'number' ? first.latitude : undefined;
@@ -231,4 +235,3 @@ export class DefaultWeatherProvider implements WeatherProvider {
     };
   }
 }
-

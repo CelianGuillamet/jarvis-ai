@@ -1,7 +1,4 @@
-import type {
-  CalendarEventItem,
-  CalendarProvider,
-} from '../../calendar/providers/calendar.provider';
+import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
 import type {
   GmailMessageDetail,
   GmailMessageItem,
@@ -15,6 +12,8 @@ import type { MissionRecord } from './jarvis-mission.service';
 import type { ReminderRecord } from './jarvis-reminder.service';
 import type { WorkflowMemoryRecord } from './jarvis-workflow.service';
 import { JarvisService } from './jarvis.service';
+
+type ServiceDependencies = ConstructorParameters<typeof JarvisService>;
 
 type ServiceOptions = {
   todos?: Array<{ id: string; text: string; done: boolean; createdAt?: Date }>;
@@ -60,7 +59,10 @@ function emptyWorldModel(): JarvisWorldModelSnapshot {
 }
 
 function makeService(options: ServiceOptions = {}) {
-  const llmChat = jest.fn();
+  const llmChat = jest.fn<
+    Promise<string>,
+    [import('../providers/llm.provider').LLMMessage[]]
+  >();
   const missionsState = (options.missions ?? []).map((mission, index) => ({
     id: mission.id,
     objective: mission.objective,
@@ -121,8 +123,8 @@ function makeService(options: ServiceOptions = {}) {
     jarvisMission: {
       findMany: jest
         .fn()
-        .mockImplementation(
-          async ({ where }: { where?: { status?: string } }) =>
+        .mockImplementation(({ where }: { where?: { status?: string } }) =>
+          Promise.resolve(
             missionsState
               .filter((mission) =>
                 where?.status ? mission.status === where.status : true,
@@ -136,11 +138,12 @@ function makeService(options: ServiceOptions = {}) {
                 nextStep: mission.nextStep ?? null,
                 updatedAt: mission.updatedAtDate,
               })),
+          ),
         ),
       update: jest
         .fn()
         .mockImplementation(
-          async ({
+          ({
             where,
             data,
           }: {
@@ -148,10 +151,10 @@ function makeService(options: ServiceOptions = {}) {
             data: { status?: string };
           }) => {
             const mission = missionsState.find((item) => item.id === where.id);
-            if (!mission) throw new Error('MISSION_NOT_FOUND');
+            if (!mission) return Promise.reject(new Error('MISSION_NOT_FOUND'));
             if (data.status) mission.status = data.status;
             mission.updatedAtDate = new Date('2026-04-17T11:00:00+02:00');
-            return {
+            return Promise.resolve({
               id: mission.id,
               objective: mission.objective,
               horizon: mission.horizon ?? null,
@@ -159,15 +162,15 @@ function makeService(options: ServiceOptions = {}) {
               summary: mission.summary,
               nextStep: mission.nextStep ?? null,
               updatedAt: mission.updatedAtDate,
-            };
+            });
           },
         ),
     },
     jarvisActionEvent: {
       findMany: jest
         .fn()
-        .mockImplementation(
-          async ({ where }: { where?: { status?: string } } = {}) =>
+        .mockImplementation(({ where }: { where?: { status?: string } } = {}) =>
+          Promise.resolve(
             (options.auditEvents ?? [])
               .filter((event) =>
                 where?.status ? event.status === where.status : true,
@@ -180,6 +183,7 @@ function makeService(options: ServiceOptions = {}) {
                 errorMessage: event.errorMessage,
                 createdAt: new Date(event.createdAt),
               })),
+          ),
         ),
     },
   };
@@ -233,9 +237,10 @@ function makeService(options: ServiceOptions = {}) {
     list: jest.fn().mockResolvedValue(options.workflowMemory ?? []),
     suggestNextPrompts: jest
       .fn()
-      .mockImplementation(
-        async (_sessionId: string, triggerToolName: string) =>
+      .mockImplementation((_sessionId: string, triggerToolName: string) =>
+        Promise.resolve(
           options.workflowSuggestionsByTool?.[triggerToolName] ?? [],
+        ),
       ),
   };
   const auditStore = {
@@ -281,7 +286,7 @@ function makeService(options: ServiceOptions = {}) {
     listBudgets: jest.fn().mockResolvedValue([]),
   };
 
-  const calendar: CalendarProvider = {
+  const calendar = {
     listEventsInterval: jest.fn().mockResolvedValue(options.events ?? []),
     createEvent: jest.fn(),
     deleteEvent: jest.fn(),
@@ -297,12 +302,12 @@ function makeService(options: ServiceOptions = {}) {
     listMessages: jest.fn().mockResolvedValue(options.unreadMails ?? []),
     getMessage: jest
       .fn()
-      .mockImplementation(async (_sessionId: string, id: string) => {
+      .mockImplementation((_sessionId: string, id: string) => {
         const found = (options.unreadMails ?? []).find(
           (mail) => mail.id === id,
         );
-        if (!found) throw new Error('NOT_FOUND');
-        return gmailDetail(found);
+        if (!found) return Promise.reject(new Error('NOT_FOUND'));
+        return Promise.resolve(gmailDetail(found));
       }),
     modifyLabels: jest.fn().mockResolvedValue(undefined),
     trashMessage: jest.fn().mockResolvedValue(undefined),
@@ -325,33 +330,33 @@ function makeService(options: ServiceOptions = {}) {
   };
 
   const service = new JarvisService(
-    config as any,
-    prisma as any,
-    pending as any,
-    humanProfileStore as any,
-    auditStore as any,
-    memoryStore as any,
-    missionStore as any,
-    workflowStore as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    reminderStore as any,
-    habitStore as any,
-    contactStore as any,
-    financeStore as any,
+    config as unknown as ServiceDependencies[0],
+    prisma as unknown as ServiceDependencies[1],
+    pending as unknown as ServiceDependencies[2],
+    humanProfileStore as unknown as ServiceDependencies[3],
+    auditStore as unknown as ServiceDependencies[4],
+    memoryStore as unknown as ServiceDependencies[5],
+    missionStore as unknown as ServiceDependencies[6],
+    workflowStore as unknown as ServiceDependencies[7],
+    {} as unknown as ServiceDependencies[8],
+    {} as unknown as ServiceDependencies[9],
+    {} as unknown as ServiceDependencies[10],
+    {} as unknown as ServiceDependencies[11],
+    {} as unknown as ServiceDependencies[12],
+    {} as unknown as ServiceDependencies[13],
+    {} as unknown as ServiceDependencies[14],
+    {} as unknown as ServiceDependencies[15],
+    {} as unknown as ServiceDependencies[16],
+    {} as unknown as ServiceDependencies[17],
+    {} as unknown as ServiceDependencies[18],
+    reminderStore as unknown as ServiceDependencies[19],
+    habitStore as unknown as ServiceDependencies[20],
+    contactStore as unknown as ServiceDependencies[21],
+    financeStore as unknown as ServiceDependencies[22],
     calendar,
     gmail,
   );
-  (service as any).llm = { chat: llmChat, providerName: 'ollama' };
+  jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 
   return {
     service,
@@ -473,13 +478,13 @@ describe('JarvisService', () => {
       ],
     });
 
-    const response = (await service.chat(
+    const response = await service.chat(
       'donne-moi mes priorités du jour',
       'briefing-priority',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.meta.toolName).toBe('daily.briefing');
+    expect(response).toHaveProperty('meta.toolName', 'daily.briefing');
     expect(response.text).toContain("Niveau d'attention");
     expect(response.text).toContain('Resume executif');
     expect(response.text).toContain('Radar immediat');
@@ -488,30 +493,27 @@ describe('JarvisService', () => {
 
   it('routes weather requests to weather.forecast instead of calendar.update', async () => {
     const { service, llmChat } = makeService();
-    (service as any).weather = {
-      name: 'mock',
-      getDailyForecast: jest.fn().mockResolvedValue({
-        resolvedLocation: 'Paris, France',
-        timezone: 'Europe/Paris',
-        day: {
-          date: '2026-04-18',
-          tempMinC: 8,
-          tempMaxC: 16,
-          precipitationProbMax: 20,
-          windMaxKmh: 12,
-          description: 'ciel dégagé',
-        },
-        source: 'open-meteo',
-      }),
-    };
+    jest.spyOn(service['weather'], 'getDailyForecast').mockResolvedValue({
+      resolvedLocation: 'Paris, France',
+      timezone: 'Europe/Paris',
+      day: {
+        date: '2026-04-18',
+        tempMinC: 8,
+        tempMaxC: 16,
+        precipitationProbMax: 20,
+        windMaxKmh: 12,
+        description: 'ciel dégagé',
+      },
+      source: 'open-meteo',
+    });
 
-    const response = (await service.chat(
+    const response = await service.chat(
       'Afficher météo de demain',
       'weather-direct',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.meta.toolName).toBe('weather.forecast');
+    expect(response).toHaveProperty('meta.toolName', 'weather.forecast');
     expect(response.text).toContain('Demain');
     expect(response.text).not.toContain('rendez-vous veux-tu modifier');
   });
@@ -552,13 +554,13 @@ describe('JarvisService', () => {
       ],
     });
 
-    const response = (await service.chat(
+    const response = await service.chat(
       'Prépare un plan de mission pour la démo investisseur',
       'mission-plan',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.meta.toolName).toBe('mission.plan');
+    expect(response).toHaveProperty('meta.toolName', 'mission.plan');
     expect(response.text).toContain('Mission plan');
     expect(response.text).toContain('Plan recommande');
     expect(response.text).toContain('Commandes suggerees');
@@ -575,14 +577,14 @@ describe('JarvisService', () => {
   it('routes mission closure requests to mission.close with confirmation', async () => {
     const { service, llmChat, auditStore } = makeService();
 
-    const response = (await service.chat(
+    const response = await service.chat(
       'Clôture la mission démo investisseur',
       'mission-close',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.pending_action?.name).toBe('mission.close');
-    expect(response.pending_action?.risk).toBe('medium');
+    expect(response).toHaveProperty('pending_action.name', 'mission.close');
+    expect(response).toHaveProperty('pending_action.risk', 'medium');
     expect(response.text).toContain('Tu confirmes');
     expect(auditStore.recordPending).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -595,13 +597,13 @@ describe('JarvisService', () => {
   it('routes audit history requests to action.history without using the LLM', async () => {
     const { service, llmChat } = makeService();
 
-    const response = (await service.chat(
+    const response = await service.chat(
       "Qu'as-tu fait récemment ?",
       'action-history',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.meta.toolName).toBe('action.history');
+    expect(response).toHaveProperty('meta.toolName', 'action.history');
     expect(response.text).toContain('Aucune action récente enregistrée');
   });
 
@@ -613,14 +615,13 @@ describe('JarvisService', () => {
       },
     });
 
-    const response = (await service.chat(
-      'Liste mes todos',
-      'workflow-choices',
-    )) as any;
+    const response = await service.chat('Liste mes todos', 'workflow-choices');
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.meta.toolName).toBe('todo.list');
-    expect(response.choices).toContain('Marque le premier todo comme fait');
+    expect(response).toHaveProperty('meta.toolName', 'todo.list');
+    expect('choices' in response ? response.choices : undefined).toContain(
+      'Marque le premier todo comme fait',
+    );
     expect(workflowStore.observeSuccessfulTool).toHaveBeenCalledWith({
       sessionId: 'workflow-choices',
       userText: 'Liste mes todos',
@@ -637,20 +638,23 @@ describe('JarvisService', () => {
       googleScope: 'https://www.googleapis.com/auth/calendar.events',
     });
 
-    const response = (await service.chat(
+    const response = await service.chat(
       'Supprime mon rendez-vous demain',
       'calendar-ambiguity',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.pending_action?.name).toBe('calendar.delete');
-    expect(response.pending_action?.planner).toBe('intent');
-    expect(response).toMatchObject({ pending_action: { confidence: 'medium' } });
-    expect(response.pending_action?.confirmationReason).toBe(
+    expect(response).toHaveProperty('pending_action.name', 'calendar.delete');
+    expect(response).toHaveProperty('pending_action.planner', 'intent');
+    expect(response).toMatchObject({
+      pending_action: { confidence: 'medium' },
+    });
+    expect(response).toHaveProperty(
+      'pending_action.confirmationReason',
       'intent_medium_confidence',
     );
-    expect(response.meta.decision?.planner).toBe('intent');
-    expect(response.meta.decision?.confidence).toBe('medium');
+    expect(response).toHaveProperty('meta.decision.planner', 'intent');
+    expect(response).toHaveProperty('meta.decision.confidence', 'medium');
     expect(response.text).toContain('validation');
   });
 
@@ -795,7 +799,7 @@ describe('JarvisService', () => {
       },
     });
 
-    const snapshot = (await service.status('console-session')) as any;
+    const snapshot = await service.status('console-session');
 
     expect(snapshot.sessionId).toBe('console-session');
     expect(snapshot.providers.llm).toBe('ollama');
@@ -827,17 +831,17 @@ describe('JarvisService', () => {
     );
     expect(
       snapshot.proactiveSuggestions.some(
-        (item: any) => item.title === 'Mission active',
+        (item) => item.title === 'Mission active',
       ),
     ).toBe(true);
     expect(
       snapshot.proactiveSuggestions.some(
-        (item: any) => item.title === 'Routine détectée',
+        (item) => item.title === 'Routine détectée',
       ),
     ).toBe(true);
     expect(
       snapshot.quickActions.some(
-        (item: any) =>
+        (item) =>
           item.kind === 'confirm' ||
           item.label === 'Voir les missions actives' ||
           item.label === 'Relancer une routine',
@@ -876,7 +880,7 @@ describe('JarvisService', () => {
       ],
     });
 
-    const snapshot = (await service.status('gmail-priority')) as any;
+    const snapshot = await service.status('gmail-priority');
 
     expect(snapshot.focus.topUnreadEmail?.subject).toBe('Client important');
   });
@@ -886,19 +890,27 @@ describe('JarvisService', () => {
       googleScope: 'https://www.googleapis.com/auth/gmail.readonly',
     });
 
-    const response = (await service.chat(
+    const response = await service.chat(
       'résume mes mails non lus de la boîte principale',
       'gmail-summary-primary',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.meta.toolName).toBe('gmail.summary');
-    expect(response.meta.toolArgs).toMatchObject({
+    expect(response).toHaveProperty('meta.toolName', 'gmail.summary');
+    expect(
+      'toolArgs' in response.meta ? response.meta.toolArgs : undefined,
+    ).toMatchObject({
       unreadOnly: true,
       category: 'primary',
       limit: 10,
     });
-    expect(response.meta.toolArgs.query).toBeUndefined();
+    expect(
+      'toolArgs' in response.meta &&
+        response.meta.toolArgs &&
+        'query' in response.meta.toolArgs
+        ? response.meta.toolArgs.query
+        : undefined,
+    ).toBeUndefined();
   });
 
   it('routes "mets ces mails en lu" to gmail.bulk_mark_read after a list', async () => {
@@ -933,15 +945,17 @@ describe('JarvisService', () => {
     });
 
     await service.chat('Liste mes emails', 'gmail-bulk-read');
-    const response = (await service.chat(
+    const response = await service.chat(
       'mets ces mails en lu',
       'gmail-bulk-read',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
-    expect(response.meta.requiresConfirmation).toBe(true);
-    expect(response.meta.toolName).toBe('gmail.bulk_mark_read');
-    expect(response.meta.toolArgs).toMatchObject({ unreadOnly: true });
+    expect(response).toHaveProperty('meta.requiresConfirmation', true);
+    expect(response).toHaveProperty('meta.toolName', 'gmail.bulk_mark_read');
+    expect(
+      'toolArgs' in response.meta ? response.meta.toolArgs : undefined,
+    ).toMatchObject({ unreadOnly: true });
   });
 
   it('hard-gates gmail tools when Gmail is not connected', async () => {
@@ -949,16 +963,13 @@ describe('JarvisService', () => {
       googleScope: null,
     });
 
-    const response = (await service.chat(
-      'Liste mes emails',
-      'gated-gmail',
-    )) as any;
+    const response = await service.chat('Liste mes emails', 'gated-gmail');
 
     expect(llmChat).not.toHaveBeenCalled();
     expect(response.text).toContain('Gmail n’est pas connecté');
     expect(response.text).toContain('/auth/google?sessionId=gated-gmail');
-    expect(response.meta.awaiting).toBe('connect_google');
-    expect(response.meta.gatedTool).toBe('gmail.list');
+    expect(response).toHaveProperty('meta.awaiting', 'connect_google');
+    expect(response).toHaveProperty('meta.gatedTool', 'gmail.list');
     expect(workflowStore.observeSuccessfulTool).not.toHaveBeenCalled();
   });
 
@@ -967,18 +978,20 @@ describe('JarvisService', () => {
       googleScope: 'https://www.googleapis.com/auth/calendar.readonly',
     });
 
-    const response = (await service.chat(
+    const response = await service.chat(
       'Ajoute un rendez-vous demain à 18h',
       'gated-calendar-scope',
-    )) as any;
+    );
 
     expect(llmChat).not.toHaveBeenCalled();
     expect(response.text).toContain('permissions Calendar');
     expect(response.text).toContain(
       '/auth/google?sessionId=gated-calendar-scope',
     );
-    expect(response.pending_action).toBeUndefined();
-    expect(response.meta.gatedTool).toBe('calendar.create');
+    expect(
+      'pending_action' in response ? response.pending_action : undefined,
+    ).toBeUndefined();
+    expect(response).toHaveProperty('meta.gatedTool', 'calendar.create');
     expect(auditStore.recordPending).not.toHaveBeenCalled();
   });
 
@@ -998,7 +1011,7 @@ describe('JarvisService', () => {
       },
     });
 
-    const response = (await service.chat('oui', 'gated-pending')) as any;
+    const response = await service.chat('oui', 'gated-pending');
 
     expect(response.text).toContain('/auth/google?sessionId=gated-pending');
     expect(response.text).toContain('Action en attente');
@@ -1031,7 +1044,6 @@ describe('JarvisService disabled web capability', () => {
   });
 });
 
-
 describe('calendar routing safety', () => {
   it.each([
     'Ajoute un rendez-vous demain à 18h',
@@ -1061,7 +1073,9 @@ describe('calendar routing safety', () => {
       'Supprime mon rendez-vous demain',
       'calendar-no-write',
     );
-    expect(response).toMatchObject({ pending_action: { confidence: 'medium' } });
+    expect(response).toMatchObject({
+      pending_action: { confidence: 'medium' },
+    });
     expect(pending.create).toHaveBeenCalledWith('calendar-no-write', {
       type: 'tool',
       name: 'calendar.delete',

@@ -101,4 +101,3 @@ export type InboxZeroDraftReplyResponse = {
   to: string;
   draftText: string;
 };
-

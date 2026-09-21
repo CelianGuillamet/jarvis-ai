@@ -70,7 +70,9 @@ npm --prefix web test
 
 Type checks disable emission; lint commands do not use `--fix`. Lint failures and test failures return nonzero exit codes. Code-changing commands are explicitly named `lint:fix` or `format` (API only). Build commands write to each application's `dist/` directory.
 
-Existing baseline debt is not hidden: JAR-004 fixes the two original calendar-routing failures; JAR-008 tracks remaining lint cleanup/CI. See ticket evidence for the current result, rather than treating a documented command as a passing check. Run `npm --prefix api run test:integration` with Docker running to replay migrations in a disposable PostgreSQL database and exercise HTTP workflows with fake Gmail, Calendar and model providers. The runner ignores existing database targets and provider credentials and removes its container afterward. See the [integration test guide](api/test/README.md).
+The CI workflow checks both applications on pull requests and pushes to main or codex branches. It installs the lockfiles, generates Prisma, checks types and lint with zero warnings allowed, builds both applications, and runs unit and isolated integration tests. There is no lint baseline exemption: new errors or warnings fail the checks. Mechanical API formatting is kept in a separate commit in JAR-008.
+
+Run `npm --prefix api run test:integration` with Docker running to replay migrations in a disposable PostgreSQL database and exercise HTTP workflows with fake Gmail, Calendar and model providers. The runner ignores existing database targets and provider credentials and removes its container afterward. See the [integration test guide](api/test/README.md).
 
 ## Repository guide
 

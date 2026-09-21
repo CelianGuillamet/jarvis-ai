@@ -22,9 +22,22 @@ export class OllamaProvider implements LLMProvider {
     if (!res.ok)
       throw new Error(`Ollama error: ${res.status} ${await res.text()}`);
 
-    const data: any = await res.json();
-
-    // format de réponse Ollama: { message: { content: "..." }, ... }
-    return data.message?.content ?? '';
+    const data: unknown = await res.json();
+    if (typeof data !== 'object' || data === null || !('message' in data)) {
+      return '';
+    }
+    const message = data.message;
+    if (
+      typeof message !== 'object' ||
+      message === null ||
+      !('content' in message)
+    ) {
+      return '';
+    }
+    if (message.content == null) return '';
+    if (typeof message.content !== 'string') {
+      throw new Error('Ollama returned non-text message content');
+    }
+    return message.content;
   }
 }

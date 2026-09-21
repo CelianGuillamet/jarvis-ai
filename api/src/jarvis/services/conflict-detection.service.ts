@@ -122,7 +122,7 @@ export class ConflictDetectionService {
       }
 
       const conflicts: ConflictItem[] = [];
-      for (const [key, ids] of normalized) {
+      for (const ids of normalized.values()) {
         if (ids.length > 1) {
           const matchingTodos = todos.filter((t) => ids.includes(t.id));
           conflicts.push({

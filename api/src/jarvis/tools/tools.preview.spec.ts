@@ -14,11 +14,11 @@ describe('previewTool', () => {
   function makeCtx(calendar: CalendarProvider): ToolContext {
     const web: WebProvider = {
       name: 'mock',
-      async search() {
-        return [];
+      search() {
+        return Promise.resolve([]);
       },
-      async open(url: string) {
-        return { url, content: '' };
+      open(url: string) {
+        return Promise.resolve({ url, content: '' });
       },
     };
 
@@ -33,14 +33,14 @@ describe('previewTool', () => {
     };
 
     return {
-      prisma: {} as any,
-      memory: {} as any,
+      prisma: {} as unknown as ToolContext['prisma'],
+      memory: {} as unknown as ToolContext['memory'],
       simulation: false,
       tz,
       sessionId,
       calendar,
       web,
-      weather: {} as any,
+      weather: {} as unknown as ToolContext['weather'],
       gmail,
     };
   }

@@ -16,11 +16,11 @@ describe('runTool action history', () => {
   }): ToolContext {
     const web: WebProvider = {
       name: 'mock',
-      async search() {
-        return [];
+      search() {
+        return Promise.resolve([]);
       },
-      async open(url: string) {
-        return { url, content: '' };
+      open(url: string) {
+        return Promise.resolve({ url, content: '' });
       },
     };
 
@@ -29,20 +29,22 @@ describe('runTool action history', () => {
         findMany: jest
           .fn()
           .mockImplementation(
-            async ({ where }: { where?: { status?: string } } = {}) =>
-              (input?.events ?? [])
-                .filter((event) =>
-                  where?.status ? event.status === where.status : true,
-                )
-                .map((event) => ({
-                  toolName: event.toolName,
-                  summary: event.summary,
-                  status: event.status,
-                  resultPreview: event.resultPreview ?? null,
-                  errorMessage: event.errorMessage ?? null,
-                  createdAt:
-                    event.createdAt ?? new Date('2026-04-17T09:00:00+02:00'),
-                })),
+            ({ where }: { where?: { status?: string } } = {}) =>
+              Promise.resolve(
+                (input?.events ?? [])
+                  .filter((event) =>
+                    where?.status ? event.status === where.status : true,
+                  )
+                  .map((event) => ({
+                    toolName: event.toolName,
+                    summary: event.summary,
+                    status: event.status,
+                    resultPreview: event.resultPreview ?? null,
+                    errorMessage: event.errorMessage ?? null,
+                    createdAt:
+                      event.createdAt ?? new Date('2026-04-17T09:00:00+02:00'),
+                  })),
+              ),
           ),
       },
     };
@@ -65,14 +67,14 @@ describe('runTool action history', () => {
     };
 
     return {
-      prisma: prisma as any,
-      memory: {} as any,
+      prisma: prisma as unknown as ToolContext['prisma'],
+      memory: {} as unknown as ToolContext['memory'],
       simulation: false,
       tz: 'Europe/Paris',
       sessionId: 'audit-tools-spec',
       calendar,
       web,
-      weather: {} as any,
+      weather: {} as unknown as ToolContext['weather'],
       gmail,
     };
   }

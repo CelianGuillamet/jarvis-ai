@@ -226,7 +226,8 @@ export class GoogleGmailProvider implements GmailProvider {
       const rawBody = bodies.text || base.snippet || '';
       const cleanText = cleanBodyText(rawBody);
       const messageIdHeader =
-        headerValue(headers, 'Message-ID') || headerValue(headers, 'Message-Id');
+        headerValue(headers, 'Message-ID') ||
+        headerValue(headers, 'Message-Id');
       const referencesHeader = headerValue(headers, 'References');
 
       return {
@@ -315,7 +316,9 @@ export class GoogleGmailProvider implements GmailProvider {
       const gmail = await this.authedGmail(sessionId);
       await gmail.users.messages.send({
         userId: 'me',
-        requestBody: payload.threadId ? { raw, threadId: payload.threadId } : { raw },
+        requestBody: payload.threadId
+          ? { raw, threadId: payload.threadId }
+          : { raw },
       });
     });
   }

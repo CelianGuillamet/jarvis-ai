@@ -1,3 +1,5 @@
+import { parseStoredTags } from '../lib/stored-json';
+import type { Contact } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -99,7 +101,9 @@ export class JarvisContactService {
   async update(
     sessionId: string,
     id: string,
-    patch: Partial<Omit<ContactRecord, 'id' | 'createdAt' | 'tags'> & { tags: string[] }>,
+    patch: Partial<
+      Omit<ContactRecord, 'id' | 'createdAt' | 'tags'> & { tags: string[] }
+    >,
   ): Promise<ContactRecord | null> {
     try {
       const contact = await this.prisma.contact.updateMany({
@@ -111,12 +115,16 @@ export class JarvisContactService {
           ...(patch.company !== undefined ? { company: patch.company } : {}),
           ...(patch.role !== undefined ? { role: patch.role } : {}),
           ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
-          ...(patch.tags !== undefined ? { tags: JSON.stringify(patch.tags) } : {}),
+          ...(patch.tags !== undefined
+            ? { tags: JSON.stringify(patch.tags) }
+            : {}),
           lastInteractionAt: new Date(),
         },
       });
       if (!contact.count) return null;
-      return this.map(await this.prisma.contact.findUniqueOrThrow({ where: { id } }));
+      return this.map(
+        await this.prisma.contact.findUniqueOrThrow({ where: { id } }),
+      );
     } catch {
       return null;
     }
@@ -131,9 +139,7 @@ export class JarvisContactService {
     }
   }
 
-  private map(c: any): ContactRecord {
-    let tags: string[] = [];
-    try { tags = JSON.parse(c.tags); } catch { tags = []; }
+  private map(c: Contact): ContactRecord {
     return {
       id: c.id,
       name: c.name,
@@ -142,7 +148,7 @@ export class JarvisContactService {
       company: c.company ?? null,
       role: c.role ?? null,
       notes: c.notes ?? null,
-      tags,
+      tags: parseStoredTags(c.tags),
       lastInteractionAt: c.lastInteractionAt?.toISOString() ?? null,
       createdAt: c.createdAt.toISOString(),
     };

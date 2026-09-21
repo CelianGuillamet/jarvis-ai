@@ -1,3 +1,4 @@
+import type { Expense, Budget } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -95,7 +96,6 @@ export class JarvisFinanceService {
   async summary(sessionId: string, period?: string): Promise<FinanceSummary> {
     const now = new Date();
     let from: string;
-    let to: string;
     const label = period ?? 'month';
 
     if (label === 'week') {
@@ -107,7 +107,7 @@ export class JarvisFinanceService {
     } else {
       from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     }
-    to = now.toISOString().slice(0, 10);
+    const to = now.toISOString().slice(0, 10);
 
     const [expenses, budgets] = await Promise.all([
       this.listExpenses(sessionId, { from, to, limit: 500 }),
@@ -145,7 +145,12 @@ export class JarvisFinanceService {
 
   async setBudget(
     sessionId: string,
-    input: { category: string; limit: number; period?: string; currency?: string },
+    input: {
+      category: string;
+      limit: number;
+      period?: string;
+      currency?: string;
+    },
   ): Promise<BudgetRecord | null> {
     try {
       const category = input.category.toLowerCase().trim();
@@ -174,13 +179,18 @@ export class JarvisFinanceService {
         where: { sessionId },
         orderBy: { category: 'asc' },
       });
-      return rows.map((b) => ({ ...this.mapBudget(b), spent: 0, remaining: b.limit, percent: 0 }));
+      return rows.map((b) => ({
+        ...this.mapBudget(b),
+        spent: 0,
+        remaining: b.limit,
+        percent: 0,
+      }));
     } catch {
       return [];
     }
   }
 
-  private mapExpense(e: any): ExpenseRecord {
+  private mapExpense(e: Expense): ExpenseRecord {
     return {
       id: e.id,
       amount: e.amount,
@@ -192,7 +202,9 @@ export class JarvisFinanceService {
     };
   }
 
-  private mapBudget(b: any): Omit<BudgetRecord, 'spent' | 'remaining' | 'percent'> {
+  private mapBudget(
+    b: Budget,
+  ): Omit<BudgetRecord, 'spent' | 'remaining' | 'percent'> {
     return {
       id: b.id,
       category: b.category,

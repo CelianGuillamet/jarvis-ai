@@ -1,4 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+} from '@nestjs/common';
 
 import { InboxZeroApplyDto } from './dto/inbox-zero-apply.dto';
 import { InboxZeroDraftReplyDto } from './dto/inbox-zero-draft-reply.dto';
@@ -44,4 +51,3 @@ export class InboxZeroController {
     return this.inboxZero.draftReply(body.sessionId, body.messageId);
   }
 }
-

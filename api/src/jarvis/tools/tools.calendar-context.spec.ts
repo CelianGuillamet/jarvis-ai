@@ -18,15 +18,17 @@ function makeCalendarProvider(seed: CalendarEventItem[]) {
     | undefined;
 
   const provider: CalendarProvider = {
-    async listEventsInterval() {
-      return [...events];
+    listEventsInterval() {
+      return Promise.resolve([...events]);
     },
     async createEvent() {},
-    async deleteEvent(_sessionId, _provider, eventId) {
+    deleteEvent(_sessionId, _provider, eventId) {
       const idx = events.findIndex((e) => e.eventId === eventId);
       if (idx >= 0) events.splice(idx, 1);
+
+      return Promise.resolve();
     },
-    async updateEvent(
+    updateEvent(
       _sessionId,
       _provider,
       eventId,
@@ -46,6 +48,8 @@ function makeCalendarProvider(seed: CalendarEventItem[]) {
         };
       }
       lastUpdate = { eventId, whenIso, endWhenIso };
+
+      return Promise.resolve();
     },
   };
 
@@ -62,22 +66,22 @@ describe('runTool calendar context resolver', () => {
   function makeContext(calendar: CalendarProvider): ToolContext {
     const web: WebProvider = {
       name: 'mock',
-      async search() {
-        return [];
+      search() {
+        return Promise.resolve([]);
       },
-      async open(url: string) {
-        return { url, content: '' };
+      open(url: string) {
+        return Promise.resolve({ url, content: '' });
       },
     };
     return {
-      prisma: {} as any,
-      memory: {} as any,
+      prisma: {} as unknown as ToolContext['prisma'],
+      memory: {} as unknown as ToolContext['memory'],
       simulation: false,
       tz,
       sessionId,
       calendar,
       web,
-      weather: {} as any,
+      weather: {} as unknown as ToolContext['weather'],
       gmail: {} as GmailProvider,
     };
   }

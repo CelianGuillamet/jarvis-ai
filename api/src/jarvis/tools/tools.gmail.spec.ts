@@ -25,7 +25,7 @@ function makeGmailMock(seed: GmailMessageDetail[]): GmailProvider {
   });
 
   return {
-    async listMessages(_sessionId, options) {
+    listMessages(_sessionId, options) {
       const qRaw = (options?.q || '').toLowerCase();
       const wantsUnread = /\bis:unread\b/.test(qRaw);
       const wantsInbox = /\bin:inbox\b/.test(qRaw);
@@ -71,38 +71,48 @@ function makeGmailMock(seed: GmailMessageDetail[]): GmailProvider {
       const sorted = searched.sort(
         (a, b) => b.date.getTime() - a.date.getTime(),
       );
-      return sorted.slice(0, options?.maxResults ?? 10).map(toItem);
+      return Promise.resolve(
+        sorted.slice(0, options?.maxResults ?? 10).map(toItem),
+      );
     },
-    async getMessage(_sessionId, messageId) {
+    getMessage(_sessionId, messageId) {
       const found = store.get(messageId);
-      if (!found) throw new Error('NOT_FOUND');
-      return { ...found };
+      if (!found) return Promise.reject(new Error('NOT_FOUND'));
+      return Promise.resolve({ ...found });
     },
-    async modifyLabels(_sessionId, messageId, addLabelIds, removeLabelIds) {
+    modifyLabels(_sessionId, messageId, addLabelIds, removeLabelIds) {
       const found = store.get(messageId);
-      if (!found) throw new Error('NOT_FOUND');
+      if (!found) return Promise.reject(new Error('NOT_FOUND'));
       const labels = new Set(found.labels);
       for (const label of addLabelIds || []) labels.add(label);
       for (const label of removeLabelIds || []) labels.delete(label);
       found.labels = [...labels];
       found.unread = found.labels.includes('UNREAD');
+
+      return Promise.resolve();
     },
-    async trashMessage(_sessionId, messageId) {
+    trashMessage(_sessionId, messageId) {
       const found = store.get(messageId);
-      if (!found) throw new Error('NOT_FOUND');
+      if (!found) return Promise.reject(new Error('NOT_FOUND'));
       found.labels = [...new Set([...found.labels, 'TRASH'])].filter(
         (label) => label !== 'INBOX',
       );
+
+      return Promise.resolve();
     },
-    async untrashMessage(_sessionId, messageId) {
+    untrashMessage(_sessionId, messageId) {
       const found = store.get(messageId);
-      if (!found) throw new Error('NOT_FOUND');
+      if (!found) return Promise.reject(new Error('NOT_FOUND'));
       found.labels = [...new Set([...found.labels, 'INBOX'])].filter(
         (label) => label !== 'TRASH',
       );
+
+      return Promise.resolve();
     },
-    async deleteMessage(_sessionId, messageId) {
+    deleteMessage(_sessionId, messageId) {
       store.delete(messageId);
+
+      return Promise.resolve();
     },
     async sendMessage() {},
   };
@@ -112,22 +122,22 @@ describe('runTool gmail tools', () => {
   function makeCtx(gmail: GmailProvider): ToolContext {
     const web: WebProvider = {
       name: 'mock',
-      async search() {
-        return [];
+      search() {
+        return Promise.resolve([]);
       },
-      async open(url: string) {
-        return { url, content: '' };
+      open(url: string) {
+        return Promise.resolve({ url, content: '' });
       },
     };
     return {
-      prisma: {} as any,
-      memory: {} as any,
+      prisma: {} as unknown as ToolContext['prisma'],
+      memory: {} as unknown as ToolContext['memory'],
       simulation: false,
       tz: 'Europe/Paris',
       sessionId: 'gmail-tools-spec',
       calendar: {} as CalendarProvider,
       web,
-      weather: {} as any,
+      weather: {} as unknown as ToolContext['weather'],
       gmail,
     };
   }
@@ -413,8 +423,10 @@ describe('runTool gmail tools', () => {
     } | null = null;
     const gmail: GmailProvider = {
       ...base,
-      async sendMessage(_sessionId, payload) {
+      sendMessage(_sessionId, payload) {
         sent = payload;
+
+        return Promise.resolve();
       },
     };
 

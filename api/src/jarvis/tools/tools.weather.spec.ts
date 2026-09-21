@@ -5,18 +5,21 @@ import type { WeatherProvider } from '../providers/weather.provider';
 import { runTool, type ToolContext } from './tools';
 
 describe('runTool weather tools', () => {
-  function makeCtx(weather: WeatherProvider, memorySnapshot?: any): ToolContext {
+  function makeCtx(
+    weather: WeatherProvider,
+    memorySnapshot?: any,
+  ): ToolContext {
     const web: WebProvider = {
       name: 'mock',
-      async search() {
-        return [];
+      search() {
+        return Promise.resolve([]);
       },
-      async open(url: string) {
-        return { url, content: '' };
+      open(url: string) {
+        return Promise.resolve({ url, content: '' });
       },
     };
     return {
-      prisma: {} as any,
+      prisma: {} as unknown as ToolContext['prisma'],
       memory: {
         getSnapshot: jest.fn().mockResolvedValue(
           memorySnapshot ?? {
@@ -30,7 +33,7 @@ describe('runTool weather tools', () => {
             sessionSummary: null,
           },
         ),
-      } as any,
+      } as unknown as ToolContext['memory'],
       simulation: false,
       tz: 'Europe/Paris',
       sessionId: 'weather-tools-spec',
@@ -44,8 +47,8 @@ describe('runTool weather tools', () => {
   it('formats weather.forecast output', async () => {
     const weather: WeatherProvider = {
       name: 'mock',
-      async getDailyForecast() {
-        return {
+      getDailyForecast() {
+        return Promise.resolve({
           resolvedLocation: 'Lyon, France',
           timezone: 'Europe/Paris',
           day: {
@@ -57,7 +60,7 @@ describe('runTool weather tools', () => {
             description: 'partiellement nuageux',
           },
           source: 'open-meteo',
-        };
+        });
       },
     };
 
@@ -75,8 +78,8 @@ describe('runTool weather tools', () => {
   it('uses memory location when location is omitted', async () => {
     const weather: WeatherProvider = {
       name: 'mock',
-      async getDailyForecast() {
-        return {
+      getDailyForecast() {
+        return Promise.resolve({
           resolvedLocation: 'Marseille, France',
           timezone: 'Europe/Paris',
           day: {
@@ -85,7 +88,7 @@ describe('runTool weather tools', () => {
             tempMaxC: 18,
           },
           source: 'open-meteo',
-        };
+        });
       },
     };
 
@@ -110,4 +113,3 @@ describe('runTool weather tools', () => {
     expect(out).not.toContain("je n'ai pas ta ville");
   });
 });
-

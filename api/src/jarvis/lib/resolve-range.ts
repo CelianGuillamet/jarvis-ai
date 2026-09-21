@@ -36,15 +36,20 @@ export function resolveRange(
     '(\\d+|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze)';
 
   const clamp = (start: DateTime, end: DateTime) => {
+    if (!start.isValid || !end.isValid) {
+      throw new RangeParseError('Date ou fuseau horaire invalide.');
+    }
     const days = end.diff(start, 'days').days;
     if (days > maxDays)
       throw new RangeParseError(
         `Période trop large (${Math.round(days)} jours).`,
       );
-    return {
-      startIso: start.toISO({ suppressMilliseconds: true })!,
-      endIso: end.toISO({ suppressMilliseconds: true })!,
-    };
+    const startIso = start.toISO({ suppressMilliseconds: true });
+    const endIso = end.toISO({ suppressMilliseconds: true });
+    if (startIso === null || endIso === null) {
+      throw new RangeParseError('Date ou fuseau horaire invalide.');
+    }
+    return { startIso, endIso };
   };
 
   // Helper: si tout est dans le passé, décale d'1 an
@@ -160,11 +165,11 @@ export function resolveRange(
     const month = monthName ? monthFromFrench(monthName) : now.month;
     if (!month) throw new RangeParseError('Mois non reconnu.');
 
-    let start = DateTime.fromObject(
+    let start: DateTime = DateTime.fromObject(
       { year: now.year, month, day: d1 },
       { zone: tz },
     ).startOf('day');
-    let end = DateTime.fromObject(
+    let end: DateTime = DateTime.fromObject(
       { year: now.year, month, day: d2 },
       { zone: tz },
     ).endOf('day');
@@ -183,11 +188,12 @@ export function resolveRange(
     const year = dayMonth[3] ? Number(dayMonth[3]) : now.year;
     if (!month) throw new RangeParseError('Mois non reconnu.');
 
-    let start = DateTime.fromObject({ year, month, day }, { zone: tz }).startOf(
-      'day',
-    );
+    let start: DateTime = DateTime.fromObject(
+      { year, month, day },
+      { zone: tz },
+    ).startOf('day');
     if (!start.isValid) throw new RangeParseError('Date invalide.');
-    let end = start.endOf('day');
+    let end: DateTime = start.endOf('day');
 
     if (!dayMonth[3]) ({ start, end } = shiftIfPast(start, end));
     return clamp(start, end);
@@ -207,11 +213,12 @@ export function resolveRange(
         : Number(yearRaw)
       : now.year;
 
-    let start = DateTime.fromObject({ year, month, day }, { zone: tz }).startOf(
-      'day',
-    );
+    let start: DateTime = DateTime.fromObject(
+      { year, month, day },
+      { zone: tz },
+    ).startOf('day');
     if (!start.isValid) throw new RangeParseError('Date invalide.');
-    let end = start.endOf('day');
+    let end: DateTime = start.endOf('day');
 
     if (!yearRaw) ({ start, end } = shiftIfPast(start, end));
     return clamp(start, end);
@@ -239,11 +246,11 @@ export function resolveRange(
     const endYear =
       forcedYear ?? (endMonth < startMonth ? now.year + 1 : now.year);
 
-    let start = DateTime.fromObject(
+    let start: DateTime = DateTime.fromObject(
       { year: startYear, month: startMonth, day: 1 },
       { zone: tz },
     ).startOf('day');
-    let end = DateTime.fromObject(
+    let end: DateTime = DateTime.fromObject(
       { year: endYear, month: endMonth, day: 1 },
       { zone: tz },
     ).endOf('month');

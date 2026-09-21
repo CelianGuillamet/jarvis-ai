@@ -10,4 +10,3 @@ export class InboxZeroDraftReplyDto {
   @MinLength(1)
   messageId!: string;
 }
-

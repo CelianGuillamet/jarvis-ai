@@ -268,7 +268,9 @@ export function describeToolCallForHuman(
           : call.args.unreadOnly === false
             ? `resumer ${possPlural} emails`
             : `resumer ${possPlural} emails non lus`;
-        return typeof call.args.limit === 'number' ? `${base} (max ${call.args.limit})` : base;
+        return typeof call.args.limit === 'number'
+          ? `${base} (max ${call.args.limit})`
+          : base;
       }
       return `resumer l'email "${call.args.query ?? 'cible'}"`;
     case 'gmail.send':
@@ -284,7 +286,8 @@ export function describeToolCallForHuman(
           : typeof call.args.limit === 'number'
             ? ` (max ${call.args.limit})`
             : '';
-      const scope = call.args.unreadOnly === false ? 'emails' : 'emails non lus';
+      const scope =
+        call.args.unreadOnly === false ? 'emails' : 'emails non lus';
       return `marquer ${possPlural} ${scope} comme lus${count}`;
     }
     case 'gmail.mark_unread':

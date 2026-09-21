@@ -1,3 +1,4 @@
+import type { Habit, HabitLog } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -39,7 +40,10 @@ export class JarvisHabitService {
     }
   }
 
-  async list(sessionId: string, includeArchived = false): Promise<HabitRecord[]> {
+  async list(
+    sessionId: string,
+    includeArchived = false,
+  ): Promise<HabitRecord[]> {
     try {
       const habits = await this.prisma.habit.findMany({
         where: { sessionId, ...(includeArchived ? {} : { archived: false }) },
@@ -93,9 +97,11 @@ export class JarvisHabitService {
     }
   }
 
-  private enrich(habit: any, logs: any[]): HabitRecord {
+  private enrich(habit: Habit, logs: HabitLog[]): HabitRecord {
     const today = new Date().toISOString().slice(0, 10);
-    const sortedDates = [...new Set(logs.map((l: any) => l.date as string))].sort().reverse();
+    const sortedDates = [...new Set(logs.map((log) => log.date))]
+      .sort()
+      .reverse();
 
     let streak = 0;
     let cursor = today;

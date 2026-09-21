@@ -1,3 +1,4 @@
+import type { JarvisTimeInsight } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -187,7 +188,7 @@ export class JarvisTimeInsightsService {
     return end;
   }
 
-  private map(row: any): TimeInsightRecord {
+  private map(row: JarvisTimeInsight): TimeInsightRecord {
     return {
       id: row.id,
       metricName: row.metricName,

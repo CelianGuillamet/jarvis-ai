@@ -1,3 +1,4 @@
+import type { JarvisResourceAllocation } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -203,7 +204,9 @@ export class JarvisResourceAllocationService {
     }
   }
 
-  private mapAllocationRecord(allocation: any): ResourceAllocationRecord {
+  private mapAllocationRecord(
+    allocation: JarvisResourceAllocation,
+  ): ResourceAllocationRecord {
     return {
       id: allocation.id,
       sessionId: allocation.sessionId,

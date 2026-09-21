@@ -1,3 +1,4 @@
+import type { JarvisDelegation } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -151,7 +152,7 @@ export class JarvisDelegationService {
     return lines.join('\n');
   }
 
-  private map(row: any): DelegationRecord {
+  private map(row: JarvisDelegation): DelegationRecord {
     return {
       id: row.id,
       taskDescription: row.taskDescription,

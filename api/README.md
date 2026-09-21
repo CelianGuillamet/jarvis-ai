@@ -43,6 +43,6 @@ Web retrieval is disabled. Legacy `WEB_*`, `GOOGLE_SEARCH_*` and `SERPER_*` vari
 | `npm run test:e2e` | Alias for the isolated integration suite. |
 | `npm run test:runner` | Test container cleanup behavior without Docker. |
 
-The two original calendar-routing failures were fixed in JAR-004. Lint debt remains tracked in JAR-008; all check commands preserve failure exit codes. Do not use `prisma db push` as a replacement for checked-in migrations during setup.
+The original calendar-routing failures and shipped-source lint debt are resolved. CI runs `npm run lint -- --max-warnings=0`, covering both source and test fixtures; all check commands preserve failure exit codes. Do not use `prisma db push` as a replacement for checked-in migrations during setup.
 
 See the [integration test guide](test/README.md) for fixture usage and isolation boundaries. In test mode Nest does not load `.env`; the integration runner supplies its own database and test configuration.

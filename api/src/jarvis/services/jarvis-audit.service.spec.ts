@@ -10,7 +10,10 @@ describe('JarvisAuditService', () => {
     const config = {
       get: jest.fn().mockReturnValue(undefined),
     };
-    const service = new JarvisAuditService(prisma as any, config as any);
+    const service = new JarvisAuditService(
+      prisma as unknown as ConstructorParameters<typeof JarvisAuditService>[0],
+      config as unknown as ConstructorParameters<typeof JarvisAuditService>[1],
+    );
 
     await service.recordPending({
       sessionId: 'audit-session',
@@ -40,7 +43,7 @@ describe('JarvisAuditService', () => {
         status: 'pending',
         planner: 'intent',
         confidence: 'medium',
-      }),
+      }) as unknown,
     });
   });
 
@@ -81,7 +84,10 @@ describe('JarvisAuditService', () => {
         return undefined;
       }),
     };
-    const service = new JarvisAuditService(prisma as any, config as any);
+    const service = new JarvisAuditService(
+      prisma as unknown as ConstructorParameters<typeof JarvisAuditService>[0],
+      config as unknown as ConstructorParameters<typeof JarvisAuditService>[1],
+    );
 
     const events = await service.listRecent('audit-session', { limit: 5 });
 
@@ -90,7 +96,7 @@ describe('JarvisAuditService', () => {
       data: expect.objectContaining({
         status: 'expired',
         errorMessage: 'Action expirée sans confirmation.',
-      }),
+      }) as unknown,
     });
     expect(events[0].status).toBe('expired');
   });

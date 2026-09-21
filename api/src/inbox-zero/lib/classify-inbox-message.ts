@@ -1,6 +1,9 @@
 import type { GmailMessageItem } from '../../gmail/providers/gmail.provider';
 import { getGmailCategoryPriority } from '../../gmail/gmail-category';
-import type { InboxZeroActionType, InboxZeroCategory } from '../inbox-zero.types';
+import type {
+  InboxZeroActionType,
+  InboxZeroCategory,
+} from '../inbox-zero.types';
 
 function normalizeText(value: string) {
   return value
@@ -33,7 +36,9 @@ export type InboxZeroClassification = {
   suggested: { action: InboxZeroActionType; label: string } | null;
 };
 
-export function classifyInboxMessage(message: GmailMessageItem): InboxZeroClassification {
+export function classifyInboxMessage(
+  message: GmailMessageItem,
+): InboxZeroClassification {
   const subject = message.subject || '';
   const from = message.from || '';
   const snippet = message.snippet || '';
@@ -125,14 +130,21 @@ export function classifyInboxMessage(message: GmailMessageItem): InboxZeroClassi
   ];
 
   const isPromotions = message.category === 'promotions';
-  const isSocialOrForums = message.category === 'social' || message.category === 'forums';
+  const isSocialOrForums =
+    message.category === 'social' || message.category === 'forums';
   const isUpdates = message.category === 'updates';
 
   const newsletterHit =
     isPromotions ||
     hasPercentDiscount(text) ||
     includesAny(text, newsletterKeywords) ||
-    includesAny(text, ['list-unsubscribe', 'mailchi', 'sendinblue', 'brevo', 'klaviyo']);
+    includesAny(text, [
+      'list-unsubscribe',
+      'mailchi',
+      'sendinblue',
+      'brevo',
+      'klaviyo',
+    ]);
 
   if (newsletterHit) {
     const hit = firstIncluded(text, newsletterKeywords);
@@ -143,9 +155,12 @@ export function classifyInboxMessage(message: GmailMessageItem): InboxZeroClassi
       reason: hit
         ? `Newsletter/promo détectée (mot-clé: "${hit}").`
         : isPromotions
-          ? "Onglet Gmail Promotions."
+          ? 'Onglet Gmail Promotions.'
           : 'Newsletter/promo détectée.',
-      suggested: { action: 'mark_read_archive', label: 'Nettoyer (lu + archiver)' },
+      suggested: {
+        action: 'mark_read_archive',
+        label: 'Nettoyer (lu + archiver)',
+      },
     };
   }
 
@@ -177,7 +192,10 @@ export function classifyInboxMessage(message: GmailMessageItem): InboxZeroClassi
       category: 'ignore',
       priority,
       reason: 'Onglet Gmail Social/Forums.',
-      suggested: { action: 'mark_read_archive', label: 'Nettoyer (lu + archiver)' },
+      suggested: {
+        action: 'mark_read_archive',
+        label: 'Nettoyer (lu + archiver)',
+      },
     };
   }
 
@@ -191,8 +209,13 @@ export function classifyInboxMessage(message: GmailMessageItem): InboxZeroClassi
     return {
       category: 'ignore',
       priority,
-      reason: hit ? `Notification détectée (mot-clé: "${hit}").` : 'Notification détectée.',
-      suggested: { action: 'mark_read_archive', label: 'Nettoyer (lu + archiver)' },
+      reason: hit
+        ? `Notification détectée (mot-clé: "${hit}").`
+        : 'Notification détectée.',
+      suggested: {
+        action: 'mark_read_archive',
+        label: 'Nettoyer (lu + archiver)',
+      },
     };
   }
 
@@ -204,4 +227,3 @@ export function classifyInboxMessage(message: GmailMessageItem): InboxZeroClassi
     suggested: { action: 'mark_read_archive', label: 'Archiver + lu' },
   };
 }
-
