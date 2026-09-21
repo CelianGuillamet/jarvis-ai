@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router';
 import BaseCard from '@/shared/ui/BaseCard.vue';
 import BaseSkeleton from '@/shared/ui/BaseSkeleton.vue';
 
-const props = defineProps<{
+defineProps<{
   habits: HabitRecord[];
   loading: boolean;
 }>();

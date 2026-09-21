@@ -56,7 +56,7 @@ const setStep = async (step: InboxZeroStep) => {
 const onKeydown = (event: KeyboardEvent) => {
   const target = event.target as HTMLElement | null;
   const tag = (target?.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea' || (target as any)?.isContentEditable) return;
+  if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
 
   if (event.key === 'Escape') {

@@ -49,8 +49,7 @@ function buildHeaders(init?: HeadersInit) {
 
 function combineSignals(signals: AbortSignal[]) {
   if (signals.length === 1) return signals[0];
-  const any = (AbortSignal as any).any as ((signals: AbortSignal[]) => AbortSignal) | undefined;
-  if (typeof any === 'function') return any(signals);
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals);
 
   const controller = new AbortController();
   const onAbort = () => controller.abort();
@@ -115,8 +114,8 @@ export function createHttpClient(options: HttpClientOptions = {}) {
       const payload = await safeJson(res);
       if (!res.ok) {
         const message =
-          payload && typeof payload === 'object' && 'message' in (payload as any)
-            ? String((payload as any).message || `HTTP ${res.status}`)
+          payload && typeof payload === 'object' && 'message' in payload
+            ? String(payload.message || `HTTP ${res.status}`)
             : typeof payload === 'string' && payload
               ? payload
               : `HTTP ${res.status}`;
