@@ -1,3 +1,4 @@
+import type { Expense, Budget } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -190,7 +191,7 @@ export class JarvisFinanceService {
     }
   }
 
-  private mapExpense(e: any): ExpenseRecord {
+  private mapExpense(e: Expense): ExpenseRecord {
     return {
       id: e.id,
       amount: e.amount,
@@ -203,7 +204,7 @@ export class JarvisFinanceService {
   }
 
   private mapBudget(
-    b: any,
+    b: Budget,
   ): Omit<BudgetRecord, 'spent' | 'remaining' | 'percent'> {
     return {
       id: b.id,

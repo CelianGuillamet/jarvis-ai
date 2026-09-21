@@ -1,3 +1,4 @@
+import type { JarvisGoal } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -159,7 +160,7 @@ export class JarvisGoalService {
     return lines.join('\n');
   }
 
-  private async enrichGoalWithSubGoals(goal: any): Promise<GoalRecord> {
+  private async enrichGoalWithSubGoals(goal: JarvisGoal): Promise<GoalRecord> {
     const subGoals = await this.prisma.jarvisGoal.findMany({
       where: {
         parentGoalId: goal.id,
@@ -186,7 +187,7 @@ export class JarvisGoalService {
     };
   }
 
-  private mapGoalRecord(goal: any): GoalRecord {
+  private mapGoalRecord(goal: JarvisGoal): GoalRecord {
     return {
       id: goal.id,
       title: goal.title,

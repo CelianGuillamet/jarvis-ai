@@ -1,3 +1,4 @@
+import type { Contact } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -137,7 +138,7 @@ export class JarvisContactService {
     }
   }
 
-  private map(c: any): ContactRecord {
+  private map(c: Contact): ContactRecord {
     let tags: string[] = [];
     try {
       tags = JSON.parse(c.tags);

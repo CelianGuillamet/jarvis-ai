@@ -1,3 +1,4 @@
+import type { JarvisTaskDependency } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -191,7 +192,7 @@ export class JarvisDependencyTrackingService {
     }
   }
 
-  private mapDependencyRecord(dep: any): DependencyRecord {
+  private mapDependencyRecord(dep: JarvisTaskDependency): DependencyRecord {
     return {
       id: dep.id,
       sourceTaskId: dep.sourceTaskId,

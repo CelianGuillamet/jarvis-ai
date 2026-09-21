@@ -1,3 +1,4 @@
+import type { JarvisPredictiveMetric } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -182,7 +183,9 @@ export class JarvisPredictiveAnalyticsService {
     }
   }
 
-  private mapMetricRecord(metric: any): PredictiveMetricRecord {
+  private mapMetricRecord(
+    metric: JarvisPredictiveMetric,
+  ): PredictiveMetricRecord {
     return {
       id: metric.id,
       sessionId: metric.sessionId,

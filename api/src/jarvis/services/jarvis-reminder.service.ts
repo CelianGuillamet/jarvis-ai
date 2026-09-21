@@ -1,3 +1,4 @@
+import type { Reminder } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -125,7 +126,7 @@ export class JarvisReminderService {
     }
   }
 
-  private map(r: any): ReminderRecord {
+  private map(r: Reminder): ReminderRecord {
     return {
       id: r.id,
       text: r.text,

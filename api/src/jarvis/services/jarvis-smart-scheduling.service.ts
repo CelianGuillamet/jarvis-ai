@@ -1,3 +1,4 @@
+import type { JarvisSchedulingSuggestion } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -178,7 +179,9 @@ export class JarvisSmartSchedulingService {
     }
   }
 
-  private mapSuggestionRecord(suggestion: any): SchedulingSuggestionRecord {
+  private mapSuggestionRecord(
+    suggestion: JarvisSchedulingSuggestion,
+  ): SchedulingSuggestionRecord {
     return {
       id: suggestion.id,
       sessionId: suggestion.sessionId,

@@ -1,3 +1,4 @@
+import type { JarvisKnowledgeEntry } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -108,7 +109,7 @@ export class JarvisKnowledgeBaseService {
     return lines.join('\n');
   }
 
-  private map(row: any): KnowledgeEntry {
+  private map(row: JarvisKnowledgeEntry): KnowledgeEntry {
     return {
       id: row.id,
       title: row.title,

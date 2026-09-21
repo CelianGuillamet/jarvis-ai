@@ -1,3 +1,4 @@
+import type { JarvisContextualHelp } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -147,7 +148,7 @@ export class JarvisContextualHelpService {
     }
   }
 
-  private mapHelpRecord(help: any): ContextualHelpRecord {
+  private mapHelpRecord(help: JarvisContextualHelp): ContextualHelpRecord {
     return {
       id: help.id,
       sessionId: help.sessionId,
