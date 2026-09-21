@@ -1,4 +1,4 @@
-import { DateTime, Settings } from 'luxon';
+import { Settings } from 'luxon';
 import { resolveRange } from './resolve-range';
 
 describe('resolveRange', () => {
@@ -58,5 +58,13 @@ describe('resolveRange', () => {
 
     expect(startIso.startsWith('2026-03-05T10:30:00')).toBe(true);
     expect(endIso.startsWith('2026-03-19T10:30:00')).toBe(true);
+  });
+  it.each([
+    ['du 31 au 31 fevrier', 'Europe/Paris'],
+    ['demain', 'Invalid/Timezone'],
+  ])('rejects invalid dates or zones: %s / %s', (text, zone) => {
+    expect(() => resolveRange(text, zone)).toThrow(
+      'Date ou fuseau horaire invalide.',
+    );
   });
 });

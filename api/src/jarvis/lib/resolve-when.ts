@@ -223,7 +223,7 @@ export function resolveWhenWindow(
   const directIso = DateTime.fromISO(raw, { zone: tz });
   if (directIso.isValid) {
     return {
-      startIso: directIso.toISO({ suppressMilliseconds: true })!,
+      startIso: directIso.toISO({ suppressMilliseconds: true }),
       hasExplicitDate: true,
       hasExplicitTime: true,
     };

@@ -1770,8 +1770,7 @@ function scoreMailUrgency(mail: GmailMessageItem, now: DateTime) {
   }
 
   const ageHours = Math.abs(
-    now.diff(DateTime.fromJSDate(mail.date).setZone(now.zoneName), 'hours')
-      .hours,
+    now.diff(DateTime.fromJSDate(mail.date).setZone(now.zone), 'hours').hours,
   );
   if (ageHours <= 24) score += 1;
   if (mail.unread) score += 1;
@@ -1956,7 +1955,9 @@ function resolveCalendarInterval(
     endIso?: string;
   },
   tz: string,
-) {
+):
+  | { error: string; startIso: null; endIso: null }
+  | { error: null; startIso: string; endIso: string } {
   const hasIso = !!(input.startIso && input.endIso);
   if (hasIso) {
     const start = DateTime.fromISO(input.startIso!, { zone: tz });
@@ -1976,7 +1977,7 @@ function resolveCalendarInterval(
       };
     }
     return {
-      error: null as string | null,
+      error: null,
       startIso: start.toISO({ suppressMilliseconds: true })!,
       endIso: end.toISO({ suppressMilliseconds: true })!,
     };
@@ -1993,7 +1994,7 @@ function resolveCalendarInterval(
   }
 
   const { startIso, endIso } = resolveRange(text, tz);
-  return { error: null as string | null, startIso, endIso };
+  return { error: null, startIso, endIso };
 }
 
 function formatDurationMinutes(totalMinutes: number) {
@@ -2506,6 +2507,9 @@ export async function runTool(
       const nowDt = DateTime.now().setZone(tz);
       const fallbackStart = nowDt.minus({ days: 30 }).startOf('day');
       const fallbackEnd = nowDt.plus({ days: 180 }).endOf('day');
+      if (!fallbackStart.isValid || !fallbackEnd.isValid) {
+        throw new RangeParseError('Fuseau horaire invalide.');
+      }
       const fallbackEvents = await ctx.calendar.listEventsInterval(
         sessionId,
         fallbackStart.toISO({ suppressMilliseconds: true }),
@@ -3137,7 +3141,7 @@ export async function runTool(
         case 'calendar.list': {
           try {
             const interval = resolveCalendarInterval(call.args, tz);
-            if (interval.error) return interval.error;
+            if (interval.error !== null) return interval.error;
             const limit = call.args.limit ?? 20;
 
             const events = await ctx.calendar.listEventsInterval(
@@ -3175,7 +3179,7 @@ export async function runTool(
         case 'calendar.has': {
           try {
             const interval = resolveCalendarInterval(call.args, tz);
-            if (interval.error) return interval.error;
+            if (interval.error !== null) return interval.error;
             const events = await ctx.calendar.listEventsInterval(
               sessionId,
               interval.startIso,
