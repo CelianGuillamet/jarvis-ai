@@ -38,6 +38,7 @@ import { normalizeToolOnlyCall, parseToolCall } from '../tools/tool-call';
 import { gateToolCall } from '../tools/tool-engine';
 import { resolveRange } from '../lib/resolve-range';
 import { resolveWhenWindow } from '../lib/resolve-when';
+import { planCalendarWrite } from '../lib/calendar-intent';
 import {
   createHumanProfile,
   humanizeAskOrFinal,
@@ -1953,6 +1954,8 @@ export class JarvisService {
     st: ConversationState | null,
     sessionId: string,
   ): ActionDecision | null {
+    const calendarDecision = planCalendarWrite(userText, this.tz);
+    if (calendarDecision) return calendarDecision;
     return this.tryDirectAction(userText, st, sessionId);
   }
 
@@ -2290,6 +2293,8 @@ export class JarvisService {
       'rendez vous',
       'rendez-vous',
       'rdv',
+      'reunion',
+      'evenement',
     ]);
     const isShopping = includesAny(text, [
       'course',
@@ -2916,15 +2921,15 @@ export class JarvisService {
     }
 
     // Par défaut sur des refs + action "terminé/supprimer", on privilégie les todos.
-    if (!isTodo && !isShopping && refs.length && wantsDone) {
+    if (!isCalendar && !isTodo && !isShopping && refs.length && wantsDone) {
       return { type: 'tool', name: 'todo.bulk_done', args: { refs } };
     }
-    if (!isTodo && !isShopping && refs.length && wantsDelete) {
+    if (!isCalendar && !isTodo && !isShopping && refs.length && wantsDelete) {
       return { type: 'tool', name: 'todo.bulk_delete', args: { refs } };
     }
 
     // Follow-up de clarification: "le 1 et le 2" sans répéter le domaine.
-    if (!isTodo && !isShopping && refs.length && st) {
+    if (!isCalendar && !isTodo && !isShopping && refs.length && st) {
       const prior = normalizeIntentText(
         `${st.originalUserText} ${st.askedText}`,
       );

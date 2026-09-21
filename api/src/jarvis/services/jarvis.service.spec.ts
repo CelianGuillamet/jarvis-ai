@@ -361,6 +361,7 @@ function makeService(options: ServiceOptions = {}) {
     missionStore,
     workflowStore,
     auditStore,
+    calendar,
   };
 }
 
@@ -644,7 +645,7 @@ describe('JarvisService', () => {
     expect(llmChat).not.toHaveBeenCalled();
     expect(response.pending_action?.name).toBe('calendar.delete');
     expect(response.pending_action?.planner).toBe('intent');
-    expect(response.pending_action?.confidence).toBe('medium');
+    expect(response).toMatchObject({ pending_action: { confidence: 'medium' } });
     expect(response.pending_action?.confirmationReason).toBe(
       'intent_medium_confidence',
     );
@@ -1028,4 +1029,64 @@ describe('JarvisService disabled web capability', () => {
     const snapshot = await service.status('disabled-web-status');
     expect(snapshot.providers.web).toBe('disabled');
   });
+});
+
+
+describe('calendar routing safety', () => {
+  it.each([
+    'Ajoute un rendez-vous demain à 18h',
+    'Supprime mon rendez-vous demain',
+    'Supprime le rendez-vous #2',
+  ])(
+    'does not queue or execute a write without the Calendar scope: %s',
+    async (message) => {
+      const { service, llmChat, calendar, pending, auditStore } = makeService({
+        googleScope: 'https://www.googleapis.com/auth/calendar.readonly',
+      });
+      const response = await service.chat(message, `scope-${message}`);
+      expect(llmChat).not.toHaveBeenCalled();
+      expect(response).toMatchObject({ meta: { awaiting: 'connect_google' } });
+      expect(pending.create).not.toHaveBeenCalled();
+      expect(auditStore.recordPending).not.toHaveBeenCalled();
+      expect(calendar.createEvent).not.toHaveBeenCalled();
+      expect(calendar.deleteEvent).not.toHaveBeenCalled();
+    },
+  );
+
+  it('queues an ambiguous deletion without executing it', async () => {
+    const { service, calendar, pending } = makeService({
+      googleScope: 'https://www.googleapis.com/auth/calendar.events',
+    });
+    const response = await service.chat(
+      'Supprime mon rendez-vous demain',
+      'calendar-no-write',
+    );
+    expect(response).toMatchObject({ pending_action: { confidence: 'medium' } });
+    expect(pending.create).toHaveBeenCalledWith('calendar-no-write', {
+      type: 'tool',
+      name: 'calendar.delete',
+      args: { query: 'mon rendez-vous demain' },
+    });
+    expect(calendar.deleteEvent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'Supprime les rendez-vous #1 et #2',
+    'Supprime la réunion #1 et #2',
+    'Ne supprime pas mon rendez-vous #1',
+  ])(
+    'does not route unsupported calendar references to todo deletion: %s',
+    async (message) => {
+      const { service, llmChat, pending, calendar } = makeService({
+        googleScope: 'https://www.googleapis.com/auth/calendar.events',
+      });
+      llmChat.mockResolvedValue(
+        JSON.stringify({ type: 'final', text: 'Aucune action exécutée.' }),
+      );
+      await service.chat(message, `unsupported-${message}`);
+      expect(llmChat).toHaveBeenCalled();
+      expect(pending.create).not.toHaveBeenCalled();
+      expect(calendar.deleteEvent).not.toHaveBeenCalled();
+    },
+  );
 });
