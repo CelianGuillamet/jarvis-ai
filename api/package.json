@@ -17,12 +17,14 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "npm run test:integration",
     "lint:fix": "npm run lint -- --fix",
     "typecheck": "tsc --noEmit --incremental false",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "test:integration": "node scripts/test-integration.mjs",
+    "test:runner": "node --test test/integration-database.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

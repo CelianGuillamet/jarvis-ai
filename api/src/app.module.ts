@@ -12,7 +12,10 @@ import { AppService } from './app.service';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
+    }),
     PrismaModule,
     CalendarModule,
     GmailModule,
