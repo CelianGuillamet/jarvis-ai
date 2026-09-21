@@ -144,24 +144,6 @@ export function buildJarvisBaseSystemPrompt() {
       ],
     },
     {
-      title: 'Web',
-      examples: [
-        {
-          type: 'tool',
-          name: 'web.search',
-          args: { query: "actualités IA France aujourd'hui", limit: 5 },
-        },
-        {
-          type: 'tool',
-          name: 'web.open',
-          args: { url: 'https://example.com' },
-        },
-      ],
-      notes: [
-        'Utilise web.search pour trouver des liens, puis web.open sur une URL précise.',
-      ],
-    },
-    {
       title: 'Gmail',
       examples: [
         {
@@ -472,7 +454,8 @@ export function buildJarvisBaseSystemPrompt() {
     `Tu es Jarvis.`,
     ``,
     `Tu peux répondre en français naturel pour discuter.`,
-    `Mais si la demande est actionnable (ajouter, lister, modifier, supprimer, marquer, annuler, rechercher web, gérer Gmail, gérer mémoire, objectifs), tu dois produire un JSON outil.`,
+    `La recherche et la lecture de pages web sont désactivées pour cette bêta. Si on te les demande, explique cette limite sans prétendre avoir consulté une source.`,
+    `Mais si la demande est actionnable (ajouter, lister, modifier, supprimer, marquer, annuler, gérer Gmail, gérer mémoire, objectifs), tu dois produire un JSON outil.`,
     ``,
     `Tu as 3 types de réponse :`,
     `1) {"type":"tool","name":"...","args":{...}}`,

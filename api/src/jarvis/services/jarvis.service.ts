@@ -13,7 +13,7 @@ import type { LLMProvider } from '../providers/llm.provider';
 import { OllamaProvider } from '../providers/ollama.provider';
 import { OpenAIProvider } from '../providers/openai.provider';
 import {
-  DefaultWebProvider,
+  DisabledWebProvider,
   type WebProvider,
 } from '../providers/web.provider';
 import {
@@ -555,39 +555,7 @@ export class JarvisService {
       );
     }
 
-    const webApiKey =
-      this.config.get<string>('WEB_SEARCH_API_KEY')?.trim() || '';
-    const serperApiKey =
-      this.config.get<string>('SERPER_API_KEY')?.trim() || '';
-    const googleSearchApiKey =
-      this.config.get<string>('GOOGLE_SEARCH_API_KEY')?.trim() || '';
-    const googleSearchCx =
-      this.config.get<string>('GOOGLE_SEARCH_CX')?.trim() || '';
-    const configuredWebProvider =
-      this.config.get<string>('WEB_SEARCH_PROVIDER')?.trim() ||
-      (serperApiKey
-        ? 'serper'
-        : googleSearchApiKey && googleSearchCx
-          ? 'google'
-          : webApiKey
-            ? 'tavily'
-            : 'duckduckgo');
-    this.web = new DefaultWebProvider(
-      configuredWebProvider,
-      webApiKey,
-      this.config.get<string>('WEB_SEARCH_BASE_URL') ||
-        'https://api.tavily.com',
-      this.config.get<string>('WEB_DDG_BASE_URL') ||
-        'https://api.duckduckgo.com/',
-      Number(this.config.get<string>('WEB_TIMEOUT_MS') || 12_000),
-      Number(this.config.get<string>('WEB_MAX_PAGE_CHARS') || 6_000),
-      googleSearchApiKey,
-      googleSearchCx,
-      this.config.get<string>('GOOGLE_SEARCH_BASE_URL') ||
-        'https://www.googleapis.com',
-      serperApiKey,
-      this.config.get<string>('SERPER_BASE_URL') || 'https://google.serper.dev',
-    );
+    this.web = new DisabledWebProvider();
     this.logger.log(`Web provider: ${this.web.name}`);
 
     this.weather = new DefaultWeatherProvider(
