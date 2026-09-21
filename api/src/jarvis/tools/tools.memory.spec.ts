@@ -32,14 +32,14 @@ describe('runTool memory tools', () => {
       value: string;
       confidence?: number;
     }>;
-  }): ToolContext {
+  }) {
     const web: WebProvider = {
       name: 'mock',
-      async search() {
-        return [];
+      search() {
+        return Promise.resolve([]);
       },
-      async open(url: string) {
-        return { url, content: '' };
+      open(url: string) {
+        return Promise.resolve({ url, content: '' });
       },
     };
 
@@ -133,14 +133,15 @@ describe('runTool memory tools', () => {
     };
 
     return {
-      prisma: {} as any,
-      memory: memory as any,
+      prisma: {} as unknown as ToolContext['prisma'],
+      memory: memory as unknown as ToolContext['memory'],
+      memoryMock: memory,
       simulation: false,
       tz,
       sessionId,
       calendar,
       web,
-      weather: {} as any,
+      weather: {} as unknown as ToolContext['weather'],
       gmail,
     };
   }
@@ -172,7 +173,7 @@ describe('runTool memory tools', () => {
       args: { ref: 1 },
     });
     expect(forgotten).toContain('OK. Mémoire oubliée');
-    expect((ctx.memory as any).forgetFact).toHaveBeenCalledWith(sessionId, {
+    expect(ctx.memoryMock.forgetFact).toHaveBeenCalledWith(sessionId, {
       layer: 'project',
       key: 'primary_project',
     });
@@ -195,7 +196,7 @@ describe('runTool memory tools', () => {
     });
 
     expect(out).toContain('OK. Mémoire mise à jour');
-    expect((ctx.memory as any).upsertFact).toHaveBeenCalledWith(
+    expect(ctx.memoryMock.upsertFact).toHaveBeenCalledWith(
       sessionId,
       expect.objectContaining({
         layer: 'project',
@@ -229,6 +230,6 @@ describe('runTool memory tools', () => {
     });
 
     expect(out).toContain('Plusieurs entrées correspondent');
-    expect((ctx.memory as any).forgetFact).not.toHaveBeenCalled();
+    expect(ctx.memoryMock.forgetFact).not.toHaveBeenCalled();
   });
 });

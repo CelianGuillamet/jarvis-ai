@@ -55,13 +55,13 @@ describe('runTool workflow list', () => {
 
     return {
       prisma: prisma as unknown as ToolContext['prisma'],
-      memory: {} as any,
+      memory: {} as unknown as ToolContext['memory'],
       simulation: false,
       tz: 'Europe/Paris',
       sessionId: 'workflow-tools-spec',
       calendar,
       web,
-      weather: {} as any,
+      weather: {} as unknown as ToolContext['weather'],
       gmail,
     };
   }

@@ -31,11 +31,11 @@ describe('runTool mission planner', () => {
   }): ToolContext {
     const web: WebProvider = {
       name: 'mock',
-      async search() {
-        return [];
+      search() {
+        return Promise.resolve([]);
       },
-      async open(url: string) {
-        return { url, content: '' };
+      open(url: string) {
+        return Promise.resolve({ url, content: '' });
       },
     };
 
@@ -72,18 +72,19 @@ describe('runTool mission planner', () => {
       jarvisMission: {
         findMany: jest
           .fn()
-          .mockImplementation(
-            async ({ where }: { where?: { status?: string } }) =>
+          .mockImplementation(({ where }: { where?: { status?: string } }) =>
+            Promise.resolve(
               missionsState
                 .filter((mission) =>
                   where?.status ? mission.status === where.status : true,
                 )
                 .map((mission) => ({ ...mission })),
+            ),
           ),
         update: jest
           .fn()
           .mockImplementation(
-            async ({
+            ({
               where,
               data,
             }: {
@@ -93,10 +94,11 @@ describe('runTool mission planner', () => {
               const mission = missionsState.find(
                 (item) => item.id === where.id,
               );
-              if (!mission) throw new Error('MISSION_NOT_FOUND');
+              if (!mission)
+                return Promise.reject(new Error('MISSION_NOT_FOUND'));
               if (data.status) mission.status = data.status;
               mission.updatedAt = new Date('2026-04-17T10:30:00+02:00');
-              return { ...mission };
+              return Promise.resolve({ ...mission });
             },
           ),
       },
@@ -120,14 +122,14 @@ describe('runTool mission planner', () => {
     };
 
     return {
-      prisma: prisma as any,
-      memory: {} as any,
+      prisma: prisma as unknown as ToolContext['prisma'],
+      memory: {} as unknown as ToolContext['memory'],
       simulation: false,
       tz: 'Europe/Paris',
       sessionId: 'mission-tools-spec',
       calendar,
       web,
-      weather: {} as any,
+      weather: {} as unknown as ToolContext['weather'],
       gmail,
     };
   }
