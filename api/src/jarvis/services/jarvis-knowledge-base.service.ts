@@ -1,3 +1,4 @@
+import { parseStoredTags } from '../lib/stored-json';
 import type { JarvisKnowledgeEntry } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -114,19 +115,11 @@ export class JarvisKnowledgeBaseService {
       id: row.id,
       title: row.title,
       content: row.content,
-      tags: this.parseTags(row.tags),
+      tags: parseStoredTags(row.tags),
       category: row.category,
       useCount: row.useCount,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
-  }
-
-  private parseTags(raw: string): string[] {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return [];
-    }
   }
 }

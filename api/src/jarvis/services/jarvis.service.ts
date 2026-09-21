@@ -28,7 +28,6 @@ import {
 } from '../lib/execution-policy';
 import { PendingActionsService } from './pending-action.service';
 import {
-  getLastWebSearchResults,
   previewTool,
   runTool,
   type ToolContext,
@@ -178,7 +177,7 @@ function parseVerbosity(
   return fallback;
 }
 
-function isRecord(v: unknown): v is Record<string, any> {
+function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
@@ -362,17 +361,16 @@ function parseJarvisActionJson(jsonText: string): JarvisAction | null {
     return null;
   }
 
-  if (!isRecord(x) || typeof (x as any).type !== 'string') return null;
+  if (!isRecord(x) || typeof x.type !== 'string') return null;
 
-  if ((x as any).type === 'ask') {
-    if (typeof (x as any).text !== 'string') return null;
-    const choicesRaw = (x as any).choices;
+  if (x.type === 'ask') {
+    if (typeof x.text !== 'string') return null;
+    const choicesRaw = x.choices;
     const choices = Array.isArray(choicesRaw)
       ? choicesRaw.filter((c) => typeof c === 'string')
       : undefined;
-    const awaiting =
-      typeof (x as any).awaiting === 'string' ? (x as any).awaiting : undefined;
-    return { type: 'ask', text: (x as any).text, choices, awaiting };
+    const awaiting = typeof x.awaiting === 'string' ? x.awaiting : undefined;
+    return { type: 'ask', text: x.text, choices, awaiting };
   }
 
   return parseToolCall(jsonText);
@@ -1181,7 +1179,7 @@ export class JarvisService {
   }
 
   private llmProviderName() {
-    const explicit = (this.llm as any)?.providerName;
+    const explicit = this.llm.providerName;
     if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
     if (this.llm instanceof OpenAIProvider) return 'openai';
     if (this.llm instanceof OllamaProvider) return 'ollama';
@@ -1939,9 +1937,8 @@ export class JarvisService {
   private tryDirectAction(
     userText: string,
     st: ConversationState | null,
-    sessionId: string,
   ): ActionDecision | null {
-    const call = this.tryDirectToolCall(userText, st, sessionId);
+    const call = this.tryDirectToolCall(userText, st);
     if (!call) return null;
     return {
       action: call,
@@ -1953,17 +1950,15 @@ export class JarvisService {
   private choosePrecomputedAction(
     userText: string,
     st: ConversationState | null,
-    sessionId: string,
   ): ActionDecision | null {
     const calendarDecision = planCalendarWrite(userText, this.tz);
     if (calendarDecision) return calendarDecision;
-    return this.tryDirectAction(userText, st, sessionId);
+    return this.tryDirectAction(userText, st);
   }
 
   private tryDirectToolCall(
     userText: string,
     st: ConversationState | null,
-    sessionId: string,
   ): Extract<ToolCall, { type: 'tool' }> | null {
     const text = normalizeIntentText(userText);
     const refs = extractRefsFromText(text);
@@ -1992,46 +1987,11 @@ export class JarvisService {
     ];
     const boughtWords = ['achete', 'achetes', 'acheter', 'pris', 'prendre'];
     const unboughtWords = ['non achete', 'pas achete'];
-    const monthWords = [
-      'janvier',
-      'fevrier',
-      'mars',
-      'avril',
-      'mai',
-      'juin',
-      'juillet',
-      'aout',
-      'septembre',
-      'octobre',
-      'novembre',
-      'decembre',
-    ];
-
     const wantsList = includesAny(text, listWords);
     const wantsAll = includesAny(text, allWords);
     const wantsDelete = includesAny(text, deleteWords);
     const wantsDone = includesAny(text, doneWords);
     const wantsBought = includesAny(text, boughtWords);
-    const wantsModify =
-      includesAny(text, [
-        'modifie',
-        'modifier',
-        'change',
-        'changer',
-        'mettre',
-        'deplace',
-        'deplacer',
-        'decale',
-        'decaler',
-        'avance',
-        'avancer',
-        'recule',
-        'reculer',
-        'reporte',
-        'reporter',
-        'reprogramme',
-        'reprogrammer',
-      ]) || hasMetVerb(text);
     if (
       includesAny(text, [
         'undo',
@@ -3027,7 +2987,7 @@ export class JarvisService {
   private normalizeToolCall(
     call: Extract<ToolCall, { type: 'tool' }>,
     effectiveTextForDates: string,
-  ) {
+  ): Extract<ToolCall, { type: 'tool' }> {
     if (call.name === 'calendar.create') {
       const resolved = resolveWhenWindow(effectiveTextForDates, this.tz);
       return {
@@ -3037,7 +2997,7 @@ export class JarvisService {
           when: resolved.startIso,
           ...(resolved.endIso ? { endWhen: resolved.endIso } : {}),
         },
-      } as any;
+      };
     }
     if (call.name === 'calendar.update') {
       const nextArgs = { ...call.args };
@@ -3077,7 +3037,7 @@ export class JarvisService {
             parsedEnd.toISO({ suppressMilliseconds: true }) ?? nextArgs.endWhen;
         }
       }
-      return { ...call, args: nextArgs } as any;
+      return { ...call, args: nextArgs };
     }
     return call;
   }
@@ -3382,11 +3342,7 @@ export class JarvisService {
 Si c'est actionnable: renvoie un JSON tool/ask.`
         : '';
 
-      const precomputedDecision = this.choosePrecomputedAction(
-        userText,
-        st,
-        resolvedSessionId,
-      );
+      const precomputedDecision = this.choosePrecomputedAction(userText, st);
       let raw = precomputedDecision
         ? `[${precomputedDecision.planner.toUpperCase()}_ACTION]`
         : '';
@@ -3474,11 +3430,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       if (action.type === 'final') {
         const actionable = this.seemsActionable(userText);
         if (this.isFillerFinal(action.text) || actionable) {
-          const fallbackDecision = this.choosePrecomputedAction(
-            userText,
-            st,
-            resolvedSessionId,
-          );
+          const fallbackDecision = this.choosePrecomputedAction(userText, st);
           if (fallbackDecision) {
             raw = `${raw}\n[${fallbackDecision.planner.toUpperCase()}_ACTION_FALLBACK]`;
             decision = fallbackDecision;

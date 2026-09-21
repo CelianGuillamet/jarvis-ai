@@ -1,3 +1,4 @@
+import { parseStoredNumbers } from '../lib/stored-json';
 import type { JarvisPredictiveMetric } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -190,8 +191,8 @@ export class JarvisPredictiveAnalyticsService {
       id: metric.id,
       sessionId: metric.sessionId,
       metricType: metric.metricType,
-      historicalData: JSON.parse(metric.historicalData),
-      forecast: JSON.parse(metric.forecast),
+      historicalData: parseStoredNumbers(metric.historicalData),
+      forecast: parseStoredNumbers(metric.forecast),
       accuracy: metric.accuracy,
       forecastedAt: metric.forecastedAt.toISOString(),
       createdAt: metric.createdAt.toISOString(),

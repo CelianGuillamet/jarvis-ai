@@ -87,7 +87,7 @@ function safeParseJson<T>(raw: string | null | undefined, fallback: T): T {
 
 function isPrismaMissingTableError(error: unknown) {
   if (!error || typeof error !== 'object') return false;
-  return 'code' in error && (error as any).code === 'P2021';
+  return 'code' in error && error.code === 'P2021';
 }
 
 function ensureInboxZeroCategory(value: string): InboxZeroCategory | null {
@@ -209,7 +209,7 @@ export class InboxZeroService {
               date: m.date,
               snippet: m.snippet || '',
               labelsJson: JSON.stringify(m.labels ?? []),
-              gmailCategory: (m.category as any) ?? null,
+              gmailCategory: m.category ?? null,
               unread: !!m.unread,
               category: classification.category,
               priority: classification.priority,
@@ -226,7 +226,7 @@ export class InboxZeroService {
               date: m.date,
               snippet: m.snippet || '',
               labelsJson: JSON.stringify(m.labels ?? []),
-              gmailCategory: (m.category as any) ?? null,
+              gmailCategory: m.category ?? null,
               unread: !!m.unread,
               category: classification.category,
               priority: classification.priority,

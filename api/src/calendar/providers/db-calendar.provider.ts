@@ -36,7 +36,6 @@ export class DbCalendarProvider implements CalendarProvider {
     title: string,
     whenIso: string,
     tz: string,
-    _endWhenIso?: string,
   ) {
     const when = DateTime.fromISO(whenIso, { zone: tz }).toJSDate();
     await this.prisma.calendarEvent.create({ data: { title, when } });
@@ -59,7 +58,6 @@ export class DbCalendarProvider implements CalendarProvider {
     title: string,
     whenIso: string,
     tz: string,
-    _endWhenIso?: string,
   ) {
     if (provider !== 'db') throw new Error('DB_UPDATE_WRONG_PROVIDER');
     const when = DateTime.fromISO(whenIso, { zone: tz }).toJSDate();

@@ -96,7 +96,6 @@ export class JarvisFinanceService {
   async summary(sessionId: string, period?: string): Promise<FinanceSummary> {
     const now = new Date();
     let from: string;
-    let to: string;
     const label = period ?? 'month';
 
     if (label === 'week') {
@@ -108,7 +107,7 @@ export class JarvisFinanceService {
     } else {
       from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     }
-    to = now.toISOString().slice(0, 10);
+    const to = now.toISOString().slice(0, 10);
 
     const [expenses, budgets] = await Promise.all([
       this.listExpenses(sessionId, { from, to, limit: 500 }),

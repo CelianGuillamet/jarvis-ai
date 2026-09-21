@@ -1,9 +1,3 @@
-/* eslint-disable
-  @typescript-eslint/no-unsafe-assignment,
-  @typescript-eslint/no-unsafe-call,
-  @typescript-eslint/no-unsafe-member-access,
-  @typescript-eslint/no-unsafe-return
-*/
 import { DateTime } from 'luxon';
 
 import { GMAIL_CATEGORIES } from '../../gmail/gmail-category';
@@ -12,11 +6,11 @@ import type { ToolCall } from './tools';
 type ToolOnly = Extract<ToolCall, { type: 'tool' }>;
 type ToolName = ToolOnly['name'];
 
-function isRecord(v: unknown): v is Record<string, any> {
+function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
-function isOneOf<T extends string>(v: any, allowed: readonly T[]): v is T {
+function isOneOf<T extends string>(v: unknown, allowed: readonly T[]): v is T {
   return typeof v === 'string' && allowed.includes(v as T);
 }
 
@@ -62,41 +56,40 @@ export function parseToolCall(jsonText: string): ToolCall | null {
   if (!isRecord(x) || typeof x.type !== 'string') return null;
 
   if (x.type === 'final') {
-    if (typeof (x as any).text !== 'string') return null;
-    return { type: 'final', text: (x as any).text };
+    if (typeof x.text !== 'string') return null;
+    return { type: 'final', text: x.text };
   }
 
   if (x.type !== 'tool') return null;
-  if (typeof (x as any).name !== 'string' || !isRecord((x as any).args))
-    return null;
+  if (typeof x.name !== 'string' || !isRecord(x.args)) return null;
 
-  const name = (x as any).name as ToolName;
-  const args = (x as any).args as Record<string, any>;
+  const name = x.name as ToolName;
+  const args = x.args;
 
   if (name === 'todo.add') {
     if (typeof args.text !== 'string') return null;
-    return { type: 'tool', name, args: { text: args.text } } as any;
+    return { type: 'tool', name, args: { text: args.text } };
   }
 
   if (name === 'todo.list') {
     const show = args.show;
     if (show !== undefined && !isOneOf(show, ['open', 'all'] as const))
       return null;
-    return { type: 'tool', name, args: show ? { show } : {} } as any;
+    return { type: 'tool', name, args: show ? { show } : {} };
   }
 
   if (name === 'todo.done') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'todo.reopen') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'todo.done_all') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'todo.update') {
@@ -106,26 +99,26 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { query: args.query, text: args.text },
-    } as any;
+    };
   }
 
   if (name === 'todo.delete') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'todo.bulk_done' || name === 'todo.bulk_delete') {
     const refs = parseRefsArray(args.refs);
     if (!refs) return null;
-    return { type: 'tool', name, args: { refs } } as any;
+    return { type: 'tool', name, args: { refs } };
   }
 
   if (name === 'todo.clear_done') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'todo.clear_all') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   // calendar.list : rangeText libre + limit optionnel
@@ -143,9 +136,9 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     )
       return null;
 
-    const out: any = {};
-    if (hasRangeText) out.rangeText = args.rangeText;
-    if (hasStartIso && hasEndIso) {
+    const out: Extract<ToolOnly, { name: 'calendar.list' }>['args'] = {};
+    if (typeof args.rangeText === 'string') out.rangeText = args.rangeText;
+    if (typeof args.startIso === 'string' && typeof args.endIso === 'string') {
       const start = DateTime.fromISO(args.startIso);
       const end = DateTime.fromISO(args.endIso);
       if (!start.isValid || !end.isValid || end <= start) return null;
@@ -155,7 +148,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     }
 
     if (typeof limit === 'number') out.limit = limit;
-    return { type: 'tool', name, args: out } as any;
+    return { type: 'tool', name, args: out };
   }
 
   if (name === 'calendar.has') {
@@ -165,9 +158,9 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     if (!hasWhen && !(hasStartIso && hasEndIso)) return null;
     if ((hasStartIso && !hasEndIso) || (!hasStartIso && hasEndIso)) return null;
 
-    const out: any = {};
-    if (hasWhen) out.when = args.when;
-    if (hasStartIso && hasEndIso) {
+    const out: Extract<ToolOnly, { name: 'calendar.has' }>['args'] = {};
+    if (typeof args.when === 'string') out.when = args.when;
+    if (typeof args.startIso === 'string' && typeof args.endIso === 'string') {
       const start = DateTime.fromISO(args.startIso);
       const end = DateTime.fromISO(args.endIso);
       if (!start.isValid || !end.isValid || end <= start) return null;
@@ -175,7 +168,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         start.toISO({ suppressMilliseconds: true }) ?? args.startIso;
       out.endIso = end.toISO({ suppressMilliseconds: true }) ?? args.endIso;
     }
-    return { type: 'tool', name, args: out } as any;
+    return { type: 'tool', name, args: out };
   }
 
   if (name === 'calendar.duration') {
@@ -189,9 +182,9 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     if (!hasRef && !hasQuery) return null;
 
     const out: { ref?: number; query?: string } = {};
-    if (hasRef) out.ref = args.ref;
-    if (hasQuery) out.query = args.query;
-    return { type: 'tool', name, args: out } as any;
+    if (hasRef && typeof args.ref === 'number') out.ref = args.ref;
+    if (hasQuery && typeof args.query === 'string') out.query = args.query;
+    return { type: 'tool', name, args: out };
   }
 
   if (name === 'calendar.create') {
@@ -204,7 +197,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       args: endWhen
         ? { title: args.title, when, endWhen }
         : { title: args.title, when },
-    } as any;
+    };
   }
 
   if (name === 'calendar.delete') {
@@ -218,9 +211,9 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     if (!hasRef && !hasQuery) return null;
 
     const out: { ref?: number; query?: string } = {};
-    if (hasRef) out.ref = args.ref;
-    if (hasQuery) out.query = args.query;
-    return { type: 'tool', name, args: out } as any;
+    if (hasRef && typeof args.ref === 'number') out.ref = args.ref;
+    if (hasQuery && typeof args.query === 'string') out.query = args.query;
+    return { type: 'tool', name, args: out };
   }
 
   if (name === 'calendar.update') {
@@ -233,9 +226,9 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       typeof args.query === 'string' && args.query.trim().length > 0;
     if (!hasRef && !hasQuery) return null;
 
-    const hasTitle = Object.prototype.hasOwnProperty.call(args, 'title');
-    const hasWhen = Object.prototype.hasOwnProperty.call(args, 'when');
-    const hasEndWhen = Object.prototype.hasOwnProperty.call(args, 'endWhen');
+    const hasTitle = Object.hasOwn(args, 'title');
+    const hasWhen = Object.hasOwn(args, 'when');
+    const hasEndWhen = Object.hasOwn(args, 'endWhen');
     if (!hasTitle && !hasWhen && !hasEndWhen) return null;
 
     const out: {
@@ -245,8 +238,8 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       when?: string;
       endWhen?: string;
     } = {};
-    if (hasRef) out.ref = args.ref;
-    if (hasQuery) out.query = args.query;
+    if (hasRef && typeof args.ref === 'number') out.ref = args.ref;
+    if (hasQuery && typeof args.query === 'string') out.query = args.query;
 
     if (hasTitle) {
       if (typeof args.title !== 'string') return null;
@@ -260,7 +253,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       if (typeof args.endWhen !== 'string') return null;
       out.endWhen = args.endWhen;
     }
-    return { type: 'tool', name, args: out } as any;
+    return { type: 'tool', name, args: out };
   }
 
   if (name === 'note.add') {
@@ -271,12 +264,12 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: title ? { title, text: args.text } : { text: args.text },
-    } as any;
+    };
   }
 
   if (name === 'note.search') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'note.list') {
@@ -294,13 +287,13 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: typeof limit === 'number' ? { limit } : {},
-    } as any;
+    };
   }
 
   if (name === 'note.update') {
     if (typeof args.query !== 'string') return null;
-    const hasTitle = Object.prototype.hasOwnProperty.call(args, 'title');
-    const hasText = Object.prototype.hasOwnProperty.call(args, 'text');
+    const hasTitle = Object.hasOwn(args, 'title');
+    const hasText = Object.hasOwn(args, 'text');
     if (!hasTitle && !hasText) return null;
 
     const out: { query: string; title?: string | null; text?: string } = {
@@ -315,38 +308,38 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       if (typeof args.text !== 'string') return null;
       out.text = args.text;
     }
-    return { type: 'tool', name, args: out } as any;
+    return { type: 'tool', name, args: out };
   }
 
   if (name === 'note.delete') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'shopping.add') {
     if (typeof args.text !== 'string') return null;
-    return { type: 'tool', name, args: { text: args.text } } as any;
+    return { type: 'tool', name, args: { text: args.text } };
   }
 
   if (name === 'shopping.list') {
     const show = args.show;
     if (show !== undefined && !isOneOf(show, ['open', 'all'] as const))
       return null;
-    return { type: 'tool', name, args: show ? { show } : {} } as any;
+    return { type: 'tool', name, args: show ? { show } : {} };
   }
 
   if (name === 'shopping.bought') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'shopping.unbought') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'shopping.bought_all') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'shopping.update') {
@@ -356,26 +349,26 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { query: args.query, text: args.text },
-    } as any;
+    };
   }
 
   if (name === 'shopping.delete') {
     if (typeof args.query !== 'string') return null;
-    return { type: 'tool', name, args: { query: args.query } } as any;
+    return { type: 'tool', name, args: { query: args.query } };
   }
 
   if (name === 'shopping.bulk_bought' || name === 'shopping.bulk_delete') {
     const refs = parseRefsArray(args.refs);
     if (!refs) return null;
-    return { type: 'tool', name, args: { refs } } as any;
+    return { type: 'tool', name, args: { refs } };
   }
 
   if (name === 'shopping.clear_bought') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'shopping.clear_all') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'weather.forecast') {
@@ -392,7 +385,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(location ? { location } : {}),
         ...(typeof day === 'string' ? { day } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'web.search') {
@@ -414,12 +407,12 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         typeof limit === 'number'
           ? { query: args.query, limit }
           : { query: args.query },
-    } as any;
+    };
   }
 
   if (name === 'web.open') {
     if (typeof args.url !== 'string') return null;
-    return { type: 'tool', name, args: { url: args.url } } as any;
+    return { type: 'tool', name, args: { url: args.url } };
   }
 
   if (name === 'gmail.list') {
@@ -428,7 +421,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     if (args.unreadOnly !== undefined && typeof args.unreadOnly !== 'boolean') {
       return null;
     }
-    const unreadOnly = args.unreadOnly as boolean | undefined;
+    const unreadOnly = args.unreadOnly;
     const limit = args.limit;
     if (
       limit !== undefined &&
@@ -441,13 +434,11 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     }
     if (
       args.category !== undefined &&
-      !GMAIL_CATEGORIES.includes(args.category)
+      !isOneOf(args.category, GMAIL_CATEGORIES)
     ) {
       return null;
     }
-    const category = args.category as
-      | (typeof GMAIL_CATEGORIES)[number]
-      | undefined;
+    const category = args.category;
 
     return {
       type: 'tool',
@@ -458,7 +449,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(typeof limit === 'number' ? { limit } : {}),
         ...(category ? { category } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'gmail.send') {
@@ -491,7 +482,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           ? { bcc: args.bcc.trim() }
           : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'gmail.summary') {
@@ -507,7 +498,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     if (args.unreadOnly !== undefined && typeof args.unreadOnly !== 'boolean') {
       return null;
     }
-    const unreadOnly = args.unreadOnly as boolean | undefined;
+    const unreadOnly = args.unreadOnly;
 
     const limit = args.limit;
     if (
@@ -522,13 +513,11 @@ export function parseToolCall(jsonText: string): ToolCall | null {
 
     if (
       args.category !== undefined &&
-      !GMAIL_CATEGORIES.includes(args.category)
+      !isOneOf(args.category, GMAIL_CATEGORIES)
     ) {
       return null;
     }
-    const category = args.category as
-      | (typeof GMAIL_CATEGORIES)[number]
-      | undefined;
+    const category = args.category;
 
     const hasMailboxFilters =
       unreadOnly !== undefined || typeof limit === 'number' || !!category;
@@ -538,20 +527,20 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: {
-        ...(hasRef ? { ref: args.ref } : {}),
+        ...(hasRef && typeof args.ref === 'number' ? { ref: args.ref } : {}),
         ...(hasQuery ? { query } : {}),
         ...(unreadOnly === undefined ? {} : { unreadOnly }),
         ...(typeof limit === 'number' ? { limit } : {}),
         ...(category ? { category } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'gmail.bulk_mark_read') {
     if (args.unreadOnly !== undefined && typeof args.unreadOnly !== 'boolean') {
       return null;
     }
-    const unreadOnly = args.unreadOnly as boolean | undefined;
+    const unreadOnly = args.unreadOnly;
 
     const limit = args.limit;
     if (
@@ -587,7 +576,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(unreadOnly === undefined ? {} : { unreadOnly }),
         ...(typeof limit === 'number' ? { limit } : {}),
       },
-    } as any;
+    };
   }
 
   if (
@@ -612,14 +601,16 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: {
-        ...(hasRef ? { ref: args.ref } : {}),
-        ...(hasQuery ? { query: args.query } : {}),
+        ...(hasRef && typeof args.ref === 'number' ? { ref: args.ref } : {}),
+        ...(hasQuery && typeof args.query === 'string'
+          ? { query: args.query }
+          : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'undo.last_action') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'action.history') {
@@ -644,7 +635,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(status ? { status } : {}),
         ...(typeof limit === 'number' ? { limit } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'workflow.list') {
@@ -664,11 +655,11 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       args: {
         ...(typeof limit === 'number' ? { limit } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'daily.briefing') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'mission.list') {
@@ -693,7 +684,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(status ? { status } : {}),
         ...(typeof limit === 'number' ? { limit } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'mission.close') {
@@ -709,10 +700,12 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: {
-        ...(hasRef ? { ref: args.ref } : {}),
-        ...(hasQuery ? { query: args.query.trim() } : {}),
+        ...(hasRef && typeof args.ref === 'number' ? { ref: args.ref } : {}),
+        ...(hasQuery && typeof args.query === 'string'
+          ? { query: args.query.trim() }
+          : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'mission.plan') {
@@ -729,7 +722,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: horizon ? { objective, horizon } : { objective },
-    } as any;
+    };
   }
 
   if (name === 'memory.list') {
@@ -764,7 +757,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(layer ? { layer } : {}),
         ...(typeof limit === 'number' ? { limit } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'memory.set') {
@@ -813,7 +806,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(typeof confidence === 'number' ? { confidence } : {}),
         ...(sourceClean ? { source: sourceClean } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'memory.forget') {
@@ -822,8 +815,9 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       Number.isInteger(args.ref) &&
       args.ref >= 1 &&
       args.ref <= 200;
+    const layer = args.layer;
     const hasLayerKey =
-      isOneOf(args.layer, [
+      isOneOf(layer, [
         'identity',
         'preference',
         'project',
@@ -840,11 +834,15 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: {
-        ...(hasRef ? { ref: args.ref } : {}),
-        ...(hasLayerKey ? { layer: args.layer, key: args.key.trim() } : {}),
-        ...(hasQuery ? { query: args.query.trim() } : {}),
+        ...(hasRef && typeof args.ref === 'number' ? { ref: args.ref } : {}),
+        ...(hasLayerKey && typeof args.key === 'string'
+          ? { layer, key: args.key.trim() }
+          : {}),
+        ...(hasQuery && typeof args.query === 'string'
+          ? { query: args.query.trim() }
+          : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'goal.create') {
@@ -891,7 +889,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(targetDateClean ? { targetDate: targetDateClean } : {}),
         ...(parentGoalIdClean ? { parentGoalId: parentGoalIdClean } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'goal.list') {
@@ -903,7 +901,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: status ? { status } : {},
-    } as any;
+    };
   }
 
   if (name === 'goal.decompose') {
@@ -915,7 +913,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       if (!isRecord(item) || typeof item.title !== 'string') return null;
       const title = item.title.trim();
       if (!title) return null;
-      const priority = (item as any).priority;
+      const priority = item.priority;
       if (
         priority !== undefined &&
         (typeof priority !== 'number' ||
@@ -934,16 +932,16 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { goalId: args.goalId.trim(), subGoals },
-    } as any;
+    };
   }
 
   if (name === 'goal.done') {
     if (typeof args.goalId !== 'string' || !args.goalId.trim()) return null;
-    return { type: 'tool', name, args: { goalId: args.goalId.trim() } } as any;
+    return { type: 'tool', name, args: { goalId: args.goalId.trim() } };
   }
 
   if (name === 'conflict.detect') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'dependency.add') {
@@ -975,12 +973,12 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           : {}),
         ...(typeof estimatedDays === 'number' ? { estimatedDays } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'dependency.list') {
     if (typeof args.taskId !== 'string' || !args.taskId.trim()) return null;
-    return { type: 'tool', name, args: { taskId: args.taskId.trim() } } as any;
+    return { type: 'tool', name, args: { taskId: args.taskId.trim() } };
   }
 
   if (name === 'dependency.order') {
@@ -991,7 +989,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       if (typeof id !== 'string' || !id.trim()) return null;
       taskIds.push(id.trim());
     }
-    return { type: 'tool', name, args: { taskIds } } as any;
+    return { type: 'tool', name, args: { taskIds } };
   }
 
   if (name === 'resource.allocate') {
@@ -1031,7 +1029,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(allocationDateClean ? { allocationDate: allocationDateClean } : {}),
         ...(expiryDateClean ? { expiryDate: expiryDateClean } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'resource.capacity') {
@@ -1048,11 +1046,11 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       args: {
         ...(resourceTypeClean ? { resourceType: resourceTypeClean } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'resource.optimize') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'analytics.forecast') {
@@ -1061,10 +1059,10 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     if (!Array.isArray(args.historicalData) || !Array.isArray(args.forecast))
       return null;
     const historicalData = args.historicalData.filter(
-      (n: unknown) => typeof n === 'number' && Number.isFinite(n),
+      (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n),
     );
     const forecast = args.forecast.filter(
-      (n: unknown) => typeof n === 'number' && Number.isFinite(n),
+      (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n),
     );
     if (!historicalData.length || !forecast.length) return null;
     const accuracy = args.accuracy;
@@ -1086,7 +1084,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         forecast,
         ...(typeof accuracy === 'number' ? { accuracy } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'analytics.trend') {
@@ -1096,7 +1094,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { metricType: args.metricType.trim() },
-    } as any;
+    };
   }
 
   if (name === 'schedule.suggest') {
@@ -1127,7 +1125,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           : {}),
         ...(typeof priority === 'number' ? { priority } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'schedule.list') {
@@ -1139,7 +1137,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       args: {
         ...(typeof applied === 'boolean' ? { applied } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'schedule.apply') {
@@ -1149,7 +1147,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { suggestionId: args.suggestionId.trim() },
-    } as any;
+    };
   }
 
   if (name === 'schedule.next_slot') {
@@ -1176,7 +1174,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(afterDateClean ? { afterDate: afterDateClean } : {}),
         ...(typeof durationMinutes === 'number' ? { durationMinutes } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'help.create') {
@@ -1203,7 +1201,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         content: args.content.trim(),
         ...(typeof relevanceScore === 'number' ? { relevanceScore } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'help.find') {
@@ -1212,7 +1210,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { context: args.context.trim() },
-    } as any;
+    };
   }
 
   if (name === 'reminder.create') {
@@ -1237,7 +1235,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           ? { rrule: rrule.trim() }
           : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'reminder.list') {
@@ -1260,7 +1258,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(typeof done === 'boolean' ? { done } : {}),
         ...(typeof limit === 'number' ? { limit } : {}),
       },
-    } as any;
+    };
   }
 
   if (
@@ -1276,7 +1274,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     ) {
       return null;
     }
-    return { type: 'tool', name, args: { ref: args.ref } } as any;
+    return { type: 'tool', name, args: { ref: args.ref } };
   }
 
   if (name === 'reminder.snooze') {
@@ -1294,7 +1292,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { ref: args.ref, until: args.until },
-    } as any;
+    };
   }
 
   if (name === 'habit.create') {
@@ -1315,7 +1313,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           ? { frequency: frequency.trim() }
           : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'habit.list') {
@@ -1329,7 +1327,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       args: {
         ...(typeof includeArchived === 'boolean' ? { includeArchived } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'habit.log') {
@@ -1359,11 +1357,11 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           ? { note: note.trim() }
           : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'habit.streak') {
-    return { type: 'tool', name, args: {} } as any;
+    return { type: 'tool', name, args: {} };
   }
 
   if (name === 'contact.save') {
@@ -1398,12 +1396,12 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           : {}),
         ...(tags !== undefined ? { tags: parseStringArray(tags) ?? [] } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'contact.find' || name === 'contact.delete') {
     if (typeof args.query !== 'string' || !args.query.trim()) return null;
-    return { type: 'tool', name, args: { query: args.query.trim() } } as any;
+    return { type: 'tool', name, args: { query: args.query.trim() } };
   }
 
   if (name === 'contact.list') {
@@ -1421,7 +1419,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { ...(typeof limit === 'number' ? { limit } : {}) },
-    } as any;
+    };
   }
 
   if (name === 'contact.update') {
@@ -1448,7 +1446,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       type: 'tool',
       name,
       args: { query: args.query.trim(), patch },
-    } as any;
+    };
   }
 
   if (name === 'expense.add') {
@@ -1482,7 +1480,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           ? { currency: currency.trim().toUpperCase() }
           : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'expense.list') {
@@ -1520,7 +1518,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
         ...(typeof to === 'string' ? { to } : {}),
         ...(typeof limit === 'number' ? { limit } : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'expense.summary' || name === 'budget.status') {
@@ -1534,7 +1532,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           ? { period: period.trim().toLowerCase() }
           : {}),
       },
-    } as any;
+    };
   }
 
   if (name === 'budget.set') {
@@ -1563,7 +1561,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
           ? { currency: currency.trim().toUpperCase() }
           : {}),
       },
-    } as any;
+    };
   }
 
   return null;

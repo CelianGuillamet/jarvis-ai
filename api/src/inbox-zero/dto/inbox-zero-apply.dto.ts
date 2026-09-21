@@ -30,18 +30,18 @@ export class InboxZeroApplyDto {
   @MinLength(1, { each: true })
   messageIds!: string[];
 
-  @ValidateIf((o) => o.action === 'remind')
+  @ValidateIf((o: InboxZeroApplyDto) => o.action === 'remind')
   @IsString()
   @MinLength(1)
   reminderWhen!: string;
 
-  @ValidateIf((o) => o.action === 'remind')
+  @ValidateIf((o: InboxZeroApplyDto) => o.action === 'remind')
   @IsOptional()
   @IsString()
   @MinLength(1)
   reminderText?: string;
 
-  @ValidateIf((o) => o.action === 'send_reply')
+  @ValidateIf((o: InboxZeroApplyDto) => o.action === 'send_reply')
   @IsString()
   @MinLength(1)
   replyText!: string;

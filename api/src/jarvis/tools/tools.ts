@@ -29,7 +29,6 @@ import {
   GMAIL_CATEGORY_LABELS_FR,
   getGmailCategoryFromLabels,
   getGmailCategoryLabel,
-  getGmailCategoryPriority,
 } from '../../gmail/gmail-category';
 import { JarvisGoalService } from '../services/jarvis-goal.service';
 import { ConflictDetectionService } from '../services/conflict-detection.service';
@@ -56,13 +55,13 @@ export type ToolCall =
   | { type: 'tool'; name: 'todo.list'; args: { show?: 'open' | 'all' } }
   | { type: 'tool'; name: 'todo.done'; args: { query: string } }
   | { type: 'tool'; name: 'todo.reopen'; args: { query: string } }
-  | { type: 'tool'; name: 'todo.done_all'; args: {} }
+  | { type: 'tool'; name: 'todo.done_all'; args: Record<string, never> }
   | { type: 'tool'; name: 'todo.update'; args: { query: string; text: string } }
   | { type: 'tool'; name: 'todo.delete'; args: { query: string } }
   | { type: 'tool'; name: 'todo.bulk_done'; args: { refs: number[] } }
   | { type: 'tool'; name: 'todo.bulk_delete'; args: { refs: number[] } }
-  | { type: 'tool'; name: 'todo.clear_done'; args: {} }
-  | { type: 'tool'; name: 'todo.clear_all'; args: {} }
+  | { type: 'tool'; name: 'todo.clear_done'; args: Record<string, never> }
+  | { type: 'tool'; name: 'todo.clear_all'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'calendar.create';
@@ -117,7 +116,7 @@ export type ToolCall =
   | { type: 'tool'; name: 'shopping.list'; args: { show?: 'open' | 'all' } }
   | { type: 'tool'; name: 'shopping.bought'; args: { query: string } }
   | { type: 'tool'; name: 'shopping.unbought'; args: { query: string } }
-  | { type: 'tool'; name: 'shopping.bought_all'; args: {} }
+  | { type: 'tool'; name: 'shopping.bought_all'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'shopping.update';
@@ -126,8 +125,8 @@ export type ToolCall =
   | { type: 'tool'; name: 'shopping.delete'; args: { query: string } }
   | { type: 'tool'; name: 'shopping.bulk_bought'; args: { refs: number[] } }
   | { type: 'tool'; name: 'shopping.bulk_delete'; args: { refs: number[] } }
-  | { type: 'tool'; name: 'shopping.clear_bought'; args: {} }
-  | { type: 'tool'; name: 'shopping.clear_all'; args: {} }
+  | { type: 'tool'; name: 'shopping.clear_bought'; args: Record<string, never> }
+  | { type: 'tool'; name: 'shopping.clear_all'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'weather.forecast';
@@ -212,8 +211,8 @@ export type ToolCall =
       name: 'gmail.delete';
       args: { ref?: number; query?: string };
     }
-  | { type: 'tool'; name: 'undo.last_action'; args: {} }
-  | { type: 'tool'; name: 'daily.briefing'; args: {} }
+  | { type: 'tool'; name: 'undo.last_action'; args: Record<string, never> }
+  | { type: 'tool'; name: 'daily.briefing'; args: Record<string, never> }
   | {
       type: 'tool';
       name: 'action.history';
@@ -285,7 +284,7 @@ export type ToolCall =
     }
   | { type: 'tool'; name: 'goal.done'; args: { goalId: string } }
   // ===== CONFLICTS =====
-  | { type: 'tool'; name: 'conflict.detect'; args: {} }
+  | { type: 'tool'; name: 'conflict.detect'; args: Record<string, never> }
   // ===== DEPENDENCIES =====
   | {
       type: 'tool';
@@ -312,7 +311,7 @@ export type ToolCall =
       };
     }
   | { type: 'tool'; name: 'resource.capacity'; args: { resourceType?: string } }
-  | { type: 'tool'; name: 'resource.optimize'; args: {} }
+  | { type: 'tool'; name: 'resource.optimize'; args: Record<string, never> }
   // ===== ANALYTICS =====
   | {
       type: 'tool';
@@ -460,7 +459,7 @@ export type ToolCall =
       name: 'habit.log';
       args: { ref: number; date?: string; note?: string };
     }
-  | { type: 'tool'; name: 'habit.streak'; args: {} }
+  | { type: 'tool'; name: 'habit.streak'; args: Record<string, never> }
   | { type: 'tool'; name: 'habit.archive'; args: { ref: number } }
   // ===== CONTACTS =====
   | {
@@ -1978,8 +1977,8 @@ function resolveCalendarInterval(
     }
     return {
       error: null,
-      startIso: start.toISO({ suppressMilliseconds: true })!,
-      endIso: end.toISO({ suppressMilliseconds: true })!,
+      startIso: start.toISO({ suppressMilliseconds: true }),
+      endIso: end.toISO({ suppressMilliseconds: true }),
     };
   }
 
@@ -3475,14 +3474,8 @@ export async function runTool(
           if (error) return error;
           if (!row) return `Aucune note trouvée pour "${call.args.query}".`;
 
-          const hasTitle = Object.prototype.hasOwnProperty.call(
-            call.args,
-            'title',
-          );
-          const hasText = Object.prototype.hasOwnProperty.call(
-            call.args,
-            'text',
-          );
+          const hasTitle = Object.hasOwn(call.args, 'title');
+          const hasText = Object.hasOwn(call.args, 'text');
           if (!hasTitle && !hasText) {
             return 'Rien à modifier: envoie au moins title ou text.';
           }
@@ -5668,7 +5661,7 @@ export async function runTool(
             done: false,
             limit: 50,
           });
-          const idx = (call.args.ref as number) - 1;
+          const idx = call.args.ref - 1;
           const target = reminders[idx];
           if (!target) return `Rappel #${call.args.ref} introuvable.`;
           await ctx.reminders.markDone(sessionId, target.id);
@@ -5681,7 +5674,7 @@ export async function runTool(
             done: false,
             limit: 50,
           });
-          const idx = (call.args.ref as number) - 1;
+          const idx = call.args.ref - 1;
           const target = reminders[idx];
           if (!target) return `Rappel #${call.args.ref} introuvable.`;
           const until = new Date(call.args.until);
@@ -5701,7 +5694,7 @@ export async function runTool(
             done: false,
             limit: 50,
           });
-          const idx = (call.args.ref as number) - 1;
+          const idx = call.args.ref - 1;
           const target = reminders[idx];
           if (!target) return `Rappel #${call.args.ref} introuvable.`;
           await ctx.reminders.delete(sessionId, target.id);
@@ -5739,7 +5732,7 @@ export async function runTool(
         case 'habit.log': {
           if (!ctx.habits) return 'Service habitudes non disponible.';
           const habits = await ctx.habits.list(sessionId);
-          const idx = (call.args.ref as number) - 1;
+          const idx = call.args.ref - 1;
           const target = habits[idx];
           if (!target) return `Habitude #${call.args.ref} introuvable.`;
           const date = call.args.date ?? new Date().toISOString().slice(0, 10);
@@ -5772,7 +5765,7 @@ export async function runTool(
         case 'habit.archive': {
           if (!ctx.habits) return 'Service habitudes non disponible.';
           const habits = await ctx.habits.list(sessionId);
-          const idx = (call.args.ref as number) - 1;
+          const idx = call.args.ref - 1;
           const target = habits[idx];
           if (!target) return `Habitude #${call.args.ref} introuvable.`;
           await ctx.habits.archive(sessionId, target.id);

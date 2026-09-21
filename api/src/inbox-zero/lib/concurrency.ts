@@ -4,7 +4,7 @@ export async function mapWithConcurrency<T, R>(
   fn: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
   const safeConcurrency = Math.max(1, Math.floor(concurrency));
-  const results: R[] = new Array(items.length);
+  const results: R[] = new Array<R>(items.length);
   let nextIndex = 0;
 
   const workers = Array.from({

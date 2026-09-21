@@ -13,7 +13,7 @@ export type FinalAction = { type: 'final'; text: string };
 
 export type JarvisAction = ToolCall | AskAction | FinalAction;
 
-function isRecord(v: unknown): v is Record<string, any> {
+function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
@@ -38,7 +38,9 @@ export function parseJarvisAction(jsonText: string): JarvisAction | null {
     return {
       type: 'ask',
       text: x.text,
-      choices: x.choices?.filter((c: any) => typeof c === 'string'),
+      choices: Array.isArray(x.choices)
+        ? x.choices.filter((c): c is string => typeof c === 'string')
+        : undefined,
       awaiting,
     };
   }

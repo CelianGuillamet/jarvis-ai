@@ -4,5 +4,6 @@ export type LLMMessage = {
 };
 
 export interface LLMProvider {
+  readonly providerName?: string;
   chat(messages: LLMMessage[]): Promise<string>;
 }

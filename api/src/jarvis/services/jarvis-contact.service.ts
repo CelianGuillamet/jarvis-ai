@@ -1,3 +1,4 @@
+import { parseStoredTags } from '../lib/stored-json';
 import type { Contact } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -139,12 +140,6 @@ export class JarvisContactService {
   }
 
   private map(c: Contact): ContactRecord {
-    let tags: string[] = [];
-    try {
-      tags = JSON.parse(c.tags);
-    } catch {
-      tags = [];
-    }
     return {
       id: c.id,
       name: c.name,
@@ -153,7 +148,7 @@ export class JarvisContactService {
       company: c.company ?? null,
       role: c.role ?? null,
       notes: c.notes ?? null,
-      tags,
+      tags: parseStoredTags(c.tags),
       lastInteractionAt: c.lastInteractionAt?.toISOString() ?? null,
       createdAt: c.createdAt.toISOString(),
     };
