@@ -41,4 +41,4 @@ Web retrieval is disabled. Legacy `WEB_*`, `GOOGLE_SEARCH_*` and `SERPER_*` vari
 | `npm run test:cov -- --runInBand` | Unit coverage report in coverage/. |
 | `npm run test:e2e` | Existing application e2e test; requires a running configured database. Isolated integration fixtures are tracked in JAR-007. |
 
-The current baseline has known lint and calendar test failures tracked in Notion; these commands preserve failure exit codes. Do not use `prisma db push` as a replacement for checked-in migrations during setup.
+The two original calendar-routing failures were fixed in JAR-004. Lint debt remains tracked in JAR-008; all check commands preserve failure exit codes. Do not use `prisma db push` as a replacement for checked-in migrations during setup.

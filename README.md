@@ -70,7 +70,7 @@ npm --prefix web test
 
 Type checks disable emission; lint commands do not use `--fix`. Lint failures and test failures return nonzero exit codes. Code-changing commands are explicitly named `lint:fix` or `format` (API only). Build commands write to each application's `dist/` directory.
 
-Existing baseline debt is not hidden: JAR-004 tracks two calendar-routing test failures and JAR-008 tracks lint cleanup/CI. See ticket evidence for the current result, rather than treating a documented command as a passing check. Database/provider integration fixtures are tracked by JAR-007; the starter API e2e command requires a database and is not the isolated unit suite.
+Existing baseline debt is not hidden: JAR-004 fixes the two original calendar-routing failures; JAR-008 tracks remaining lint cleanup/CI. See ticket evidence for the current result, rather than treating a documented command as a passing check. Database/provider integration fixtures are tracked by JAR-007; the starter API e2e command requires a database and is not the isolated unit suite.
 
 ## Repository guide
 
