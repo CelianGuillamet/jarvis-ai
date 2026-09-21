@@ -18,12 +18,12 @@ export class GoogleAuthController {
     @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const sessionId = await this.auth.handleCallback(code, state);
+    await this.auth.handleCallback(code, state);
 
     res
       .status(200)
       .send(
-        `<html><body style="font-family:system-ui"><h2>Google connecté ✅</h2><p>Session: <b>${sessionId}</b></p><p>Scopes Calendar + Gmail accordés. Tu peux revenir dans Jarvis.</p></body></html>`,
+        `<html><body style="font-family:system-ui"><h2>Google connecté ✅</h2><p>Tu peux revenir dans Jarvis pour vérifier les services connectés.</p></body></html>`,
       );
   }
 
