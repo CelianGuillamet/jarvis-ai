@@ -50,4 +50,3 @@ export class InboxZeroApplyDto {
   @IsBoolean()
   archiveAfter?: boolean;
 }
-

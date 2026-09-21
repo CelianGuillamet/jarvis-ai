@@ -21,7 +21,12 @@ export class JarvisReminderService {
 
   async create(
     sessionId: string,
-    input: { text: string; triggerAt: Date; recurring?: boolean; rrule?: string },
+    input: {
+      text: string;
+      triggerAt: Date;
+      recurring?: boolean;
+      rrule?: string;
+    },
   ): Promise<ReminderRecord | null> {
     try {
       const r = await this.prisma.reminder.create({
@@ -59,14 +64,19 @@ export class JarvisReminderService {
     }
   }
 
-  async markDone(sessionId: string, id: string): Promise<ReminderRecord | null> {
+  async markDone(
+    sessionId: string,
+    id: string,
+  ): Promise<ReminderRecord | null> {
     try {
       const r = await this.prisma.reminder.updateMany({
         where: { id, sessionId, done: false },
         data: { done: true, doneAt: new Date() },
       });
       if (!r.count) return null;
-      return this.map(await this.prisma.reminder.findUniqueOrThrow({ where: { id } }));
+      return this.map(
+        await this.prisma.reminder.findUniqueOrThrow({ where: { id } }),
+      );
     } catch {
       return null;
     }
@@ -97,7 +107,10 @@ export class JarvisReminderService {
     }
   }
 
-  async upcoming(sessionId: string, withinMs: number = 24 * 60 * 60 * 1000): Promise<ReminderRecord[]> {
+  async upcoming(
+    sessionId: string,
+    withinMs: number = 24 * 60 * 60 * 1000,
+  ): Promise<ReminderRecord[]> {
     const now = new Date();
     const until = new Date(now.getTime() + withinMs);
     try {

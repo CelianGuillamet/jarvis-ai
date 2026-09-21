@@ -645,7 +645,9 @@ describe('JarvisService', () => {
     expect(llmChat).not.toHaveBeenCalled();
     expect(response.pending_action?.name).toBe('calendar.delete');
     expect(response.pending_action?.planner).toBe('intent');
-    expect(response).toMatchObject({ pending_action: { confidence: 'medium' } });
+    expect(response).toMatchObject({
+      pending_action: { confidence: 'medium' },
+    });
     expect(response.pending_action?.confirmationReason).toBe(
       'intent_medium_confidence',
     );
@@ -1031,7 +1033,6 @@ describe('JarvisService disabled web capability', () => {
   });
 });
 
-
 describe('calendar routing safety', () => {
   it.each([
     'Ajoute un rendez-vous demain à 18h',
@@ -1061,7 +1062,9 @@ describe('calendar routing safety', () => {
       'Supprime mon rendez-vous demain',
       'calendar-no-write',
     );
-    expect(response).toMatchObject({ pending_action: { confidence: 'medium' } });
+    expect(response).toMatchObject({
+      pending_action: { confidence: 'medium' },
+    });
     expect(pending.create).toHaveBeenCalledWith('calendar-no-write', {
       type: 'tool',
       name: 'calendar.delete',

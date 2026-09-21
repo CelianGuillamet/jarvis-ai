@@ -1217,7 +1217,10 @@ export function parseToolCall(jsonText: string): ToolCall | null {
 
   if (name === 'reminder.create') {
     if (typeof args.text !== 'string' || !args.text.trim()) return null;
-    if (typeof args.triggerAt !== 'string' || !isValidIsoDateTime(args.triggerAt))
+    if (
+      typeof args.triggerAt !== 'string' ||
+      !isValidIsoDateTime(args.triggerAt)
+    )
       return null;
     const recurring = args.recurring;
     if (recurring !== undefined && typeof recurring !== 'boolean') return null;
@@ -1317,10 +1320,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
 
   if (name === 'habit.list') {
     const includeArchived = args.includeArchived;
-    if (
-      includeArchived !== undefined &&
-      typeof includeArchived !== 'boolean'
-    ) {
+    if (includeArchived !== undefined && typeof includeArchived !== 'boolean') {
       return null;
     }
     return {
@@ -1342,7 +1342,10 @@ export function parseToolCall(jsonText: string): ToolCall | null {
       return null;
     }
     const date = args.date;
-    if (date !== undefined && (typeof date !== 'string' || !isValidDateOnly(date)))
+    if (
+      date !== undefined &&
+      (typeof date !== 'string' || !isValidDateOnly(date))
+    )
       return null;
     const note = args.note;
     if (note !== undefined && typeof note !== 'string') return null;
@@ -1460,7 +1463,10 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     if (typeof args.description !== 'string' || !args.description.trim())
       return null;
     const date = args.date;
-    if (date !== undefined && (typeof date !== 'string' || !isValidDateOnly(date)))
+    if (
+      date !== undefined &&
+      (typeof date !== 'string' || !isValidDateOnly(date))
+    )
       return null;
     const currency = args.currency;
     if (currency !== undefined && typeof currency !== 'string') return null;
@@ -1483,7 +1489,10 @@ export function parseToolCall(jsonText: string): ToolCall | null {
     const category = args.category;
     if (category !== undefined && typeof category !== 'string') return null;
     const from = args.from;
-    if (from !== undefined && (typeof from !== 'string' || !isValidDateOnly(from)))
+    if (
+      from !== undefined &&
+      (typeof from !== 'string' || !isValidDateOnly(from))
+    )
       return null;
     const to = args.to;
     if (to !== undefined && (typeof to !== 'string' || !isValidDateOnly(to)))

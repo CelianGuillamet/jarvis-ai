@@ -5,7 +5,10 @@ import type { WeatherProvider } from '../providers/weather.provider';
 import { runTool, type ToolContext } from './tools';
 
 describe('runTool weather tools', () => {
-  function makeCtx(weather: WeatherProvider, memorySnapshot?: any): ToolContext {
+  function makeCtx(
+    weather: WeatherProvider,
+    memorySnapshot?: any,
+  ): ToolContext {
     const web: WebProvider = {
       name: 'mock',
       async search() {
@@ -110,4 +113,3 @@ describe('runTool weather tools', () => {
     expect(out).not.toContain("je n'ai pas ta ville");
   });
 });
-

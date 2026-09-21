@@ -145,7 +145,12 @@ export class JarvisFinanceService {
 
   async setBudget(
     sessionId: string,
-    input: { category: string; limit: number; period?: string; currency?: string },
+    input: {
+      category: string;
+      limit: number;
+      period?: string;
+      currency?: string;
+    },
   ): Promise<BudgetRecord | null> {
     try {
       const category = input.category.toLowerCase().trim();
@@ -174,7 +179,12 @@ export class JarvisFinanceService {
         where: { sessionId },
         orderBy: { category: 'asc' },
       });
-      return rows.map((b) => ({ ...this.mapBudget(b), spent: 0, remaining: b.limit, percent: 0 }));
+      return rows.map((b) => ({
+        ...this.mapBudget(b),
+        spent: 0,
+        remaining: b.limit,
+        percent: 0,
+      }));
     } catch {
       return [];
     }
@@ -192,7 +202,9 @@ export class JarvisFinanceService {
     };
   }
 
-  private mapBudget(b: any): Omit<BudgetRecord, 'spent' | 'remaining' | 'percent'> {
+  private mapBudget(
+    b: any,
+  ): Omit<BudgetRecord, 'spent' | 'remaining' | 'percent'> {
     return {
       id: b.id,
       category: b.category,

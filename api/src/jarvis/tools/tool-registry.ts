@@ -372,27 +372,91 @@ export const TOOL_META: Record<ToolName, ToolMetadata> = {
     risk: 'low',
   },
 
-  'reminder.create': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'reminder.list': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
-  'reminder.done': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'reminder.snooze': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'reminder.delete': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
+  'reminder.create': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
+  'reminder.list': {
+    requiresConfirmation: false,
+    sideEffect: false,
+    risk: 'low',
+  },
+  'reminder.done': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
+  'reminder.snooze': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
+  'reminder.delete': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
 
-  'habit.create': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
+  'habit.create': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
   'habit.list': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
   'habit.log': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'habit.streak': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
-  'habit.archive': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
+  'habit.streak': {
+    requiresConfirmation: false,
+    sideEffect: false,
+    risk: 'low',
+  },
+  'habit.archive': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
 
-  'contact.save': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'contact.find': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
-  'contact.list': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
-  'contact.update': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'contact.delete': { requiresConfirmation: true, sideEffect: true, risk: 'medium' },
+  'contact.save': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
+  'contact.find': {
+    requiresConfirmation: false,
+    sideEffect: false,
+    risk: 'low',
+  },
+  'contact.list': {
+    requiresConfirmation: false,
+    sideEffect: false,
+    risk: 'low',
+  },
+  'contact.update': {
+    requiresConfirmation: false,
+    sideEffect: true,
+    risk: 'low',
+  },
+  'contact.delete': {
+    requiresConfirmation: true,
+    sideEffect: true,
+    risk: 'medium',
+  },
 
   'expense.add': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'expense.list': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
-  'expense.summary': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
+  'expense.list': {
+    requiresConfirmation: false,
+    sideEffect: false,
+    risk: 'low',
+  },
+  'expense.summary': {
+    requiresConfirmation: false,
+    sideEffect: false,
+    risk: 'low',
+  },
   'budget.set': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
-  'budget.status': { requiresConfirmation: false, sideEffect: false, risk: 'low' },
+  'budget.status': {
+    requiresConfirmation: false,
+    sideEffect: false,
+    risk: 'low',
+  },
 };

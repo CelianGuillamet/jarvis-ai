@@ -8,4 +8,3 @@ import { InboxZeroService } from './inbox-zero.service';
   providers: [InboxZeroService],
 })
 export class InboxZeroModule {}
-

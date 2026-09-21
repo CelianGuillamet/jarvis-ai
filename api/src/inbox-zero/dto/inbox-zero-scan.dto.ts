@@ -1,4 +1,12 @@
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class InboxZeroScanDto {
   @IsOptional()
@@ -21,4 +29,3 @@ export class InboxZeroScanDto {
   @IsBoolean()
   refresh?: boolean;
 }
-

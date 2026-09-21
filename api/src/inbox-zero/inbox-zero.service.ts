@@ -37,7 +37,11 @@ import {
 } from './inbox-zero.types';
 import { classifyInboxMessage } from './lib/classify-inbox-message';
 import { mapWithConcurrency } from './lib/concurrency';
-import { buildReplySubject, compactText, extractEmailAddress } from './lib/email';
+import {
+  buildReplySubject,
+  compactText,
+  extractEmailAddress,
+} from './lib/email';
 
 type RawSessionRow = {
   sessionId: string;
@@ -140,7 +144,8 @@ export class InboxZeroService {
         openAiKey,
         this.config.get<string>('OPENAI_MODEL_PRIMARY') || 'gpt-5-nano',
         this.config.get<string>('OPENAI_MODEL_FALLBACK') || 'gpt-5-mini',
-        this.config.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
+        this.config.get<string>('OPENAI_BASE_URL') ||
+          'https://api.openai.com/v1',
         Number(this.config.get<string>('OPENAI_TIMEOUT_MS') || 30_000),
       );
       this.logger.log(
@@ -171,7 +176,8 @@ export class InboxZeroService {
     const sessionId = this.resolveSessionId(input.sessionId);
     const session = await this.ensureSession(sessionId);
 
-    const nextQuery = input.query?.trim() || session.query || 'in:inbox is:unread';
+    const nextQuery =
+      input.query?.trim() || session.query || 'in:inbox is:unread';
     const limit = Math.min(Math.max(input.limit ?? 40, 1), 50);
     const shouldRefresh = input.refresh ?? !session.scannedAt;
 
@@ -326,7 +332,8 @@ export class InboxZeroService {
         id: row.id,
         messageId: row.messageId ?? null,
         actionType:
-          ensureActionType(row.actionType) ?? ('archive' as InboxZeroActionType),
+          ensureActionType(row.actionType) ??
+          ('archive' as InboxZeroActionType),
         status: row.status,
         errorMessage: row.errorMessage ?? null,
         createdAt: row.createdAt.toISOString(),
@@ -357,7 +364,9 @@ export class InboxZeroService {
     const [item, detail] = await Promise.all([
       this.withInboxZeroDbGuard(() =>
         this.prisma.inboxZeroItem.findUnique({
-          where: { sessionId_messageId: { sessionId: resolvedSessionId, messageId } },
+          where: {
+            sessionId_messageId: { sessionId: resolvedSessionId, messageId },
+          },
           select: {
             id: true,
             messageId: true,
@@ -373,7 +382,9 @@ export class InboxZeroService {
           },
         }),
       ),
-      this.withGoogleGuard(() => this.gmail.getMessage(resolvedSessionId, messageId)),
+      this.withGoogleGuard(() =>
+        this.gmail.getMessage(resolvedSessionId, messageId),
+      ),
     ]);
 
     return {
@@ -436,7 +447,7 @@ export class InboxZeroService {
     const action = input.action;
     if (action === 'draft_reply') {
       throw new BadRequestException(
-        "Utilise /inbox-zero/draft-reply pour générer une réponse.",
+        'Utilise /inbox-zero/draft-reply pour générer une réponse.',
       );
     }
 
@@ -452,9 +463,9 @@ export class InboxZeroService {
       throw new BadRequestException('reminderWhen manquant pour remind.');
     }
 
-    const messageIds = [...new Set(input.messageIds.map((id) => id.trim()))].filter(
-      (id) => id.length > 0,
-    );
+    const messageIds = [
+      ...new Set(input.messageIds.map((id) => id.trim())),
+    ].filter((id) => id.length > 0);
     if (!messageIds.length) {
       throw new BadRequestException('messageIds vides.');
     }
@@ -499,10 +510,10 @@ export class InboxZeroService {
 
     const results = await mapWithConcurrency(rows, 4, async (row) => {
       const labels = safeParseJson<string[]>(row.labelsJson, []);
-      const suggested = safeParseJson<{ action?: string; label?: string } | null>(
-        row.suggestedJson,
-        null,
-      );
+      const suggested = safeParseJson<{
+        action?: string;
+        label?: string;
+      } | null>(row.suggestedJson, null);
 
       const effectiveAction =
         action === 'apply_recommended'
@@ -536,7 +547,12 @@ export class InboxZeroService {
           const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
           const nextLabels = applyLabels(labels, ['STARRED'], remove);
           await this.withGoogleGuard(() =>
-            this.gmail.modifyLabels(sessionId, row.messageId, ['STARRED'], remove),
+            this.gmail.modifyLabels(
+              sessionId,
+              row.messageId,
+              ['STARRED'],
+              remove,
+            ),
           );
           itemPatch.labelsJson = JSON.stringify(nextLabels);
           itemPatch.unread = false;
@@ -570,13 +586,19 @@ export class InboxZeroService {
           itemPatch.status = 'processed';
           itemPatch.lastActionAt = now;
         } else if (effectiveAction === 'trash') {
-          await this.withGoogleGuard(() => this.gmail.trashMessage(sessionId, row.messageId));
-          itemPatch.labelsJson = JSON.stringify(applyLabels(labels, ['TRASH'], ['INBOX']));
+          await this.withGoogleGuard(() =>
+            this.gmail.trashMessage(sessionId, row.messageId),
+          );
+          itemPatch.labelsJson = JSON.stringify(
+            applyLabels(labels, ['TRASH'], ['INBOX']),
+          );
           itemPatch.unread = false;
           itemPatch.status = 'processed';
           itemPatch.lastActionAt = now;
         } else if (effectiveAction === 'delete') {
-          await this.withGoogleGuard(() => this.gmail.deleteMessage(sessionId, row.messageId));
+          await this.withGoogleGuard(() =>
+            this.gmail.deleteMessage(sessionId, row.messageId),
+          );
           itemPatch.labelsJson = JSON.stringify([]);
           itemPatch.unread = false;
           itemPatch.status = 'processed';
@@ -612,7 +634,9 @@ export class InboxZeroService {
           itemPatch.lastActionAt = now;
         } else if (effectiveAction === 'send_reply') {
           if (!input.replyText?.trim()) {
-            throw new BadRequestException('replyText manquant pour send_reply.');
+            throw new BadRequestException(
+              'replyText manquant pour send_reply.',
+            );
           }
           const detail = await this.withGoogleGuard(() =>
             this.gmail.getMessage(sessionId, row.messageId),
@@ -650,7 +674,9 @@ export class InboxZeroService {
           itemPatch.status = 'processed';
           itemPatch.lastActionAt = now;
         } else {
-          throw new BadRequestException(`Action InboxZero non supportée: ${effectiveAction}`);
+          throw new BadRequestException(
+            `Action InboxZero non supportée: ${effectiveAction}`,
+          );
         }
 
         await this.withInboxZeroDbGuard(() =>
@@ -660,8 +686,12 @@ export class InboxZeroService {
               ...(itemPatch.labelsJson !== undefined
                 ? { labelsJson: itemPatch.labelsJson }
                 : {}),
-              ...(itemPatch.unread !== undefined ? { unread: itemPatch.unread } : {}),
-              ...(itemPatch.status !== undefined ? { status: itemPatch.status } : {}),
+              ...(itemPatch.unread !== undefined
+                ? { unread: itemPatch.unread }
+                : {}),
+              ...(itemPatch.status !== undefined
+                ? { status: itemPatch.status }
+                : {}),
               ...(itemPatch.lastActionAt !== undefined
                 ? { lastActionAt: itemPatch.lastActionAt }
                 : {}),
@@ -681,7 +711,8 @@ export class InboxZeroService {
       this.prisma.inboxZeroAction.create({
         data: {
           sessionId,
-          messageId: action === 'send_reply' ? rows[0]?.messageId ?? null : null,
+          messageId:
+            action === 'send_reply' ? (rows[0]?.messageId ?? null) : null,
           actionType: action,
           status: allOk ? 'completed' : 'failed',
           errorMessage: allOk ? null : 'Certaines actions ont échoué.',
@@ -690,7 +721,10 @@ export class InboxZeroService {
             messageIds,
             archiveAfter,
             ...(action === 'remind'
-              ? { reminderWhen: input.reminderWhen, reminderText: input.reminderText }
+              ? {
+                  reminderWhen: input.reminderWhen,
+                  reminderText: input.reminderText,
+                }
               : {}),
             ...(action === 'send_reply'
               ? { replyTextChars: input.replyText?.length ?? 0 }
@@ -769,14 +803,21 @@ export class InboxZeroService {
       const category = ensureInboxZeroCategory(row.category);
       if (!category) continue;
       if (row.status === 'pending') counts[category].pending = row._count._all;
-      else if (row.status === 'processed') counts[category].processed = row._count._all;
+      else if (row.status === 'processed')
+        counts[category].processed = row._count._all;
     }
 
     return counts;
   }
 
-  private computeStep(session: RawSessionRow, counts: InboxZeroSessionView['counts']) {
-    const totalPending = Object.values(counts).reduce((sum, c) => sum + c.pending, 0);
+  private computeStep(
+    session: RawSessionRow,
+    counts: InboxZeroSessionView['counts'],
+  ) {
+    const totalPending = Object.values(counts).reduce(
+      (sum, c) => sum + c.pending,
+      0,
+    );
     if (totalPending === 0) {
       return { nextStatus: 'completed', nextStep: 'done' as InboxZeroStep };
     }
@@ -798,8 +839,14 @@ export class InboxZeroService {
       }
     };
 
-    const order: InboxZeroStep[] = ['urgent', 'quick_wins', 'schedule', 'cleanup'];
-    const firstWithPending = order.find((s) => pendingForStep(s) > 0) ?? 'urgent';
+    const order: InboxZeroStep[] = [
+      'urgent',
+      'quick_wins',
+      'schedule',
+      'cleanup',
+    ];
+    const firstWithPending =
+      order.find((s) => pendingForStep(s) > 0) ?? 'urgent';
     const current = ensureInboxZeroStep(session.step) ?? firstWithPending;
 
     if (current === 'done') {
@@ -813,7 +860,10 @@ export class InboxZeroService {
     return { nextStatus: 'active', nextStep: firstWithPending };
   }
 
-  private toSessionView(session: RawSessionRow, counts: InboxZeroSessionView['counts']): InboxZeroSessionView {
+  private toSessionView(
+    session: RawSessionRow,
+    counts: InboxZeroSessionView['counts'],
+  ): InboxZeroSessionView {
     const status = session.status === 'completed' ? 'completed' : 'active';
     const step = ensureInboxZeroStep(session.step) ?? 'urgent';
 
@@ -902,7 +952,10 @@ export class InboxZeroService {
 
   private async generateDraftReply(detail: GmailMessageDetail) {
     const maxBodyChars = 3_000;
-    const body = compactText(detail.bodyText || detail.snippet || '', maxBodyChars);
+    const body = compactText(
+      detail.bodyText || detail.snippet || '',
+      maxBodyChars,
+    );
 
     const messages = [
       {

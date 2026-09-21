@@ -562,7 +562,8 @@ export class JarvisService {
     this.weather = new DefaultWeatherProvider(
       this.config.get<string>('WEATHER_GEO_BASE_URL') ||
         'https://geocoding-api.open-meteo.com',
-      this.config.get<string>('WEATHER_BASE_URL') || 'https://api.open-meteo.com',
+      this.config.get<string>('WEATHER_BASE_URL') ||
+        'https://api.open-meteo.com',
       Number(this.config.get<string>('WEATHER_TIMEOUT_MS') || 6_000),
     );
     this.logger.log(`Weather provider: ${this.weather.name}`);
@@ -2343,7 +2344,9 @@ export class JarvisService {
       !isNote &&
       !isGmail;
     if (asksWeather) {
-      const day = includesAny(text, ['demain', 'tomorrow']) ? 'tomorrow' : 'today';
+      const day = includesAny(text, ['demain', 'tomorrow'])
+        ? 'tomorrow'
+        : 'today';
       const location = extractWeatherLocation(text);
       return {
         type: 'tool',
@@ -2686,7 +2689,11 @@ export class JarvisService {
 
       if (wantsSummary) {
         if (gmailRef) {
-          return { type: 'tool', name: 'gmail.summary', args: { ref: gmailRef } };
+          return {
+            type: 'tool',
+            name: 'gmail.summary',
+            args: { ref: gmailRef },
+          };
         }
 
         const wantsMailboxSummary =
@@ -2725,7 +2732,11 @@ export class JarvisService {
             'emails recents',
             'mails recents',
           ]);
-          const unreadOnly = wantsUnread ? true : wantsAllEmails ? false : undefined;
+          const unreadOnly = wantsUnread
+            ? true
+            : wantsAllEmails
+              ? false
+              : undefined;
 
           return {
             type: 'tool',

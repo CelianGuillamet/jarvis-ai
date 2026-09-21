@@ -28,7 +28,10 @@ describe('classifyInboxMessage', () => {
 
   it('detects scheduling intent', () => {
     const out = classifyInboxMessage(
-      base({ subject: 'Dispo pour un call ? Calendly', snippet: 'Choisis un créneau' }),
+      base({
+        subject: 'Dispo pour un call ? Calendly',
+        snippet: 'Choisis un créneau',
+      }),
     );
     expect(out.category).toBe('schedule');
     expect(out.suggested?.action).toBe('remind');
@@ -36,7 +39,10 @@ describe('classifyInboxMessage', () => {
 
   it('detects urgent intent', () => {
     const out = classifyInboxMessage(
-      base({ subject: 'URGENT: action requise aujourd’hui', snippet: 'deadline' }),
+      base({
+        subject: 'URGENT: action requise aujourd’hui',
+        snippet: 'deadline',
+      }),
     );
     expect(out.category).toBe('urgent');
     expect(out.suggested?.action).toBe('draft_reply');
@@ -48,9 +54,10 @@ describe('classifyInboxMessage', () => {
   });
 
   it('defaults to quick wins', () => {
-    const out = classifyInboxMessage(base({ subject: 'Petite question', snippet: 'Hello' }));
+    const out = classifyInboxMessage(
+      base({ subject: 'Petite question', snippet: 'Hello' }),
+    );
     expect(out.category).toBe('quick_wins');
     expect(out.suggested?.action).toBe('mark_read_archive');
   });
 });
-

@@ -12,4 +12,3 @@ export class InboxZeroStepDto {
   @IsIn(INBOX_ZERO_STEPS)
   step!: InboxZeroStep;
 }
-

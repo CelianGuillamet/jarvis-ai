@@ -99,7 +99,9 @@ export class JarvisContactService {
   async update(
     sessionId: string,
     id: string,
-    patch: Partial<Omit<ContactRecord, 'id' | 'createdAt' | 'tags'> & { tags: string[] }>,
+    patch: Partial<
+      Omit<ContactRecord, 'id' | 'createdAt' | 'tags'> & { tags: string[] }
+    >,
   ): Promise<ContactRecord | null> {
     try {
       const contact = await this.prisma.contact.updateMany({
@@ -111,12 +113,16 @@ export class JarvisContactService {
           ...(patch.company !== undefined ? { company: patch.company } : {}),
           ...(patch.role !== undefined ? { role: patch.role } : {}),
           ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
-          ...(patch.tags !== undefined ? { tags: JSON.stringify(patch.tags) } : {}),
+          ...(patch.tags !== undefined
+            ? { tags: JSON.stringify(patch.tags) }
+            : {}),
           lastInteractionAt: new Date(),
         },
       });
       if (!contact.count) return null;
-      return this.map(await this.prisma.contact.findUniqueOrThrow({ where: { id } }));
+      return this.map(
+        await this.prisma.contact.findUniqueOrThrow({ where: { id } }),
+      );
     } catch {
       return null;
     }
@@ -133,7 +139,11 @@ export class JarvisContactService {
 
   private map(c: any): ContactRecord {
     let tags: string[] = [];
-    try { tags = JSON.parse(c.tags); } catch { tags = []; }
+    try {
+      tags = JSON.parse(c.tags);
+    } catch {
+      tags = [];
+    }
     return {
       id: c.id,
       name: c.name,

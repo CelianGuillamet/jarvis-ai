@@ -19,4 +19,3 @@ describe('email utils', () => {
     expect(compactText('a'.repeat(20), 10).length).toBeLessThanOrEqual(10);
   });
 });
-

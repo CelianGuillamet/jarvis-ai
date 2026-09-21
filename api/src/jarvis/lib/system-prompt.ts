@@ -383,11 +383,31 @@ export function buildJarvisBaseSystemPrompt() {
     {
       title: 'Rappels',
       examples: [
-        { type: 'tool', name: 'reminder.create', args: { text: 'Appeler le médecin', triggerAt: '2026-04-20T09:00:00+02:00' } },
-        { type: 'tool', name: 'reminder.create', args: { text: 'Réunion hebdo', triggerAt: '2026-04-21T10:00:00+02:00', recurring: true, rrule: 'FREQ=WEEKLY;BYDAY=MO' } },
+        {
+          type: 'tool',
+          name: 'reminder.create',
+          args: {
+            text: 'Appeler le médecin',
+            triggerAt: '2026-04-20T09:00:00+02:00',
+          },
+        },
+        {
+          type: 'tool',
+          name: 'reminder.create',
+          args: {
+            text: 'Réunion hebdo',
+            triggerAt: '2026-04-21T10:00:00+02:00',
+            recurring: true,
+            rrule: 'FREQ=WEEKLY;BYDAY=MO',
+          },
+        },
         { type: 'tool', name: 'reminder.list', args: {} },
         { type: 'tool', name: 'reminder.done', args: { ref: 1 } },
-        { type: 'tool', name: 'reminder.snooze', args: { ref: 2, until: '2026-04-20T14:00:00+02:00' } },
+        {
+          type: 'tool',
+          name: 'reminder.snooze',
+          args: { ref: 2, until: '2026-04-20T14:00:00+02:00' },
+        },
         { type: 'tool', name: 'reminder.delete', args: { ref: 3 } },
       ],
       notes: [
@@ -399,16 +419,28 @@ export function buildJarvisBaseSystemPrompt() {
     {
       title: 'Habitudes',
       examples: [
-        { type: 'tool', name: 'habit.create', args: { name: 'Sport', emoji: '🏋️', frequency: 'daily' } },
-        { type: 'tool', name: 'habit.create', args: { name: 'Lecture', emoji: '📚', frequency: 'daily' } },
+        {
+          type: 'tool',
+          name: 'habit.create',
+          args: { name: 'Sport', emoji: '🏋️', frequency: 'daily' },
+        },
+        {
+          type: 'tool',
+          name: 'habit.create',
+          args: { name: 'Lecture', emoji: '📚', frequency: 'daily' },
+        },
         { type: 'tool', name: 'habit.list', args: {} },
         { type: 'tool', name: 'habit.log', args: { ref: 1 } },
-        { type: 'tool', name: 'habit.log', args: { ref: 2, date: '2026-04-18', note: '30 pages' } },
+        {
+          type: 'tool',
+          name: 'habit.log',
+          args: { ref: 2, date: '2026-04-18', note: '30 pages' },
+        },
         { type: 'tool', name: 'habit.streak', args: {} },
         { type: 'tool', name: 'habit.archive', args: { ref: 3 } },
       ],
       notes: [
-        'habit.log sans date = aujourd\'hui.',
+        "habit.log sans date = aujourd'hui.",
         'habit.streak affiche les séries visuellement.',
         'ref = numéro dans habit.list (1-based).',
       ],
@@ -416,11 +448,28 @@ export function buildJarvisBaseSystemPrompt() {
     {
       title: 'Contacts',
       examples: [
-        { type: 'tool', name: 'contact.save', args: { name: 'Marie Dupont', email: 'marie@example.com', company: 'Acme', role: 'DG' } },
+        {
+          type: 'tool',
+          name: 'contact.save',
+          args: {
+            name: 'Marie Dupont',
+            email: 'marie@example.com',
+            company: 'Acme',
+            role: 'DG',
+          },
+        },
         { type: 'tool', name: 'contact.find', args: { query: 'Marie' } },
         { type: 'tool', name: 'contact.list', args: {} },
-        { type: 'tool', name: 'contact.update', args: { query: 'Marie', patch: { phone: '+33612345678' } } },
-        { type: 'tool', name: 'contact.delete', args: { query: 'Marie Dupont' } },
+        {
+          type: 'tool',
+          name: 'contact.update',
+          args: { query: 'Marie', patch: { phone: '+33612345678' } },
+        },
+        {
+          type: 'tool',
+          name: 'contact.delete',
+          args: { query: 'Marie Dupont' },
+        },
       ],
       notes: [
         'contact.save met à jour automatiquement si le nom existe déjà.',
@@ -430,17 +479,46 @@ export function buildJarvisBaseSystemPrompt() {
     {
       title: 'Finance',
       examples: [
-        { type: 'tool', name: 'expense.add', args: { amount: 45.5, category: 'restaurant', description: 'Déjeuner client', date: '2026-04-19' } },
-        { type: 'tool', name: 'expense.add', args: { amount: 120, category: 'transport', description: 'Train Paris-Lyon' } },
-        { type: 'tool', name: 'expense.list', args: { category: 'restaurant' } },
-        { type: 'tool', name: 'expense.list', args: { from: '2026-04-01', to: '2026-04-30' } },
+        {
+          type: 'tool',
+          name: 'expense.add',
+          args: {
+            amount: 45.5,
+            category: 'restaurant',
+            description: 'Déjeuner client',
+            date: '2026-04-19',
+          },
+        },
+        {
+          type: 'tool',
+          name: 'expense.add',
+          args: {
+            amount: 120,
+            category: 'transport',
+            description: 'Train Paris-Lyon',
+          },
+        },
+        {
+          type: 'tool',
+          name: 'expense.list',
+          args: { category: 'restaurant' },
+        },
+        {
+          type: 'tool',
+          name: 'expense.list',
+          args: { from: '2026-04-01', to: '2026-04-30' },
+        },
         { type: 'tool', name: 'expense.summary', args: { period: 'month' } },
         { type: 'tool', name: 'expense.summary', args: { period: 'week' } },
-        { type: 'tool', name: 'budget.set', args: { category: 'restaurant', limit: 200, period: 'monthly' } },
+        {
+          type: 'tool',
+          name: 'budget.set',
+          args: { category: 'restaurant', limit: 200, period: 'monthly' },
+        },
         { type: 'tool', name: 'budget.status', args: {} },
       ],
       notes: [
-        'date au format YYYY-MM-DD. Si absent, utilise aujourd\'hui.',
+        "date au format YYYY-MM-DD. Si absent, utilise aujourd'hui.",
         'period: "month" (défaut), "week", "year".',
         'category en minuscules: restaurant, transport, courses, santé, loisirs, abonnements, autre.',
         'budget.set écrase le budget existant pour cette catégorie+période.',
