@@ -39,6 +39,10 @@ Web retrieval is disabled. Legacy `WEB_*`, `GOOGLE_SEARCH_*` and `SERPER_*` vari
 | `npm run format` | Rewrite source/test formatting. |
 | `npm test -- --runInBand` | Mocked unit suite; no live credentials needed. |
 | `npm run test:cov -- --runInBand` | Unit coverage report in coverage/. |
-| `npm run test:e2e` | Existing application e2e test; requires a running configured database. Isolated integration fixtures are tracked in JAR-007. |
+| `npm run test:integration` | Provision disposable PostgreSQL, replay migrations, test HTTP/database workflows with fake providers, and remove the container. Requires Docker. |
+| `npm run test:e2e` | Alias for the isolated integration suite. |
+| `npm run test:runner` | Test container cleanup behavior without Docker. |
 
 The two original calendar-routing failures were fixed in JAR-004. Lint debt remains tracked in JAR-008; all check commands preserve failure exit codes. Do not use `prisma db push` as a replacement for checked-in migrations during setup.
+
+See the [integration test guide](test/README.md) for fixture usage and isolation boundaries. In test mode Nest does not load `.env`; the integration runner supplies its own database and test configuration.

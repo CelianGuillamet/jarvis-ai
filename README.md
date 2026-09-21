@@ -4,7 +4,7 @@ Personal assistant built with Vue 3, Pinia and Vite (`web/`), NestJS (`api/`), a
 
 ## Runtime
 
-Use Node **24.11.0** (`.nvmrc`) and npm **11.x**. Both applications declare the same supported Node 24 range. Their separate committed lockfiles are authoritative; run `npm ci`, not `npm install`, to reproduce them. Docker Compose is needed only for the local database.
+Use Node **24.11.0** (`.nvmrc`) and npm **11.x**. Both applications declare the same supported Node 24 range. Their separate committed lockfiles are authoritative; run `npm ci`, not `npm install`, to reproduce them. Docker is required for the local database and disposable integration tests; Compose is used for the local development database.
 
 ```sh
 nvm install
@@ -70,7 +70,7 @@ npm --prefix web test
 
 Type checks disable emission; lint commands do not use `--fix`. Lint failures and test failures return nonzero exit codes. Code-changing commands are explicitly named `lint:fix` or `format` (API only). Build commands write to each application's `dist/` directory.
 
-Existing baseline debt is not hidden: JAR-004 fixes the two original calendar-routing failures; JAR-008 tracks remaining lint cleanup/CI. See ticket evidence for the current result, rather than treating a documented command as a passing check. Database/provider integration fixtures are tracked by JAR-007; the starter API e2e command requires a database and is not the isolated unit suite.
+Existing baseline debt is not hidden: JAR-004 fixes the two original calendar-routing failures; JAR-008 tracks remaining lint cleanup/CI. See ticket evidence for the current result, rather than treating a documented command as a passing check. Run `npm --prefix api run test:integration` with Docker running to replay migrations in a disposable PostgreSQL database and exercise HTTP workflows with fake Gmail, Calendar and model providers. The runner ignores existing database targets and provider credentials and removes its container afterward. See the [integration test guide](api/test/README.md).
 
 ## Repository guide
 
