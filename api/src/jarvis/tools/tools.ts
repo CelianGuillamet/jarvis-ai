@@ -6,7 +6,10 @@ import type {
 } from '../../calendar/providers/calendar.provider';
 import { resolveRange, RangeParseError } from '../lib/resolve-range';
 import { resolveWhenWindow } from '../lib/resolve-when';
-import type { WebProvider } from '../providers/web.provider';
+import {
+  WEB_DISABLED_MESSAGE,
+  type WebProvider,
+} from '../providers/web.provider';
 import type { WeatherProvider } from '../providers/weather.provider';
 export {
   TOOL_META,
@@ -922,11 +925,6 @@ function removeNoteFromCache(sessionId: string, id: string) {
 function setLastShoppingList(sessionId: string, items: ShoppingListItem[]) {
   cleanupSimpleCache(LAST_SHOPPING_LIST);
   LAST_SHOPPING_LIST.set(sessionId, { items, createdAt: Date.now() });
-}
-
-function setLastWebSearch(sessionId: string, items: WebSearchListItem[]) {
-  cleanupSimpleCache(LAST_WEB_SEARCH);
-  LAST_WEB_SEARCH.set(sessionId, { items, createdAt: Date.now() });
 }
 
 function getLastShoppingList(sessionId: string) {
@@ -2137,23 +2135,6 @@ function formatMissionWindow(startIso: string, endIso: string, tz: string) {
   const end = DateTime.fromISO(endIso, { zone: tz });
   if (!start.isValid || !end.isValid) return `${startIso} -> ${endIso}`;
   return `${start.toFormat('ccc d LLL HH:mm')} -> ${end.toFormat('ccc d LLL HH:mm')}`;
-}
-
-function normalizeWebSearchQuery(raw: string) {
-  let q = raw
-    .trim()
-    .replace(/[?!.\s]+$/g, '')
-    .trim();
-  if (!q) return q;
-
-  const patterns = [
-    /^(?:stp\s+|s(?:'| )?il te plait\s+|peux[- ]tu\s+|tu peux\s+)?(?:fais\s+)?(?:une\s+)?(?:recherche|rechercher|cherche|chercher|trouve|trouver)\s+(?:sur\s+(?:internet|le web|google)\s+)?/i,
-    /^(?:peux[- ]tu\s+)?(?:me\s+)?(?:dire|donner|indiquer)\s+/i,
-  ];
-  for (const re of patterns) {
-    q = q.replace(re, '').trim();
-  }
-  return q || raw.trim();
 }
 
 function cleanRefs(refs: number[]) {
@@ -3947,60 +3928,9 @@ export async function runTool(
         }
 
         // ===== WEB =====
-        case 'web.search': {
-          const requestedQuery = call.args.query.trim();
-          if (!requestedQuery) return 'Requête web vide.';
-          const query = normalizeWebSearchQuery(requestedQuery);
-          const limit = Math.min(Math.max(call.args.limit ?? 5, 1), 10);
-          try {
-            let results = await ctx.web.search(query, limit);
-            if (!results.length && query !== requestedQuery) {
-              results = await ctx.web.search(requestedQuery, limit);
-            }
-            if (!results.length) return `Aucun résultat web pour "${query}".`;
-            setLastWebSearch(
-              sessionId,
-              results.map((row) => ({
-                title: row.title,
-                url: row.url,
-                snippet: row.snippet,
-              })),
-            );
-
-            return [
-              `Résultats web (${results.length}) pour "${query}":`,
-              ...results.map(
-                (row, idx) =>
-                  `#${idx + 1} - ${row.title}\nURL: ${row.url}${row.snippet ? `\nExtrait: ${row.snippet}` : ''}`,
-              ),
-            ].join('\n');
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : 'Erreur web.search';
-            return `Recherche web impossible: ${message}`;
-          }
-        }
-
-        case 'web.open': {
-          const url = call.args.url.trim();
-          if (!url) return 'URL web vide.';
-          try {
-            const page = await ctx.web.open(url);
-            return [
-              `Page web:`,
-              page.title ? `Titre: ${page.title}` : null,
-              `URL: ${page.url}`,
-              `Contenu:`,
-              page.content,
-            ]
-              .filter((line): line is string => !!line)
-              .join('\n');
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : 'Erreur web.open';
-            return `Ouverture web impossible: ${message}`;
-          }
-        }
+        case 'web.search':
+        case 'web.open':
+          return WEB_DISABLED_MESSAGE;
 
         // ===== GMAIL =====
         case 'gmail.list': {

@@ -1004,3 +1004,28 @@ describe('JarvisService', () => {
     expect(pending.consume).not.toHaveBeenCalled();
   });
 });
+
+describe('JarvisService disabled web capability', () => {
+  it.each(['Cherche sur internet les actualités', 'Ouvre https://example.com'])(
+    'returns a clear disabled response for %s without network access',
+    async (message) => {
+      const { service } = makeService();
+      const fetch = jest
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('Unexpected fetch'));
+      try {
+        const response = await service.chat(message, 'disabled-web');
+        expect(response.text).toContain('désactivées');
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
+
+  it('reports the disabled provider in capability metadata', async () => {
+    const { service } = makeService();
+    const snapshot = await service.status('disabled-web-status');
+    expect(snapshot.providers.web).toBe('disabled');
+  });
+});
