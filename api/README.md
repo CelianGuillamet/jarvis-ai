@@ -1,101 +1,44 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Jarvis API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS API with Prisma/PostgreSQL persistence, Google Gmail/Calendar integrations, and OpenAI or Ollama model providers. Start with the repository [setup guide](../README.md).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Configuration
 
-## Description
+Copy `.env.example` to `.env` once. Nest and Prisma load it from this directory; `npm --prefix api` commands in the root guide run here. Never commit credentials.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Required to run the API or migrations. Example matches the local Compose PostgreSQL database. Not required for builds or mocked unit tests. |
+| `NODE_ENV` | `development` explicitly enables `/dev/` assets. Production, test and an unset value do not serve them. |
+| `PORT` | Optional API port; default 3000. Update the web proxy if changed. |
+| `SIMULATION` | Defaults to true in the example. Assistant simulation is not a global guarantee against external side effects; integration tests need fake providers or test accounts. |
+| `LLM_PROVIDER` | `ollama` for local models or `openai` for OpenAI. |
+| `OLLAMA_URL`, `OLLAMA_MODEL` | Ollama endpoint/model; the model must exist locally. |
+| `OPENAI_API_KEY` | Required only for OpenAI. A missing key currently falls back to Ollama. |
+| `OPENAI_MODEL_PRIMARY`, `OPENAI_MODEL_FALLBACK`, `OPENAI_TIMEOUT_MS` | Model selection and request timeout in milliseconds. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Required to connect Google, not to install/build/test. Register the exact redirect URI with your Google OAuth client. |
+| `PENDING_TTL_MINUTES`, `CONVO_TTL_MINUTES` | Confirmation and conversation expiration in minutes. |
+| `HUMAN_PROFILE_*`, `HUMANIZE_RESPONSES`, `JARVIS_DEFAULT_*` | Optional profile persistence and response preferences; example values show current defaults. |
 
-## Project setup
+Web retrieval is disabled. Legacy `WEB_*`, `GOOGLE_SEARCH_*` and `SERPER_*` variables cannot re-enable it. Authentication and per-user ownership are still under development; a caller-supplied session identifier is not an authenticated account.
 
-```bash
-$ cp .env.example .env
-$ npm install
-```
+## Commands (from api/)
 
-Fill the values in `.env` with your local credentials. The `.env` file is intentionally ignored and must not be committed.
+| Command | Effect |
+| --- | --- |
+| `npm ci --ignore-scripts --no-audit` | Install the committed dependency lockfile. |
+| `npm run prisma:generate` | Generate Prisma client code in node_modules; no database changes. |
+| `npm run db:migrate` | Apply checked-in migrations to the configured database. |
+| `npm run start:dev` | Compile and run with file watching. Set NODE_ENV through `.env` for developer assets. |
+| `npm run build` | Compile production artifacts into dist. |
+| `npm run start:prod` | Run an existing build; requires a configured database. |
+| `npm run typecheck` | Check source/tests without emitting files or incremental caches. |
+| `npm run lint` | Check source/tests without changing files. |
+| `npm run lint:fix` | Explicitly apply supported lint fixes. |
+| `npm run format:check` | Report formatting differences without changing files. |
+| `npm run format` | Rewrite source/test formatting. |
+| `npm test -- --runInBand` | Mocked unit suite; no live credentials needed. |
+| `npm run test:cov -- --runInBand` | Unit coverage report in coverage/. |
+| `npm run test:e2e` | Existing application e2e test; requires a running configured database. Isolated integration fixtures are tracked in JAR-007. |
 
-## Compile and run the project
-
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+The current baseline has known lint and calendar test failures tracked in Notion; these commands preserve failure exit codes. Do not use `prisma db push` as a replacement for checked-in migrations during setup.
