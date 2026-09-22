@@ -10,7 +10,9 @@
     "typecheck": "vue-tsc --noEmit",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "lint": "eslint src vite.config.ts test",
-    "lint:fix": "npm run lint -- --fix"
+    "lint:fix": "npm run lint -- --fix",
+    "prototype": "vite --mode prototype --port 5174 --strictPort",
+    "build:prototype": "vite build --mode prototype"
   },
   "dependencies": {
     "dompurify": "^3.4.15",
