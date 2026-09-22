@@ -91,5 +91,16 @@
   "engines": {
     "node": ">=24.11.0 <25",
     "npm": ">=11 <12"
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "2.4.0"
+    },
+    "prisma": {
+      "mysql2": "3.24.4"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
+    }
   }
 }
