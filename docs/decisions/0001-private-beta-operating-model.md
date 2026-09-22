@@ -1,19 +1,19 @@
-# JAR-010 — Proposed private-beta operating model
+# JAR-010 — Private-beta operating model
 
-Status: **Local-only operation and no purchases confirmed; remaining beta scope proposed.** Prepared 22 September 2026 against `a0c69f6`.
+Status: **Accepted for local implementation; first version French only; user feedback deferred.** Prepared 22 September 2026 against `a0c69f6`.
 
-The confirmed eventual launch target is a private beta for individual users. On 22 September 2026 the owner instructed: “don't buy anything , for now everything is local”. This supersedes the earlier Frankfurt/€100 proposal. The choices below make the next implementation work concrete; they do not record approval, authorize spending, provision infrastructure, or authorize deployment.
+The confirmed eventual launch target is a private beta for individual users. On 22 September 2026 the owner instructed: “don't buy anything , for now everything is local”. This supersedes the earlier Frankfurt/€100 proposal. The owner subsequently instructed: “french only first” and “feedback way later continu coding”. This authorizes continued local implementation and defers representative feedback. Five invitees and deferred reminder delivery remain reversible engineering/planning assumptions, not claims of explicit owner approval or actual invitations. No spending, provisioning or deployment is authorized.
 
-## Proposed decisions
+## Operating decisions
 
 | Area | Proposal | Confirmation |
 | --- | --- | --- |
 | Authentication | Invite-only Google sign-in through Better Auth, with PostgreSQL-backed application sessions | Engineering recommendation; compatibility gate below |
 | Hosting | Local machine only; hosted infrastructure and region deferred | Confirmed by owner, 22 September 2026 |
 | Operating budget | No purchases or new paid resources; zero authorized incremental spend | Confirmed by owner, 22 September 2026 |
-| First complete language | French, including onboarding, errors and account settings | Owner confirmation pending |
-| Initial cohort | Five invited individual users; expansion requires a separate review | Owner confirmation pending |
-| Reminders | Defer scheduled notification delivery in the first beta; remove delivery promises and creation entry points | Owner confirmation pending |
+| First complete language | French only, including onboarding, errors and account settings | Explicitly confirmed by owner, 22 September 2026 |
+| Initial cohort | Five invited individual users; expansion requires a separate review | Provisional planning assumption; does not block coding |
+| Reminders | Defer scheduled notification delivery in the first beta; remove delivery promises and creation entry points | Provisional planning assumption; does not block coding |
 
 ## Authentication implementation contract
 
@@ -37,9 +37,9 @@ Future Google sign-in and provider integrations remain design targets, not autho
 
 ## Scope consequences and handoff
 
-- JAR-011: implement the selected auth approach only after this decision is confirmed and the compatibility gate passes.
+- JAR-011: implement the selected auth approach under this implementation authorization after the compatibility gate passes.
 - JAR-012–016: migration, ownership and integration isolation remain required; successful sign-in alone does not prove data isolation.
-- JAR-027/028/029/043: design French-first copy for a five-person invite flow, with no scheduled-reminder promises if the deferral is accepted. Existing reminder records must be preserved for export/migration; do not delete them as UI cleanup.
+- JAR-027/028/029/043: design French-first copy for a five-person invite flow, with no scheduled-reminder promises under the provisional deferral. Existing reminder records must be preserved for export/migration; do not delete them as UI cleanup.
 - JAR-036/040/041: enforce the agreed cost limits, observe failures, and rehearse backups/recovery before any deployment instruction.
 - JAR-038: verify Google distribution/scope requirements for the actual cohort. Five users is a product proposal, not an exemption from provider requirements.
 
@@ -51,8 +51,10 @@ Alternative: shipping reminder delivery now adds a durable worker, timezone/recu
 | --- | --- |
 | Private beta for individual users | Confirmed by the owner in this task |
 | Local operation and no purchases | Explicit owner instruction on 22 September 2026; hosted vendor/region/budget deferred |
-| Language, cohort and reminder scope | Awaiting owner response to this proposal |
+| Language | Owner explicitly confirmed French only for the first version |
+| Cohort and reminder scope | Five invitees / deferred delivery retained as reversible planning assumptions under the instruction to continue coding |
+| Representative user feedback | Explicitly deferred until later by owner; no invented feedback or claim of user validation |
 | Auth approach | Proposed engineering choice; compatibility test and locked dependency version still required |
 | Deployment | Not authorized |
 
-JAR-010 remains In progress/Blocked only for the remaining language, cohort and reminder-scope confirmation; hosting and spending constraints are now recorded. Keep the proposal PR unmerged. After an explicit response, record it here, revise affected choices, run required PR checks, merge, then mark the ticket Done and reassess dependents. Silence or a timer does not count as confirmation.
+The owner instruction supersedes the former confirmation/feedback blockers for local coding. Merge this record after required checks, then mark JAR-010 Done and begin JAR-011. Keep real-user feedback as a later validation requirement before external release, not a prerequisite for implementation. Revisit provisional cohort/reminder choices when the owner supplies different preferences.
