@@ -1,6 +1,6 @@
 # JAR-028: private-beta product prototype
 
-Status: working design proposal; representative-user validation pending. French is provisional until JAR-010 is confirmed. No real account, email or calendar is used.
+Status: French-only first version confirmed by owner; representative-user feedback explicitly deferred until later. No real account, email or calendar is used.
 
 ## Direction and design review
 
@@ -43,7 +43,7 @@ Record participant pseudonym/context, date, viewport/input, task completion, ass
 
 ## Evidence and feedback
 
-No representative beta-user sessions have occurred. Engineering checks and design critique are not substitutes for that acceptance criterion. Keep the PR draft and ticket In progress/Blocked once implementation checks finish. Incorporate observed feedback in this branch, recheck, then merge only when all criteria and required checks pass.
+No representative beta-user sessions have occurred. On 22 September the owner explicitly instructed French only first, feedback much later and continued coding. Feedback is therefore a later release-validation activity, not an implementation/merge gate. Engineering checks do not constitute user validation. Merge after engineering review and required checks; collect feedback under the release-validation work before external beta launch.
 
 ### Engineering verification — 22 September 2026
 
