@@ -1,16 +1,16 @@
 # JAR-010 — Proposed private-beta operating model
 
-Status: **Proposed; owner confirmation pending.** Prepared 22 September 2026 against `a0c69f6`.
+Status: **Local-only operation and no purchases confirmed; remaining beta scope proposed.** Prepared 22 September 2026 against `a0c69f6`.
 
-The confirmed launch target is a private beta for individual users. The choices below make the next implementation work concrete; they do not record approval, authorize spending, provision infrastructure, or authorize deployment.
+The confirmed eventual launch target is a private beta for individual users. On 22 September 2026 the owner instructed: “don't buy anything , for now everything is local”. This supersedes the earlier Frankfurt/€100 proposal. The choices below make the next implementation work concrete; they do not record approval, authorize spending, provision infrastructure, or authorize deployment.
 
 ## Proposed decisions
 
 | Area | Proposal | Confirmation |
 | --- | --- | --- |
 | Authentication | Invite-only Google sign-in through Better Auth, with PostgreSQL-backed application sessions | Engineering recommendation; compatibility gate below |
-| Hosting | Render, Frankfurt: one application service and managed PostgreSQL in the same region | Owner confirmation pending |
-| Operating budget | €100/month total planning ceiling: up to €60 infrastructure, €30 model use, €10 contingency | Owner confirmation pending; not a provider quote or spending authorization |
+| Hosting | Local machine only; hosted infrastructure and region deferred | Confirmed by owner, 22 September 2026 |
+| Operating budget | No purchases or new paid resources; zero authorized incremental spend | Confirmed by owner, 22 September 2026 |
 | First complete language | French, including onboarding, errors and account settings | Owner confirmation pending |
 | Initial cohort | Five invited individual users; expansion requires a separate review | Owner confirmation pending |
 | Reminders | Defer scheduled notification delivery in the first beta; remove delivery promises and creation entry points | Owner confirmation pending |
@@ -29,13 +29,11 @@ Sources checked 22 September 2026: [Google provider](https://better-auth.com/doc
 
 ## Hosting and cost controls
 
-Frankfurt is a supported Render region. Keep application and database there so the service can use the regional private database connection. Serve built Vue assets through the application origin to simplify cookies and routing. Use a paid persistent database with a tested backup/restore plan; do not base the beta on a temporary/free database. Final sizing and plan selection follow measured memory/load and recovery requirements in JAR-041.
+Run the application, database, prototype and validation locally. Use local models or fake providers for development and tests. Do not provision hosted resources, buy subscriptions or credits, redeem resets, or initiate paid model/API calls. No external deployment is authorized.
 
-The €100 ceiling is a proposed product constraint, not a claim that a specific deployment costs €100. Before provisioning, record current provider quotes, database/storage/backup costs, model budget, applicable taxes and currency conversion. If the complete estimate exceeds the ceiling, revise the proposal before spending. No paid resources are created by this ticket. Model quotas and a fail-closed spend cap remain JAR-036 implementation work; a provider billing alert alone is insufficient.
+A hosting vendor, region and future operating budget are deferred until the owner requests deployment planning. The previous Render Frankfurt/€100 recommendation is withdrawn as the current operating proposal. These deferred choices do not block local engineering. GitHub PRs and Notion tracking remain the previously authorized collaboration workflow; they do not deploy the application.
 
-Frankfurt hosting does not imply that Google, model processing, logs or every subprocessor stays in the EU. Document actual data flows and provider arrangements under JAR-038/JAR-039 before invitations; make no unsupported residency or compliance promise.
-
-Sources: [Render regions](https://render.com/docs/regions), [Postgres connections](https://render.com/docs/postgresql-creating-connecting), [current pricing](https://render.com/pricing). Prices must be rechecked at the deployment decision.
+Future Google sign-in and provider integrations remain design targets, not authorization to connect real accounts now. Verify their behavior using isolated fixtures locally. Local operation does not waive identity, ownership, privacy or execution-safety criteria for an eventual beta.
 
 ## Scope consequences and handoff
 
@@ -52,8 +50,9 @@ Alternative: shipping reminder delivery now adds a durable worker, timezone/recu
 | Decision | Evidence |
 | --- | --- |
 | Private beta for individual users | Confirmed by the owner in this task |
-| Language, cohort, reminder scope, hosting and budget | Awaiting owner response to this proposal |
+| Local operation and no purchases | Explicit owner instruction on 22 September 2026; hosted vendor/region/budget deferred |
+| Language, cohort and reminder scope | Awaiting owner response to this proposal |
 | Auth approach | Proposed engineering choice; compatibility test and locked dependency version still required |
 | Deployment | Not authorized |
 
-JAR-010 remains In progress/Blocked while confirmation is missing. Keep the proposal PR unmerged. After an explicit response, record it here, revise affected choices, run required PR checks, merge, then mark the ticket Done and reassess dependents. Silence or a timer does not count as confirmation.
+JAR-010 remains In progress/Blocked only for the remaining language, cohort and reminder-scope confirmation; hosting and spending constraints are now recorded. Keep the proposal PR unmerged. After an explicit response, record it here, revise affected choices, run required PR checks, merge, then mark the ticket Done and reassess dependents. Silence or a timer does not count as confirmation.
