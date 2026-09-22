@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted } from "vue";
 
-import BaseBadge from '@/shared/ui/BaseBadge.vue';
-import BaseButton from '@/shared/ui/BaseButton.vue';
-import BaseCard from '@/shared/ui/BaseCard.vue';
-import BaseInput from '@/shared/ui/BaseInput.vue';
-import { useAppStore } from '@/stores/appStore';
-import { useStatusStore } from '@/stores/statusStore';
+import BaseBadge from "@/shared/ui/BaseBadge.vue";
+import BaseButton from "@/shared/ui/BaseButton.vue";
+import BaseCard from "@/shared/ui/BaseCard.vue";
+import BaseInput from "@/shared/ui/BaseInput.vue";
+import { useAppStore } from "@/stores/appStore";
+import { useStatusStore } from "@/stores/statusStore";
 
 const app = useAppStore();
 const status = useStatusStore();
@@ -30,19 +30,19 @@ const timeoutMsText = computed({
 
 const timeoutError = computed(() => {
   const n = Number(timeoutMsText.value);
-  if (!Number.isFinite(n)) return 'Valeur invalide.';
-  if (n < 1_000) return 'Minimum 1 000 ms.';
-  if (n > 300_000) return 'Maximum conseillé : 300 000 ms.';
-  return '';
+  if (!Number.isFinite(n)) return "Valeur invalide.";
+  if (n < 1_000) return "Minimum 1 000 ms.";
+  if (n > 300_000) return "Maximum conseillé : 300 000 ms.";
+  return "";
 });
 
 const connectGoogle = () => {
   const url = app.jarvis.googleAuthUrl(app.sessionId);
-  window.open(url, '_blank', 'noopener,noreferrer');
+  window.open(url, "_blank", "noopener,noreferrer");
 };
 
 const toggleTheme = () => {
-  app.theme = app.theme === 'dark' ? 'light' : 'dark';
+  app.theme = app.theme === "dark" ? "light" : "dark";
 };
 </script>
 
@@ -69,7 +69,9 @@ const toggleTheme = () => {
           stroke-linecap="round"
         >
           <circle cx="10" cy="10" r="4" />
-          <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42" />
+          <path
+            d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"
+          />
         </svg>
         <svg
           v-else
@@ -82,14 +84,16 @@ const toggleTheme = () => {
         >
           <path d="M17.5 12A7.5 7.5 0 0 1 8 2.5a7.5 7.5 0 1 0 9.5 9.5z" />
         </svg>
-        {{ app.theme === 'dark' ? 'Clair' : 'Sombre' }}
+        {{ app.theme === "dark" ? "Clair" : "Sombre" }}
       </BaseButton>
     </header>
 
     <div class="grid gap-4 lg:grid-cols-2">
       <!-- Session -->
       <BaseCard class="p-5">
-        <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+        <p
+          class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50"
+        >
           Session
         </p>
         <p class="mt-1 text-xs text-muted-foreground/60">
@@ -107,7 +111,9 @@ const toggleTheme = () => {
 
       <!-- Réseau -->
       <BaseCard class="p-5">
-        <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+        <p
+          class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50"
+        >
           Réseau & Auth
         </p>
         <p class="mt-1 text-xs text-muted-foreground/60">
@@ -119,13 +125,6 @@ const toggleTheme = () => {
             label="API base URL"
             placeholder="http://localhost:3000"
             hint="Optionnel — vide = même origin."
-          />
-          <BaseInput
-            v-model="app.authToken"
-            label="Auth token"
-            type="password"
-            placeholder="—"
-            hint="Futur Bearer token. Optionnel pour l'instant."
           />
           <BaseInput
             v-model="timeoutMsText"
@@ -142,27 +141,37 @@ const toggleTheme = () => {
     <BaseCard class="p-5">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          <p
+            class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50"
+          >
             Intégration Google
           </p>
           <p class="mt-1 text-xs text-muted-foreground/60">
             Requis pour exécuter
-            <code class="rounded bg-muted/60 px-1 py-0.5 font-mono text-[11px]">calendar.*</code>
+            <code class="rounded bg-muted/60 px-1 py-0.5 font-mono text-[11px]"
+              >calendar.*</code
+            >
             et
-            <code class="rounded bg-muted/60 px-1 py-0.5 font-mono text-[11px]">gmail.*</code>
+            <code class="rounded bg-muted/60 px-1 py-0.5 font-mono text-[11px]"
+              >gmail.*</code
+            >
           </p>
           <div class="mt-3 flex flex-wrap gap-2">
             <BaseBadge :tone="googleConnected ? 'ok' : 'warn'" :dot="true">
-              Google {{ googleConnected ? 'connecté' : 'non connecté' }}
+              Google {{ googleConnected ? "connecté" : "non connecté" }}
             </BaseBadge>
             <BaseBadge
-              :tone="status.snapshot?.integrations.calendarConnected ? 'ok' : 'muted'"
+              :tone="
+                status.snapshot?.integrations.calendarConnected ? 'ok' : 'muted'
+              "
               :dot="true"
             >
               Calendar
             </BaseBadge>
             <BaseBadge
-              :tone="status.snapshot?.integrations.gmailConnected ? 'ok' : 'muted'"
+              :tone="
+                status.snapshot?.integrations.gmailConnected ? 'ok' : 'muted'
+              "
               :dot="true"
             >
               Gmail

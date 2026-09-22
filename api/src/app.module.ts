@@ -9,6 +9,7 @@ import { JarvisModule } from './jarvis/jarvis.module';
 import { InboxZeroModule } from './inbox-zero/inbox-zero.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AppService } from './app.service';
       ignoreEnvFile: process.env.NODE_ENV === 'test',
     }),
     PrismaModule,
+    AuthModule,
     CalendarModule,
     GmailModule,
     GoogleAuthModule,
