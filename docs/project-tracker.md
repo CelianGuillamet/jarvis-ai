@@ -7,7 +7,9 @@ The execution tracker is in Notion. Update ticket status and evidence there as w
 - [Audit reference](https://app.notion.com/p/3e28931c9eb981eb8f04eb3f453f96c6)
 - [Rework plan reference](https://app.notion.com/p/3e28931c9eb9817ca101d39f5c978a27)
 
-Initial snapshot, 21 September 2026: 46 tickets; 2 completed (audit and plan), 44 not started. Six ready, 37 waiting on prerequisites, one blocked pending dependency-metadata disclosure authorization. Readiness is maintained as tickets progress. The hourly same-task automation `jarvis-backlog-execution` is active; the local execution-checkpoint.md (not versioned) records the latest work and resume instructions.
+Initial snapshot, 21 September 2026: 46 tickets; 2 completed (audit and plan), 44 not started. Readiness and current status are maintained in Notion. The local execution-checkpoint.md (not versioned) records the latest work and resume instructions.
+
+Owner direction, 23 September 2026: resume exactly one ticket, JAR-011 and its existing PR #10, then pause ticket processing again. The hourly automation was deleted after the earlier pause request; do not recreate it or start another ticket without a new instruction. Work remains local, with no purchases or deployment; GitHub and Notion updates remain authorized.
 
 ## Updating work
 

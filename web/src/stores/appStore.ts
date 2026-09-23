@@ -1,48 +1,57 @@
-import { defineStore } from 'pinia';
-import { computed, ref, watch } from 'vue';
+import { defineStore } from "pinia";
+import { computed, ref, watch } from "vue";
 
-import { env } from '@/core/config/env';
-import { createJarvisApi } from '@/core/api/jarvis';
+import { env } from "@/core/config/env";
+import { createJarvisApi } from "@/core/api/jarvis";
 import {
   readStorageNumber,
   readStorageString,
   writeStorageNumber,
   writeStorageString,
-} from '@/shared/utils/storage';
+} from "@/shared/utils/storage";
 
 const STORAGE_KEYS = {
-  sessionId: 'jarvis.web.sessionId',
-  apiBaseUrl: 'jarvis.web.apiBaseUrl',
-  authToken: 'jarvis.web.authToken',
-  theme: 'jarvis.web.theme',
-  timeoutMs: 'jarvis.web.timeoutMs',
+  sessionId: "jarvis.web.sessionId",
+  apiBaseUrl: "jarvis.web.apiBaseUrl",
+  theme: "jarvis.web.theme",
+  timeoutMs: "jarvis.web.timeoutMs",
 } as const;
 
-export type ThemeMode = 'dark' | 'light';
+export type ThemeMode = "dark" | "light";
 
-export const useAppStore = defineStore('app', () => {
+export const useAppStore = defineStore("app", () => {
   const sessionId = ref(
     readStorageString(STORAGE_KEYS.sessionId, env.defaultSessionId),
   );
-  const apiBaseUrl = ref(readStorageString(STORAGE_KEYS.apiBaseUrl, env.apiBaseUrl));
-  const authToken = ref(readStorageString(STORAGE_KEYS.authToken, ''));
-  const timeoutMs = ref(readStorageNumber(STORAGE_KEYS.timeoutMs, env.requestTimeoutMs));
+  const apiBaseUrl = ref(
+    readStorageString(STORAGE_KEYS.apiBaseUrl, env.apiBaseUrl),
+  );
+  const timeoutMs = ref(
+    readStorageNumber(STORAGE_KEYS.timeoutMs, env.requestTimeoutMs),
+  );
   const theme = ref<ThemeMode>(
-    readStorageString(STORAGE_KEYS.theme, 'dark') === 'light' ? 'light' : 'dark',
+    readStorageString(STORAGE_KEYS.theme, "dark") === "light"
+      ? "light"
+      : "dark",
   );
 
-  watch(sessionId, (value) => writeStorageString(STORAGE_KEYS.sessionId, value.trim()));
-  watch(apiBaseUrl, (value) => writeStorageString(STORAGE_KEYS.apiBaseUrl, value.trim()));
-  watch(authToken, (value) => writeStorageString(STORAGE_KEYS.authToken, value.trim()));
-  watch(timeoutMs, (value) => writeStorageNumber(STORAGE_KEYS.timeoutMs, value));
+  watch(sessionId, (value) =>
+    writeStorageString(STORAGE_KEYS.sessionId, value.trim()),
+  );
+  watch(apiBaseUrl, (value) =>
+    writeStorageString(STORAGE_KEYS.apiBaseUrl, value.trim()),
+  );
+  watch(timeoutMs, (value) =>
+    writeStorageNumber(STORAGE_KEYS.timeoutMs, value),
+  );
   watch(theme, (value) => writeStorageString(STORAGE_KEYS.theme, value));
 
   watch(
     theme,
     (next) => {
       const root = document.documentElement;
-      if (next === 'light') root.classList.add('light');
-      else root.classList.remove('light');
+      if (next === "light") root.classList.add("light");
+      else root.classList.remove("light");
     },
     { immediate: true },
   );
@@ -51,14 +60,12 @@ export const useAppStore = defineStore('app', () => {
     createJarvisApi({
       ...(apiBaseUrl.value.trim() ? { baseUrl: apiBaseUrl.value.trim() } : {}),
       timeoutMs: timeoutMs.value,
-      getAuthToken: () => (authToken.value.trim() ? authToken.value.trim() : null),
     }),
   );
 
   return {
     sessionId,
     apiBaseUrl,
-    authToken,
     timeoutMs,
     theme,
     jarvis,

@@ -39,6 +39,9 @@ try {
       const env = {
         ...environment,
         NODE_ENV: 'test',
+        AUTH_SECRET: 'isolated-integration-secret-not-for-real-use-2026',
+        AUTH_BASE_URL: 'http://localhost:3000',
+        APP_ORIGIN: 'http://localhost:5173',
         TZ: 'UTC',
         DATABASE_URL: databaseUrl,
         JARVIS_TEST_RUN_ID: runId,
@@ -55,6 +58,7 @@ try {
       );
       await runNode(
         [
+          '--experimental-vm-modules',
           'node_modules/jest/bin/jest.js',
           '--config',
           'test/jest-integration.json',

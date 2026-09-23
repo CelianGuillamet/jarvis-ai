@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import AppShell from '@/layouts/AppShell.vue';
-import ToastViewport from '@/shared/ui/ToastViewport.vue';
+import AuthGate from "@/features/auth/AuthGate.vue";
+import AppShell from "@/layouts/AppShell.vue";
+import ToastViewport from "@/shared/ui/ToastViewport.vue";
 </script>
 
 <template>
-  <AppShell>
-    <RouterView />
-  </AppShell>
-  <ToastViewport />
+  <AuthGate>
+    <AppShell>
+      <RouterView />
+    </AppShell>
+    <ToastViewport />
+  </AuthGate>
 </template>
