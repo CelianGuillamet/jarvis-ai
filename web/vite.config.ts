@@ -6,7 +6,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   const base = env.VITE_BASE_PATH || "/";
-  const outDir = env.VITE_OUT_DIR || "dist";
+  const outDir =
+    mode === "prototype" ? "dist-prototype" : env.VITE_OUT_DIR || "dist";
   const proxyTarget = env.VITE_API_PROXY_TARGET || "http://localhost:3000";
 
   return {
@@ -28,6 +29,15 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir,
+      ...(mode === 'prototype'
+        ? {
+            rollupOptions: {
+              input: fileURLToPath(
+                new URL('./prototype.html', import.meta.url),
+              ),
+            },
+          }
+        : {}),
       emptyOutDir: true,
       sourcemap: true,
     },
