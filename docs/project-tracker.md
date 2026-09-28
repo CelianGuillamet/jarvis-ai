@@ -9,7 +9,7 @@ The execution tracker is in Notion. Update ticket status and evidence there as w
 
 Initial snapshot, 21 September 2026: 46 tickets; 2 completed (audit and plan), 44 not started. Readiness and current status are maintained in Notion. The local execution-checkpoint.md (not versioned) records the latest work and resume instructions.
 
-Owner direction, 23 September 2026: resume exactly one ticket, JAR-011 and its existing PR #10, then pause ticket processing again. The hourly automation was deleted after the earlier pause request; do not recreate it or start another ticket without a new instruction. Work remains local, with no purchases or deployment; GitHub and Notion updates remain authorized.
+Owner direction, 28 September 2026: resume the backlog without the previous one-ticket limit. The ongoing goal and hourly same-task follow-up are active again. Work remains local, with no purchases or deployment; GitHub and Notion updates remain authorized. Continue in priority/dependency order, preserving checkpoints and existing work after interruptions.
 
 ## Updating work
 

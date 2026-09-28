@@ -25,7 +25,8 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "test:integration": "node scripts/test-integration.mjs",
     "test:runner": "node --test test/integration-database.test.mjs",
-    "account:invite": "node scripts/manage-invite.mjs"
+    "account:invite": "node scripts/manage-invite.mjs",
+    "ownership": "node scripts/manage-ownership.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

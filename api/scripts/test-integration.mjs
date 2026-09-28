@@ -56,6 +56,7 @@ try {
         ['node_modules/prisma/build/index.js', 'migrate', 'deploy'],
         env,
       );
+      await runNode(['--test', 'test/ownership-migration.test.mjs'], env);
       await runNode(
         [
           '--experimental-vm-modules',
