@@ -4,11 +4,16 @@ import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthService } from './auth.service';
 import { SessionGuard } from './session.guard';
+import { ConversationService } from './conversation.service';
 
 @Module({
   imports: [PrismaModule],
   controllers: [AccountController],
-  providers: [AuthService, { provide: APP_GUARD, useClass: SessionGuard }],
-  exports: [AuthService],
+  providers: [
+    AuthService,
+    ConversationService,
+    { provide: APP_GUARD, useClass: SessionGuard },
+  ],
+  exports: [AuthService, ConversationService],
 })
 export class AuthModule {}

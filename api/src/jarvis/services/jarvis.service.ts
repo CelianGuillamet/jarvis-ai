@@ -1574,9 +1574,9 @@ export class JarvisService {
     };
   }
 
-  private buildToolContext(sessionId: string): ToolContext {
+  private async buildToolContext(sessionId: string): Promise<ToolContext> {
     return {
-      prisma: this.prisma,
+      prisma: await this.prisma.forConversation(sessionId),
       memory: this.memoryStore,
       simulation: this.simulation,
       tz: this.tz,
@@ -1588,18 +1588,12 @@ export class JarvisService {
       goals: this.goalStore,
       conflicts: this.conflictStore,
       dependencies: this.dependencyStore,
-      resources: this.resourceStore,
-      analytics: this.analyticsStore,
       scheduling: this.schedulingStore,
       help: this.helpStore,
       search: this.searchStore,
       knowledge: this.knowledgeStore,
       timeInsights: this.timeInsightsStore,
-      delegation: this.delegationStore,
-      reminders: this.reminderStore,
-      habits: this.habitStore,
       contacts: this.contactStore,
-      finance: this.financeStore,
     };
   }
 
@@ -1621,6 +1615,7 @@ export class JarvisService {
 
   async status(sessionId?: string) {
     const resolvedSessionId = this.resolveSessionId(sessionId);
+    const prisma = await this.prisma.forConversation(resolvedSessionId);
     const profile = await this.getHumanProfile(resolvedSessionId);
     const pendingAction = await this.pending.peekLatest(resolvedSessionId);
 
@@ -1641,9 +1636,9 @@ export class JarvisService {
         where: { sessionId: resolvedSessionId },
         select: { scope: true, updatedAt: true },
       }),
-      this.prisma.todo.count({ where: { done: false } }),
-      this.prisma.shoppingItem.count({ where: { bought: false } }),
-      this.prisma.note.count(),
+      prisma.todo.count({ where: { done: false } }),
+      prisma.shoppingItem.count({ where: { bought: false } }),
+      prisma.note.count(),
       this.prisma.jarvisLog.findMany({
         where: { sessionId: resolvedSessionId },
         orderBy: { createdAt: 'desc' },
@@ -1659,8 +1654,10 @@ export class JarvisService {
       this.missionStore.list(resolvedSessionId, { status: 'active', limit: 5 }),
       this.auditStore.listRecent(resolvedSessionId, { limit: 8 }),
       this.workflowStore.list(resolvedSessionId, { limit: 5 }),
-      this.reminderStore.upcoming(resolvedSessionId, 24 * 60 * 60 * 1000),
-      this.habitStore.list(resolvedSessionId),
+      Promise.resolve(
+        [] as Awaited<ReturnType<JarvisReminderService['upcoming']>>,
+      ),
+      Promise.resolve([] as Awaited<ReturnType<JarvisHabitService['list']>>),
     ]);
 
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
@@ -1727,7 +1724,7 @@ export class JarvisService {
 
     const pendingPreview = pendingAction
       ? await previewTool(
-          this.buildToolContext(resolvedSessionId),
+          await this.buildToolContext(resolvedSessionId),
           pendingAction.call,
         )
       : null;
@@ -3200,7 +3197,7 @@ export class JarvisService {
             pendingActionId: consumed.id,
           };
           const result = await runTool(
-            this.buildToolContext(resolvedSessionId),
+            await this.buildToolContext(resolvedSessionId),
             consumed.call,
           );
           const choices = await this.buildAutoFollowUpChoices(
@@ -3306,7 +3303,7 @@ export class JarvisService {
         }
 
         const pendingPreview = await previewTool(
-          this.buildToolContext(resolvedSessionId),
+          await this.buildToolContext(resolvedSessionId),
           pending.call,
         );
         const pendingDecision = this.buildPendingActionView(profile, pending, {
@@ -3631,7 +3628,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         await this.auditStore.markSessionPendingAsSuperseded(resolvedSessionId);
         const actionId = await this.pending.create(resolvedSessionId, toolCall);
         const preview = await previewTool(
-          this.buildToolContext(resolvedSessionId),
+          await this.buildToolContext(resolvedSessionId),
           toolCall,
         );
         const pendingActionView = this.buildPendingActionView(
@@ -3697,7 +3694,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         plan: executionPlan,
       };
       const result = await runTool(
-        this.buildToolContext(resolvedSessionId),
+        await this.buildToolContext(resolvedSessionId),
         toolCall,
       );
       const finalResult = await this.maybeSummarizeWebResult(
@@ -3883,7 +3880,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
     try {
       const profile = await this.getHumanProfile(item.sessionId);
       const result = await runTool(
-        this.buildToolContext(item.sessionId),
+        await this.buildToolContext(item.sessionId),
         item.call,
       );
       const choices = await this.buildAutoFollowUpChoices(

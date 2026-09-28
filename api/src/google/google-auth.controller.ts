@@ -1,14 +1,25 @@
-import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Controller, Get, Query, Res, Req } from '@nestjs/common';
+import { ConversationService } from '../auth/conversation.service';
+import type { AuthenticatedRequest } from '../auth/session.guard';
 import type { Response } from 'express';
 import { GoogleAuthService } from './google-auth.service';
 
 @Controller('auth/google')
 export class GoogleAuthController {
-  constructor(private readonly auth: GoogleAuthService) {}
+  constructor(
+    private readonly auth: GoogleAuthService,
+    private readonly conversations: ConversationService,
+  ) {}
 
   @Get()
-  start(@Query('sessionId') sessionId = 'default', @Res() res: Response) {
-    const url = this.auth.getAuthUrl(sessionId);
+  async start(
+    @Query('sessionId') sessionId = 'default',
+    @Res() res: Response,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const url = this.auth.getAuthUrl(
+      await this.conversations.resolve(request.identity.userId, sessionId),
+    );
     return res.redirect(url);
   }
 
@@ -17,8 +28,9 @@ export class GoogleAuthController {
     @Query('code') code: string,
     @Query('state') state: string,
     @Res() res: Response,
+    @Req() request: AuthenticatedRequest,
   ) {
-    await this.auth.handleCallback(code, state);
+    await this.auth.handleCallback(code, state, request.identity.userId);
 
     res
       .status(200)
@@ -28,7 +40,12 @@ export class GoogleAuthController {
   }
 
   @Get('status')
-  async status(@Query('sessionId') sessionId = 'default') {
-    return this.auth.status(sessionId);
+  async status(
+    @Query('sessionId') sessionId = 'default',
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.auth.status(
+      await this.conversations.resolve(request.identity.userId, sessionId),
+    );
   }
 }

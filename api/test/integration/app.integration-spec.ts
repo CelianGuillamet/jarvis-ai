@@ -1,3 +1,4 @@
+import { ConversationService } from '../../src/auth/conversation.service';
 import { createAuth } from '../../src/auth/create-auth';
 import { readAuthConfig } from '../../src/auth/auth-config';
 import { createHmac } from 'node:crypto';
@@ -107,7 +108,10 @@ describe('API against disposable migrated PostgreSQL', () => {
     jest.spyOn(OpenAIProvider.prototype, 'chat').mockRestore();
   });
 
-  async function seedGoogle(sessionId: string) {
+  async function seedGoogle(clientKey: string) {
+    const sessionId = await app
+      .get(ConversationService)
+      .resolve('integration-user', clientKey);
     await prisma.googleOAuthToken.create({
       data: {
         sessionId,
@@ -144,7 +148,12 @@ describe('API against disposable migrated PostgreSQL', () => {
     ).toBe(1);
     expect(
       await prisma.jarvisLog.count({
-        where: { sessionId: 'fixture-todo', toolName: 'todo.add' },
+        where: {
+          sessionId: await app
+            .get(ConversationService)
+            .resolve('integration-user', 'fixture-todo'),
+          toolName: 'todo.add',
+        },
       }),
     ).toBe(1);
     await request(baseUrl)
@@ -156,7 +165,9 @@ describe('API against disposable migrated PostgreSQL', () => {
   });
 
   it('persists and confirms a calendar action using only the injected fake', async () => {
-    const sessionId = 'fixture-calendar';
+    const sessionId = await app
+      .get(ConversationService)
+      .resolve('integration-user', 'fixture-calendar');
     await seedGoogle(sessionId);
     await request(baseUrl)
       .post('/jarvis/chat')
@@ -183,7 +194,9 @@ describe('API against disposable migrated PostgreSQL', () => {
   });
 
   it('scans and replies to a fixture email without a real Google account', async () => {
-    const sessionId = 'fixture-inbox';
+    const sessionId = await app
+      .get(ConversationService)
+      .resolve('integration-user', 'fixture-inbox');
     await seedGoogle(sessionId);
     await request(baseUrl)
       .post('/inbox-zero/scan')
@@ -471,6 +484,83 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(response.status).toBe(302);
     expect(response.headers.location).toContain('error=');
     expect(await prisma.user.count()).toBe(before);
+  });
+
+  it('refuses another owner’s conversation across HTTP surfaces and keeps shared browser aliases separate', async () => {
+    await prisma.betaInvite.create({
+      data: { email: 'second@example.invalid' },
+    });
+    await prisma.user.create({
+      data: {
+        id: 'second-user',
+        name: 'Second',
+        email: 'second@example.invalid',
+        emailVerified: true,
+      },
+    });
+    const token = 'second-user-session-token';
+    await prisma.session.create({
+      data: {
+        id: 'second-session',
+        token,
+        userId: 'second-user',
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const resolver = app.get(ConversationService);
+    const first = await resolver.resolve(
+      'integration-user',
+      'same-browser-alias',
+    );
+    const second = await resolver.resolve('second-user', 'same-browser-alias');
+    expect(first).not.toBe(second);
+    await prisma.todo.create({
+      data: { ownerId: 'second-user', text: 'second-user-private-task' },
+    });
+    const status = await request(baseUrl)
+      .get('/jarvis/status')
+      .query({ sessionId: second })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(
+      (status.body as { metrics: { openTodos: number } }).metrics.openTodos,
+    ).toBe(1);
+    for (const path of [
+      '/jarvis/status',
+      '/inbox-zero/session',
+      '/auth/google/status',
+    ]) {
+      await request(baseUrl)
+        .get(path)
+        .query({ sessionId: first })
+        .set('Cookie', cookie)
+        .expect(404);
+    }
+    await request(baseUrl)
+      .post('/jarvis/confirm')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId: first, actionId: 'known-foreign-action' })
+      .expect(404);
+    await request(baseUrl)
+      .post('/jarvis/chat')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId: first, text: 'liste mes tâches' })
+      .expect(404);
+    await request(baseUrl)
+      .get('/inbox-zero/session')
+      .query({ sessionId: 'same-browser-alias' })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(
+      (await prisma.conversation.findUniqueOrThrow({ where: { id: second } }))
+        .ownerId,
+    ).toBe('second-user');
   });
 
   it('logs out through the auth library and clears subsequent access', async () => {

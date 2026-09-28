@@ -76,11 +76,12 @@ export class JarvisSmartSchedulingService {
   }
 
   async applySuggestion(
+    sessionId: string,
     suggestionId: string,
   ): Promise<SchedulingSuggestionRecord | null> {
     try {
       const updated = await this.prisma.jarvisSchedulingSuggestion.update({
-        where: { id: suggestionId },
+        where: { id: suggestionId, sessionId },
         data: { applied: true },
       });
 
@@ -107,7 +108,8 @@ export class JarvisSmartSchedulingService {
           orderBy: { suggestedTime: 'asc' },
         });
 
-      const existingEvents = await this.prisma.calendarEvent.findMany({
+      const prisma = await this.prisma.forConversation(sessionId);
+      const existingEvents = await prisma.calendarEvent.findMany({
         where: {
           when: { gte: afterDate },
         },

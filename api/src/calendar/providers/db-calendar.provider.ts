@@ -6,16 +6,17 @@ export class DbCalendarProvider implements CalendarProvider {
   constructor(private readonly prisma: PrismaService) {}
 
   async listEventsInterval(
-    _sessionId: string,
+    sessionId: string,
     startIso: string,
     endIso: string,
     tz: string,
     limit: number,
   ): Promise<CalendarEventItem[]> {
+    const prisma = await this.prisma.forConversation(sessionId);
     const start = DateTime.fromISO(startIso, { zone: tz }).toJSDate();
     const end = DateTime.fromISO(endIso, { zone: tz }).toJSDate();
 
-    const rows = await this.prisma.calendarEvent.findMany({
+    const rows = await prisma.calendarEvent.findMany({
       where: { when: { gte: start, lte: end } },
       orderBy: { when: 'asc' },
       take: limit,
@@ -32,26 +33,30 @@ export class DbCalendarProvider implements CalendarProvider {
   }
 
   async createEvent(
-    _sessionId: string,
+    sessionId: string,
     title: string,
     whenIso: string,
     tz: string,
   ) {
+    const prisma = await this.prisma.forConversation(sessionId);
     const when = DateTime.fromISO(whenIso, { zone: tz }).toJSDate();
-    await this.prisma.calendarEvent.create({ data: { title, when } });
+    await prisma.calendarEvent.create({
+      data: { ownerId: prisma.ownerId, title, when },
+    });
   }
 
   async deleteEvent(
-    _sessionId: string,
+    sessionId: string,
     provider: 'google' | 'db',
     eventId: string,
   ) {
     if (provider !== 'db') throw new Error('DB_DELETE_WRONG_PROVIDER');
-    await this.prisma.calendarEvent.delete({ where: { id: eventId } });
+    const prisma = await this.prisma.forConversation(sessionId);
+    await prisma.calendarEvent.delete({ where: { id: eventId } });
   }
 
   async updateEvent(
-    _sessionId: string,
+    sessionId: string,
     provider: 'google' | 'db',
     eventId: string,
     _calendarId: string | undefined,
@@ -60,10 +65,11 @@ export class DbCalendarProvider implements CalendarProvider {
     tz: string,
   ) {
     if (provider !== 'db') throw new Error('DB_UPDATE_WRONG_PROVIDER');
+    const prisma = await this.prisma.forConversation(sessionId);
     const when = DateTime.fromISO(whenIso, { zone: tz }).toJSDate();
-    await this.prisma.calendarEvent.update({
+    await prisma.calendarEvent.update({
       where: { id: eventId },
-      data: { title, when },
+      data: { ownerId: prisma.ownerId, title, when },
     });
   }
 }

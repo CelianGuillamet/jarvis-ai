@@ -1,4 +1,8 @@
 import { DateTime } from 'luxon';
+import {
+  isDeferredCapability,
+  DEFERRED_CAPABILITY_MESSAGE,
+} from './beta-capabilities';
 import { PrismaService } from '../../prisma/prisma.service';
 import type {
   CalendarProvider,
@@ -531,7 +535,16 @@ export type ToolCall =
   | { type: 'final'; text: string };
 
 export type ToolContext = {
-  prisma: PrismaService;
+  prisma: Pick<
+    Awaited<ReturnType<PrismaService['forConversation']>>,
+    | 'ownerId'
+    | 'todo'
+    | 'note'
+    | 'shoppingItem'
+    | 'jarvisActionEvent'
+    | 'jarvisMission'
+    | 'jarvisWorkflowMemory'
+  >;
   memory: JarvisMemoryService;
   simulation: boolean;
   tz: string;
@@ -1098,7 +1111,7 @@ function consumeUndo(sessionId: string): UndoEntry | null {
   return entry;
 }
 
-async function applyUndo(prisma: PrismaService, entry: UndoEntry) {
+async function applyUndo(prisma: ToolContext['prisma'], entry: UndoEntry) {
   for (const mutation of entry.mutations) {
     switch (mutation.kind) {
       case 'todo.delete':
@@ -1109,6 +1122,7 @@ async function applyUndo(prisma: PrismaService, entry: UndoEntry) {
         await prisma.todo.upsert({
           where: { id: mutation.row.id },
           create: {
+            ownerId: prisma.ownerId,
             id: mutation.row.id,
             text: mutation.row.text,
             done: mutation.row.done,
@@ -1138,6 +1152,7 @@ async function applyUndo(prisma: PrismaService, entry: UndoEntry) {
         await prisma.shoppingItem.upsert({
           where: { id: mutation.row.id },
           create: {
+            ownerId: prisma.ownerId,
             id: mutation.row.id,
             text: mutation.row.text,
             bought: mutation.row.bought,
@@ -1167,6 +1182,7 @@ async function applyUndo(prisma: PrismaService, entry: UndoEntry) {
         await prisma.note.upsert({
           where: { id: mutation.row.id },
           create: {
+            ownerId: prisma.ownerId,
             id: mutation.row.id,
             title: mutation.row.title,
             text: mutation.row.text,
@@ -1334,6 +1350,7 @@ export async function previewTool(
   ctx: ToolContext,
   call: Extract<ToolCall, { type: 'tool' }>,
 ): Promise<string | null> {
+  if (isDeferredCapability(call.name)) return DEFERRED_CAPABILITY_MESSAGE;
   try {
     const { prisma, tz, sessionId } = ctx;
 
@@ -2151,6 +2168,8 @@ export async function runTool(
   ctx: ToolContext,
   call: ToolCall,
 ): Promise<string> {
+  if (call.type === 'tool' && isDeferredCapability(call.name))
+    return DEFERRED_CAPABILITY_MESSAGE;
   const { prisma, tz, sessionId } = ctx;
 
   const resolveTodo = async (query: string, done?: boolean) => {
@@ -2825,7 +2844,7 @@ export async function runTool(
         // ===== TODOS =====
         case 'todo.add': {
           const created = await prisma.todo.create({
-            data: { text: call.args.text },
+            data: { ownerId: prisma.ownerId, text: call.args.text },
             select: { id: true },
           });
           rememberUndo(sessionId, 'ajout todo', true, [
@@ -3412,7 +3431,11 @@ export async function runTool(
         // ===== NOTES =====
         case 'note.add': {
           const created = await prisma.note.create({
-            data: { title: call.args.title ?? null, text: call.args.text },
+            data: {
+              ownerId: prisma.ownerId,
+              title: call.args.title ?? null,
+              text: call.args.text,
+            },
             select: { id: true },
           });
 
@@ -3544,7 +3567,7 @@ export async function runTool(
         // ===== SHOPPING =====
         case 'shopping.add': {
           const created = await prisma.shoppingItem.create({
-            data: { text: call.args.text },
+            data: { ownerId: prisma.ownerId, text: call.args.text },
             select: { id: true },
           });
 
@@ -5289,7 +5312,11 @@ export async function runTool(
 
         case 'goal.done': {
           if (!ctx.goals) return 'Service objectifs non disponible.';
-          const goal = await ctx.goals.updateStatus(call.args.goalId, 'done');
+          const goal = await ctx.goals.updateStatus(
+            sessionId,
+            call.args.goalId,
+            'done',
+          );
           if (!goal) return 'Objectif introuvable.';
           return `Objectif "${goal.title}" marqué comme terminé.`;
         }
@@ -5463,6 +5490,7 @@ export async function runTool(
         case 'schedule.apply': {
           if (!ctx.scheduling) return 'Service planification non disponible.';
           const applied = await ctx.scheduling.applySuggestion(
+            sessionId,
             call.args.suggestionId,
           );
           if (!applied) return 'Suggestion introuvable.';

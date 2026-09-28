@@ -72,10 +72,13 @@ export class JarvisContextualHelpService {
     }
   }
 
-  async markViewed(helpId: string): Promise<ContextualHelpRecord | null> {
+  async markViewed(
+    sessionId: string,
+    helpId: string,
+  ): Promise<ContextualHelpRecord | null> {
     try {
       const help = await this.prisma.jarvisContextualHelp.update({
-        where: { id: helpId },
+        where: { id: helpId, sessionId },
         data: { viewedCount: { increment: 1 } },
       });
 
@@ -87,12 +90,13 @@ export class JarvisContextualHelpService {
   }
 
   async markHelpful(
+    sessionId: string,
     helpId: string,
     helpful: boolean,
   ): Promise<ContextualHelpRecord | null> {
     try {
       const help = await this.prisma.jarvisContextualHelp.update({
-        where: { id: helpId },
+        where: { id: helpId, sessionId },
         data: {
           helpful,
           relevanceScore: helpful ? { increment: 0.1 } : { decrement: 0.1 },
