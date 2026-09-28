@@ -29,7 +29,12 @@ describe('GoogleAuthController callback', () => {
       identity,
     );
 
-    expect(handleCallback).toHaveBeenCalledWith('code', 'state', 'user-1');
+    expect(handleCallback).toHaveBeenCalledWith(
+      'code',
+      'state',
+      'user-1',
+      'auth-session',
+    );
     expect(status).toHaveBeenCalledWith(200);
     expect(send).toHaveBeenCalledWith(
       expect.stringContaining('Google connecté'),

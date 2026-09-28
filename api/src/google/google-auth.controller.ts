@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Res, Req } from '@nestjs/common';
+import { Controller, Get, Post, Query, Res, Req } from '@nestjs/common';
 import { ConversationService } from '../auth/conversation.service';
 import type { AuthenticatedRequest } from '../auth/session.guard';
 import type { Response } from 'express';
@@ -17,8 +17,10 @@ export class GoogleAuthController {
     @Res() res: Response,
     @Req() request: AuthenticatedRequest,
   ) {
-    const url = this.auth.getAuthUrl(
+    const url = await this.auth.getAuthUrl(
       await this.conversations.resolve(request.identity.userId, sessionId),
+      request.identity.userId,
+      request.identity.sessionId,
     );
     return res.redirect(url);
   }
@@ -30,7 +32,12 @@ export class GoogleAuthController {
     @Res() res: Response,
     @Req() request: AuthenticatedRequest,
   ) {
-    await this.auth.handleCallback(code, state, request.identity.userId);
+    await this.auth.handleCallback(
+      code,
+      state,
+      request.identity.userId,
+      request.identity.sessionId,
+    );
 
     res
       .status(200)
@@ -47,5 +54,10 @@ export class GoogleAuthController {
     return this.auth.status(
       await this.conversations.resolve(request.identity.userId, sessionId),
     );
+  }
+
+  @Post('disconnect')
+  disconnect(@Req() request: AuthenticatedRequest) {
+    return this.auth.disconnect(request.identity.userId);
   }
 }
