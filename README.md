@@ -43,6 +43,8 @@ npm --prefix api run db:migrate
 
 The migration command applies checked-in migrations to the database selected by `api/.env`; the example points at the development database. Do not point it at production as part of local setup. Schema generation does not apply migrations.
 
+For an existing database, first follow the [ownership cutover](docs/security/owned-data-boundary.md) and [Google token encryption procedure](docs/security/google-authorization.md). Stop writers and verify backups before migrating. The Google migration intentionally refuses legacy plaintext tokens until the local sealing command has run.
+
 Start the API and web application in separate terminals:
 
 ```sh

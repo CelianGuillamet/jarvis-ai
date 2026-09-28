@@ -40,6 +40,8 @@ try {
         ...environment,
         NODE_ENV: 'test',
         AUTH_SECRET: 'isolated-integration-secret-not-for-real-use-2026',
+        GOOGLE_TOKEN_KEYS: JSON.stringify({ fixture: Buffer.alloc(32, 41).toString('base64') }),
+        GOOGLE_TOKEN_ACTIVE_KEY: 'fixture',
         AUTH_BASE_URL: 'http://localhost:3000',
         APP_ORIGIN: 'http://localhost:5173',
         TZ: 'UTC',

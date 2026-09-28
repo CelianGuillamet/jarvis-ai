@@ -1,4 +1,5 @@
 import { ConversationService } from '../../src/auth/conversation.service';
+import { GoogleCredentialService } from '../../src/google/google-credential.service';
 import { createAuth } from '../../src/auth/create-auth';
 import { readAuthConfig } from '../../src/auth/auth-config';
 import { createHmac } from 'node:crypto';
@@ -112,13 +113,12 @@ describe('API against disposable migrated PostgreSQL', () => {
     const sessionId = await app
       .get(ConversationService)
       .resolve('integration-user', clientKey);
-    await prisma.googleOAuthToken.create({
-      data: {
-        sessionId,
-        refreshToken: 'fixture-not-a-real-token',
+    await app
+      .get(GoogleCredentialService)
+      .save('integration-user', 'fixture-google-subject', sessionId, {
+        refresh_token: 'fixture-not-a-real-token',
         scope: scopes,
-      },
-    });
+      });
   }
 
   it('replays every checked-in migration and serves HTTP', async () => {
@@ -561,6 +561,45 @@ describe('API against disposable migrated PostgreSQL', () => {
       (await prisma.conversation.findUniqueOrThrow({ where: { id: second } }))
         .ownerId,
     ).toBe('second-user');
+  });
+
+  it('disconnects only the authenticated Google account behind the origin guard', async () => {
+    await seedGoogle('disconnect-fixture');
+    await request(baseUrl)
+      .post('/auth/google/disconnect')
+      .set('Origin', 'http://localhost:5173')
+      .send({})
+      .expect(401);
+    await request(baseUrl)
+      .post('/auth/google/disconnect')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'https://untrusted.invalid')
+      .send({})
+      .expect(403);
+    const response = await request(baseUrl)
+      .post('/auth/google/disconnect')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ ownerId: 'second-user' })
+      .expect(201);
+    expect(response.body).toEqual({
+      connected: false,
+      revocationPending: true,
+    });
+    expect(
+      await prisma.integrationAccount.findFirst({
+        where: { ownerId: 'integration-user' },
+      }),
+    ).toBeNull();
+    expect(
+      await prisma.session.findUnique({ where: { id: 'integration-session' } }),
+    ).not.toBeNull();
+    await request(baseUrl)
+      .post('/auth/google/disconnect')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({})
+      .expect(201, { connected: false, revocationPending: false });
   });
 
   it('logs out through the auth library and clears subsequent access', async () => {

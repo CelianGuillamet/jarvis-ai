@@ -17,6 +17,7 @@ Copy `.env.example` to `.env` once. Nest and Prisma load it from this directory;
 | `OPENAI_API_KEY` | Required only for OpenAI. A missing key currently falls back to Ollama. |
 | `OPENAI_MODEL_PRIMARY`, `OPENAI_MODEL_FALLBACK`, `OPENAI_TIMEOUT_MS` | Model selection and request timeout in milliseconds. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Required to connect Google, not to install/build/test. Register the exact redirect URI with your Google OAuth client. |
+| `GOOGLE_TOKEN_KEYS`, `GOOGLE_TOKEN_ACTIVE_KEY` | Local encryption key ring and active key ID. Required for Google authorization/token maintenance; see the [key and migration runbook](../docs/security/google-authorization.md). Never commit real keys. |
 | `PENDING_TTL_MINUTES`, `CONVO_TTL_MINUTES` | Confirmation and conversation expiration in minutes. |
 | `HUMAN_PROFILE_*`, `HUMANIZE_RESPONSES`, `JARVIS_DEFAULT_*` | Optional profile persistence and response preferences; example values show current defaults. |
 

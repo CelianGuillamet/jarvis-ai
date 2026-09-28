@@ -76,6 +76,7 @@ model JarvisLog {
 }
 
 model GoogleOAuthToken {
+  generation String @default(uuid())
   integrationAccountId String? @unique
   integrationAccount IntegrationAccount? @relation(fields: [integrationAccountId], references: [id], onDelete: Restrict)
   id           String    @id @default(uuid())
@@ -485,6 +486,7 @@ model User {
   calendarEvents CalendarEvent[]
   conversations Conversation[]
   integrations  IntegrationAccount[]
+  googleOAuthStates GoogleOAuthState[]
 }
 
 // A conversation is not an authentication session or a provider identity.
@@ -512,6 +514,23 @@ model IntegrationAccount {
 
   @@unique([provider, providerSubject])
   @@index([ownerId, provider])
+  @@unique([ownerId, provider])
+}
+
+model GoogleOAuthState {
+  digest        String   @id
+  ownerId       String
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  authSessionId String
+  conversationId String
+  verifier      String
+  nonce         String
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([ownerId])
 }
 
 // Operator-only rollback evidence. No application route exposes these snapshots.

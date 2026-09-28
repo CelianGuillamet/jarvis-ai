@@ -1,29 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
-
-import { PrismaService } from '../prisma/prisma.service';
+import { GoogleCredentialService } from './google-credential.service';
 import {
   GoogleIntegrationError,
   type GoogleIntegrationErrorCode,
 } from './google-integration.error';
 import { buildGoogleConnectionStatus } from './google-scopes';
-
-type StoredGoogleToken = {
-  refreshToken: string;
-  accessToken: string | null;
-  tokenType: string | null;
-  scope: string | null;
-  expiryDate: Date | null;
-};
-
-type RefreshedTokens = {
-  refresh_token?: string | null;
-  access_token?: string | null;
-  token_type?: string | null;
-  scope?: string | null;
-  expiry_date?: number | null;
-};
 
 @Injectable()
 export class GoogleOAuthClientService {
@@ -31,108 +14,70 @@ export class GoogleOAuthClientService {
 
   constructor(
     private readonly config: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly credentials: GoogleCredentialService,
   ) {}
 
   createOAuthClient() {
     const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
     const clientSecret = this.config.get<string>('GOOGLE_CLIENT_SECRET');
     const redirectUri = this.config.get<string>('GOOGLE_REDIRECT_URI');
-
-    if (!clientId || !clientSecret || !redirectUri) {
+    if (!clientId || !clientSecret || !redirectUri)
       throw new GoogleIntegrationError(
         'GOOGLE_OAUTH_CONFIG_MISSING',
-        'Google OAuth env manquant: GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI',
+        'Configuration Google OAuth manquante.',
       );
-    }
-
-    return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+    const client = new google.auth.OAuth2({
+      clientId,
+      clientSecret,
+      redirectUri,
+      transporterOptions: { timeout: 10_000 },
+    });
+    client.transporter.interceptors.response.add({
+      rejected: (error) => {
+        const status = error.response?.status;
+        const scopeMissing =
+          status === 403 && /insufficient|scope/i.test(error.message);
+        // Preserve only the status needed by OAuth's built-in refresh/retry.
+        // Request bodies, headers, tokens, provider messages and causes must not
+        // reach Nest logging or the browser through a raw transport exception.
+        const safe = new Error(
+          scopeMissing ? 'Insufficient permissions.' : 'Google request failed.',
+        );
+        Object.assign(safe, {
+          code: status,
+          response: status ? { status, config: {} } : undefined,
+        });
+        throw safe;
+      },
+    });
+    return client;
   }
 
-  async isConnected(sessionId: string) {
-    const row = await this.prisma.googleOAuthToken.findUnique({
-      where: { sessionId },
-      select: { id: true },
-    });
-    return !!row;
+  async isConnected(conversationId: string) {
+    return !!(await this.credentials.find(conversationId));
   }
 
-  async getConnectionStatus(sessionId: string) {
-    const row = await this.prisma.googleOAuthToken.findUnique({
-      where: { sessionId },
-      select: { scope: true },
-    });
+  async getConnectionStatus(conversationId: string) {
+    const row = await this.credentials.find(conversationId);
     return buildGoogleConnectionStatus(row?.scope);
   }
 
   async createAuthorizedClient(
-    sessionId: string,
+    conversationId: string,
     missingConnectionCode: GoogleIntegrationErrorCode,
   ) {
-    const row = await this.prisma.googleOAuthToken.findUnique({
-      where: { sessionId },
-      select: {
-        refreshToken: true,
-        accessToken: true,
-        tokenType: true,
-        scope: true,
-        expiryDate: true,
-      },
-    });
-    if (!row) {
-      throw new GoogleIntegrationError(missingConnectionCode, sessionId);
-    }
-
+    const row = await this.credentials.find(conversationId);
+    if (!row)
+      throw new GoogleIntegrationError(missingConnectionCode, conversationId);
     const oauth2 = this.createOAuthClient();
-    oauth2.setCredentials({
-      refresh_token: row.refreshToken,
-      access_token: row.accessToken ?? undefined,
-      token_type: row.tokenType ?? undefined,
-      scope: row.scope ?? undefined,
-      expiry_date: row.expiryDate ? row.expiryDate.getTime() : undefined,
-    });
-
+    oauth2.setCredentials(this.credentials.credentials(row));
     oauth2.on('tokens', (tokens) => {
-      void this.persistRefreshedTokens(sessionId, row, tokens).catch(
-        (error) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          this.logger.warn(
-            `Impossible de persister les tokens Google pour ${sessionId}: ${message}`,
-          );
-        },
-      );
+      void this.credentials.refresh(row, tokens).catch(() => {
+        this.logger.warn(
+          'Impossible de persister les identifiants Google actualisés.',
+        );
+      });
     });
-
     return oauth2;
-  }
-
-  private async persistRefreshedTokens(
-    sessionId: string,
-    current: StoredGoogleToken,
-    tokens: RefreshedTokens,
-  ) {
-    const hasUsefulTokenUpdate =
-      tokens.refresh_token !== undefined ||
-      tokens.access_token !== undefined ||
-      tokens.token_type !== undefined ||
-      tokens.scope !== undefined ||
-      tokens.expiry_date !== undefined;
-
-    if (!hasUsefulTokenUpdate) return;
-
-    await this.prisma.googleOAuthToken.update({
-      where: { sessionId },
-      data: {
-        refreshToken: tokens.refresh_token ?? current.refreshToken,
-        accessToken: tokens.access_token ?? current.accessToken ?? null,
-        tokenType: tokens.token_type ?? current.tokenType ?? null,
-        scope: tokens.scope ?? current.scope ?? null,
-        expiryDate:
-          tokens.expiry_date !== undefined && tokens.expiry_date !== null
-            ? new Date(tokens.expiry_date)
-            : (current.expiryDate ?? null),
-      },
-    });
   }
 }

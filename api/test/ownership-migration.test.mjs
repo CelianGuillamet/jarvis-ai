@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+// Google credential rehearsals share the same isolated historical schemas.
 import { test } from 'node:test';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
+import { TokenCipher } from '../src/google/token-cipher.ts';
+import { sealGoogleTokens } from '../scripts/google-token-maintenance.mjs';
 import {
   applyOwnership,
   inventoryOwnership,
@@ -316,5 +319,44 @@ test('restore refuses post-migration edits atomically; snapshot storage also rol
       ).rows[0].restoredAt,
       null,
     );
+  });
+});
+
+test('Google token cutover refuses plaintext, seals legacy data without adopting it, and rotates keys', async () => {
+  await fixture('google_seal', async (client, expand) => {
+    await expand();
+    await client.query(`INSERT INTO "GoogleOAuthToken" (id,"sessionId","refreshToken","accessToken","updatedAt") VALUES ('legacy-google','unknown-browser','refresh-secret','access-secret',now())`);
+    const sql = await readFile(new URL('20260928190000_google_credentials/migration.sql', root), 'utf8');
+    await assert.rejects(client.query(sql));
+    await client.query('ROLLBACK');
+    const oldKey = Buffer.alloc(32, 21).toString('base64');
+    const newKey = Buffer.alloc(32, 22).toString('base64');
+    const original = new TokenCipher(JSON.stringify({ old: oldKey }), 'old');
+    assert.deepEqual(await sealGoogleTokens(client, original), { sealedRecords: 1 });
+    const before = (await client.query('SELECT * FROM "GoogleOAuthToken"')).rows[0];
+    assert.equal(original.decrypt(before.refreshToken, 'google:legacy-google:refresh'), 'refresh-secret');
+    assert.equal(original.decrypt(before.accessToken, 'google:legacy-google:access'), 'access-secret');
+    assert.equal(before.integrationAccountId, null);
+    assert.equal(before.sessionId, 'unknown-browser');
+    await client.query(sql);
+    await assert.rejects(client.query(`INSERT INTO "GoogleOAuthToken" (id,"sessionId","refreshToken","updatedAt") VALUES ('rejected','other','plaintext',now())`));
+    const rotated = new TokenCipher(JSON.stringify({ old: oldKey, current: newKey }), 'current');
+    await sealGoogleTokens(client, rotated);
+    const after = (await client.query('SELECT * FROM "GoogleOAuthToken"')).rows[0];
+    const retired = new TokenCipher(JSON.stringify({ current: newKey }), 'current');
+    assert.equal(retired.decrypt(after.refreshToken, 'google:legacy-google:refresh'), 'refresh-secret');
+    assert.equal(after.updatedAt.getTime(), before.updatedAt.getTime());
+    assert.equal(after.integrationAccountId, null);
+  });
+});
+
+test('Google token maintenance rolls back atomically if a required old key is unavailable', async () => {
+  await fixture('google_rollback', async (client, expand) => {
+    await expand();
+    await client.query(`INSERT INTO "GoogleOAuthToken" (id,"sessionId","refreshToken","updatedAt") VALUES ('plain','one','secret',now()), ('unknown','two','v1.missing.invalid',now())`);
+    const before = (await client.query('SELECT * FROM "GoogleOAuthToken" ORDER BY id')).rows;
+    const cipher = new TokenCipher(JSON.stringify({ current: Buffer.alloc(32, 1).toString('base64') }), 'current');
+    await assert.rejects(sealGoogleTokens(client, cipher));
+    assert.deepEqual((await client.query('SELECT * FROM "GoogleOAuthToken" ORDER BY id')).rows, before);
   });
 });

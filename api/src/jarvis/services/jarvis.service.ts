@@ -603,10 +603,7 @@ export class JarvisService {
         this.memoryStore.buildPromptContext(sessionId),
         this.missionStore.buildPromptContext(sessionId),
         this.workflowStore.buildPromptContext(sessionId),
-        this.prisma.googleOAuthToken.findUnique({
-          where: { sessionId },
-          select: { scope: true },
-        }),
+        this.googleTokenForConversation(sessionId),
       ]);
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
     const capabilitiesContext = [
@@ -1574,6 +1571,14 @@ export class JarvisService {
     };
   }
 
+  private async googleTokenForConversation(sessionId: string) {
+    const { ownerId } = await this.prisma.forConversation(sessionId);
+    return this.prisma.googleOAuthToken.findFirst({
+      where: { integrationAccount: { ownerId, provider: 'google' } },
+      select: { scope: true, updatedAt: true },
+    });
+  }
+
   private async buildToolContext(sessionId: string): Promise<ToolContext> {
     return {
       prisma: await this.prisma.forConversation(sessionId),
@@ -1632,10 +1637,7 @@ export class JarvisService {
       upcomingReminders,
       habits,
     ] = await Promise.all([
-      this.prisma.googleOAuthToken.findUnique({
-        where: { sessionId: resolvedSessionId },
-        select: { scope: true, updatedAt: true },
-      }),
+      this.googleTokenForConversation(resolvedSessionId),
       prisma.todo.count({ where: { done: false } }),
       prisma.shoppingItem.count({ where: { bought: false } }),
       prisma.note.count(),
@@ -3047,10 +3049,8 @@ export class JarvisService {
     let auditContext: AuditExecutionContext | null = null;
 
     try {
-      const googleToken = await this.prisma.googleOAuthToken.findUnique({
-        where: { sessionId: resolvedSessionId },
-        select: { scope: true },
-      });
+      const googleToken =
+        await this.googleTokenForConversation(resolvedSessionId);
       const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
 
       // CONFIRMATION “HUMAINE” : si une action pending existe, on peut répondre "oui/non"
@@ -3823,10 +3823,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         meta: { simulation: this.simulation },
       };
 
-    const googleToken = await this.prisma.googleOAuthToken.findUnique({
-      where: { sessionId: peeked.sessionId },
-      select: { scope: true },
-    });
+    const googleToken = await this.googleTokenForConversation(peeked.sessionId);
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
     const gateError = gateToolCall(peeked.call, googleStatus);
     if (gateError) {

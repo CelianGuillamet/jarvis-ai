@@ -1,153 +1,151 @@
 import { BadRequestException } from '@nestjs/common';
-
-import type { PrismaService } from '../prisma/prisma.service';
-import { GoogleIntegrationError } from './google-integration.error';
-import type { GoogleOAuthClientService } from './google-oauth-client.service';
 import { GoogleAuthService } from './google-auth.service';
+import type { GoogleOAuthClientService } from './google-oauth-client.service';
+import type { GoogleCredentialService } from './google-credential.service';
 import type { OAuthStateService } from './oauth-state.service';
 
-type ServiceOptions = {
-  consumeState?: string | null;
-  existingRefreshToken?: string | null;
-  oauthTokens?: {
-    refresh_token?: string;
-    access_token?: string;
-    token_type?: string;
-    scope?: string;
-    expiry_date?: number;
+function fixture() {
+  const tokens = {
+    refresh_token: 'refresh-secret',
+    id_token: 'identity-secret',
   };
-  oauthClientError?: Error;
-};
-
-function makeService(options: ServiceOptions = {}) {
-  const oauthClient = {
+  const client = {
+    _clientId: 'fixture-client',
     generateAuthUrl: jest
       .fn()
-      .mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth'),
-    getToken: jest.fn().mockResolvedValue({
-      tokens: options.oauthTokens ?? {},
+      .mockReturnValue('https://accounts.google.com/authorize'),
+    getToken: jest.fn().mockResolvedValue({ tokens }),
+    verifyIdToken: jest.fn().mockResolvedValue({
+      getPayload: () => ({ sub: 'google-subject', nonce: 'nonce' }),
     }),
+    revokeToken: jest.fn().mockResolvedValue({}),
   };
-
-  const oauthClients = {
-    createOAuthClient: jest.fn(() => {
-      if (options.oauthClientError) throw options.oauthClientError;
-      return oauthClient;
-    }),
-    getConnectionStatus: jest.fn().mockResolvedValue({
-      scopes: [],
-      connected: false,
-      calendarConnected: false,
-      gmailConnected: false,
-    }),
+  const oauth = {
+    createOAuthClient: jest.fn(() => client),
+    getConnectionStatus: jest.fn(),
   };
-
-  const prisma = {
-    conversation: {
-      findFirst: jest
-        .fn()
-        .mockResolvedValue({ id: 'session-1', ownerId: 'user-1' }),
-    },
-    googleOAuthToken: {
-      findUnique: jest
-        .fn()
-        .mockResolvedValue(
-          options.existingRefreshToken
-            ? { refreshToken: options.existingRefreshToken }
-            : null,
-        ),
-      upsert: jest.fn().mockResolvedValue({}),
-    },
+  const credentials = {
+    save: jest.fn(),
+    disconnect: jest
+      .fn()
+      .mockResolvedValue({ refresh_token: 'refresh-secret' }),
   };
-
   const state = {
-    create: jest.fn().mockReturnValue('state-token'),
-    consume: jest.fn().mockReturnValue(options.consumeState ?? 'session-1'),
+    create: jest.fn().mockResolvedValue({
+      state: 'state',
+      nonce: 'nonce',
+      codeChallenge: 'challenge',
+    }),
+    consume: jest.fn().mockResolvedValue({
+      conversationId: 'conversation',
+      digest: 'claimed-digest',
+      nonce: 'nonce',
+      verifier: 'verifier',
+    }),
   };
-
   return {
+    client,
+    credentials,
+    state,
     service: new GoogleAuthService(
-      oauthClients as unknown as GoogleOAuthClientService,
-      prisma as unknown as PrismaService,
+      oauth as unknown as GoogleOAuthClientService,
+      credentials as unknown as GoogleCredentialService,
       state as unknown as OAuthStateService,
     ),
-    oauthClient,
-    prisma,
   };
 }
 
 describe('GoogleAuthService', () => {
-  it('rejects another account before reading or exchanging tokens', async () => {
-    const { service, prisma, oauthClient } = makeService();
-    prisma.conversation.findFirst.mockResolvedValueOnce(null);
-
+  it('returns a safe error when authorization configuration is unavailable', async () => {
+    const { service, state } = fixture();
+    state.create.mockRejectedValueOnce(new Error('sensitive-configuration'));
     await expect(
-      service.handleCallback('google-code', 'state-token', 'other-user'),
+      service.getAuthUrl('conversation', 'owner', 'login-session'),
+    ).rejects.toThrow('Connexion Google indisponible.');
+  });
+
+  it('binds authorization to the owner and authenticated session with PKCE and nonce', async () => {
+    const { service, state, client } = fixture();
+    await service.getAuthUrl('conversation', 'owner', 'login-session');
+    expect(state.create).toHaveBeenCalledWith({
+      conversationId: 'conversation',
+      ownerId: 'owner',
+      authSessionId: 'login-session',
+    });
+    expect(client.generateAuthUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: 'state',
+        nonce: 'nonce',
+        code_challenge: 'challenge',
+        code_challenge_method: 'S256',
+      }),
+    );
+  });
+
+  it('rejects an unavailable claim before accessing the provider or credentials', async () => {
+    const { service, state, client, credentials } = fixture();
+    state.consume.mockResolvedValueOnce(null);
+    await expect(
+      service.handleCallback('code', 'state', 'other-owner', 'other-session'),
     ).rejects.toThrow(BadRequestException);
-
-    expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
-      where: { id: 'session-1', ownerId: 'other-user' },
-    });
-    expect(prisma.googleOAuthToken.findUnique).not.toHaveBeenCalled();
-    expect(prisma.googleOAuthToken.upsert).not.toHaveBeenCalled();
-    expect(oauthClient.getToken).not.toHaveBeenCalled();
+    expect(state.consume).toHaveBeenCalledWith(
+      'state',
+      'other-owner',
+      'other-session',
+    );
+    expect(client.getToken).not.toHaveBeenCalled();
+    expect(credentials.save).not.toHaveBeenCalled();
   });
 
-  it('reuses the stored refresh token when Google does not return a new one', async () => {
-    const { service, prisma } = makeService({
-      existingRefreshToken: 'refresh-token-stored',
-      oauthTokens: {
-        access_token: 'access-token',
-        token_type: 'Bearer',
-        scope: 'scope-a',
-        expiry_date: 1_777_200_000_000,
-      },
-    });
-
+  it('requires verified provider identity and saves only to the claimed account', async () => {
+    const { service, client, credentials } = fixture();
     await expect(
-      service.handleCallback('google-code', 'state-token', 'user-1'),
-    ).resolves.toBe('session-1');
-
-    expect(prisma.googleOAuthToken.upsert).toHaveBeenCalledWith({
-      where: { sessionId: 'session-1' },
-      create: {
-        sessionId: 'session-1',
-        refreshToken: 'refresh-token-stored',
-        accessToken: 'access-token',
-        tokenType: 'Bearer',
-        scope: 'scope-a',
-        expiryDate: new Date(1_777_200_000_000),
-      },
-      update: {
-        refreshToken: 'refresh-token-stored',
-        accessToken: 'access-token',
-        tokenType: 'Bearer',
-        scope: 'scope-a',
-        expiryDate: new Date(1_777_200_000_000),
-      },
+      service.handleCallback('code', 'state', 'owner', 'login-session'),
+    ).resolves.toBe('conversation');
+    expect(client.getToken).toHaveBeenCalledWith({
+      code: 'code',
+      codeVerifier: 'verifier',
     });
+    expect(client.verifyIdToken).toHaveBeenCalledWith({
+      idToken: 'identity-secret',
+      audience: 'fixture-client',
+    });
+    expect(credentials.save).toHaveBeenCalledWith(
+      'owner',
+      'google-subject',
+      'conversation',
+      expect.objectContaining({ refresh_token: 'refresh-secret' }),
+      'claimed-digest',
+    );
   });
 
-  it('rejects the callback when there is no refresh token to persist', async () => {
-    const { service } = makeService({
-      oauthTokens: {
-        access_token: 'access-token',
-      },
+  it('rejects nonce mismatch and redacts provider failures', async () => {
+    const { service, client, credentials } = fixture();
+    client.verifyIdToken.mockResolvedValueOnce({
+      getPayload: () => ({ sub: 'google-subject', nonce: 'other-nonce' }),
     });
-
     await expect(
-      service.handleCallback('google-code', 'state-token', 'user-1'),
-    ).rejects.toThrow(BadRequestException);
+      service.handleCallback('code', 'state', 'owner', 'login-session'),
+    ).rejects.toThrow('Connexion Google impossible.');
+    expect(credentials.save).not.toHaveBeenCalled();
+    client.getToken.mockRejectedValueOnce(new Error('SECRET_ACCESS_TOKEN'));
+    await expect(
+      service.handleCallback('code', 'state', 'owner', 'login-session'),
+    ).rejects.toThrow('Connexion Google impossible.');
   });
 
-  it('converts missing OAuth configuration into a bad request', () => {
-    const { service } = makeService({
-      oauthClientError: new GoogleIntegrationError(
-        'GOOGLE_OAUTH_CONFIG_MISSING',
-        'Google OAuth env manquant',
-      ),
+  it('revokes after local disconnect and reports a provider failure without restoring access', async () => {
+    const { service, credentials, client } = fixture();
+    await expect(service.disconnect('owner')).resolves.toEqual({
+      connected: false,
+      revocationPending: false,
     });
-
-    expect(() => service.getAuthUrl('session-1')).toThrow(BadRequestException);
+    expect(credentials.disconnect).toHaveBeenCalledWith('owner');
+    expect(client.revokeToken).toHaveBeenCalledWith('refresh-secret');
+    client.revokeToken.mockRejectedValueOnce(new Error('SECRET_REFRESH_TOKEN'));
+    await expect(service.disconnect('owner')).resolves.toEqual({
+      connected: false,
+      revocationPending: true,
+    });
   });
 });

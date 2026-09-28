@@ -1,123 +1,113 @@
 import type { ConfigService } from '@nestjs/config';
-
-import type { PrismaService } from '../prisma/prisma.service';
-import { GoogleIntegrationError } from './google-integration.error';
+import { Common } from 'googleapis';
+import type { GoogleCredentialService } from './google-credential.service';
 import { GoogleOAuthClientService } from './google-oauth-client.service';
 
-type ServiceOptions = {
-  config?: Record<string, string | undefined>;
-  token?: {
-    refreshToken: string;
-    accessToken: string | null;
-    tokenType: string | null;
-    scope: string | null;
-    expiryDate: Date | null;
-  } | null;
-};
-
-function makeService(options: ServiceOptions = {}) {
-  const configValues: Record<string, string | undefined> = {
-    GOOGLE_CLIENT_ID: 'client-id',
-    GOOGLE_CLIENT_SECRET: 'client-secret',
-    GOOGLE_REDIRECT_URI: 'http://localhost:3000/auth/google/callback',
-    ...options.config,
+function fixture() {
+  const row = {
+    id: 'credential',
+    scope: 'https://www.googleapis.com/auth/gmail.modify',
   };
-
-  const prisma = {
-    googleOAuthToken: {
-      findUnique: jest.fn().mockResolvedValue(options.token ?? null),
-      update: jest.fn().mockResolvedValue({}),
-    },
+  const credentials = {
+    find: jest.fn().mockResolvedValue(row),
+    credentials: jest.fn().mockReturnValue({ refresh_token: 'refresh-secret' }),
+    refresh: jest.fn().mockResolvedValue(undefined),
   };
-
   const config = {
-    get: jest.fn((key: string): string | undefined => configValues[key]),
+    get: (key: string) =>
+      ({
+        GOOGLE_CLIENT_ID: 'client',
+        GOOGLE_CLIENT_SECRET: 'secret',
+        GOOGLE_REDIRECT_URI: 'http://localhost:3000/auth/google/callback',
+      })[key],
   };
-
   return {
+    row,
+    credentials,
     service: new GoogleOAuthClientService(
       config as unknown as ConfigService,
-      prisma as unknown as PrismaService,
+      credentials as unknown as GoogleCredentialService,
     ),
-    prisma,
   };
 }
 
 describe('GoogleOAuthClientService', () => {
-  it('computes the connection status from granted scopes', async () => {
-    const { service } = makeService({
-      token: {
-        refreshToken: 'refresh-token',
-        accessToken: 'access-token',
-        tokenType: 'Bearer',
-        scope:
-          'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify',
-        expiryDate: new Date('2026-04-17T08:00:00.000Z'),
-      },
-    });
+  it.each([
+    {
+      status: 401,
+      providerMessage: 'private-refresh-token',
+      safeMessage: 'Google request failed.',
+    },
+    {
+      status: 403,
+      providerMessage: 'Insufficient permissions private-refresh-token',
+      safeMessage: 'Insufficient permissions.',
+    },
+  ])(
+    'strips credentials from transport failures while preserving status $status',
+    async ({ status, providerMessage, safeMessage }) => {
+      const { service } = fixture();
+      const client = service.createOAuthClient();
+      client.setCredentials({
+        access_token: 'private-access-token',
+        expiry_date: Date.now() + 3600000,
+      });
+      const error: unknown = await client
+        .request({
+          url: 'https://google-fixture.invalid/test',
+          retry: false,
+          adapter: (options) => {
+            return Promise.reject(
+              new Common.GaxiosError(
+                providerMessage,
+                options,
+                Object.assign(new Response(null, { status }), {
+                  config: options,
+                  data: { access_token: 'private-access-token' },
+                }),
+              ),
+            );
+          },
+        })
+        .catch((failure: unknown) => failure);
+      expect(error).toMatchObject({
+        message: safeMessage,
+        response: { status, config: {} },
+      });
+      expect(JSON.stringify(error)).not.toContain('private-');
+      expect(JSON.stringify(error)).not.toContain('Bearer');
+    },
+  );
 
-    await expect(service.getConnectionStatus('session-1')).resolves.toEqual({
-      scopes: [
-        'https://www.googleapis.com/auth/calendar.events',
-        'https://www.googleapis.com/auth/gmail.modify',
-      ],
+  it('reads connection status from the account credential', async () => {
+    const { service, credentials } = fixture();
+    await expect(service.getConnectionStatus('conversation')).resolves.toEqual({
       connected: true,
-      calendarConnected: true,
       gmailConnected: true,
+      calendarConnected: false,
+      scopes: ['https://www.googleapis.com/auth/gmail.modify'],
     });
+    expect(credentials.find).toHaveBeenCalledWith('conversation');
   });
 
-  it('throws a typed error when the session is not connected', async () => {
-    const { service } = makeService({ token: null });
-
+  it('fails closed without an owned credential', async () => {
+    const { service, credentials } = fixture();
+    credentials.find.mockResolvedValueOnce(null);
     await expect(
-      service.createAuthorizedClient('session-1', 'GMAIL_NOT_CONNECTED'),
-    ).rejects.toEqual(
-      expect.objectContaining<Partial<GoogleIntegrationError>>({
-        code: 'GMAIL_NOT_CONNECTED',
-        details: 'session-1',
-      }),
-    );
+      service.createAuthorizedClient('conversation', 'GMAIL_NOT_CONNECTED'),
+    ).rejects.toMatchObject({ code: 'GMAIL_NOT_CONNECTED' });
   });
 
-  it('persists refreshed Google tokens emitted by the oauth client', async () => {
-    const existingToken = {
-      refreshToken: 'refresh-token',
-      accessToken: 'access-token',
-      tokenType: 'Bearer',
-      scope: 'scope-a',
-      expiryDate: new Date('2026-04-17T08:00:00.000Z'),
-    };
-    const { service, prisma } = makeService({ token: existingToken });
-
+  it('routes refresh events through encrypted storage with the original generation', async () => {
+    const { service, credentials, row } = fixture();
     const client = await service.createAuthorizedClient(
-      'session-1',
+      'conversation',
       'GOOGLE_NOT_CONNECTED',
     );
-
-    (
-      client as typeof client & {
-        emit: (event: 'tokens', tokens: Record<string, unknown>) => boolean;
-      }
-    ).emit('tokens', {
-      refresh_token: 'refresh-token-2',
-      access_token: 'access-token-2',
-      token_type: 'Bearer',
-      scope: 'scope-b',
-      expiry_date: 1_777_200_000_000,
-    });
-
+    client.emit('tokens', { access_token: 'new-access-token' });
     await new Promise((resolve) => setImmediate(resolve));
-
-    expect(prisma.googleOAuthToken.update).toHaveBeenCalledWith({
-      where: { sessionId: 'session-1' },
-      data: {
-        refreshToken: 'refresh-token-2',
-        accessToken: 'access-token-2',
-        tokenType: 'Bearer',
-        scope: 'scope-b',
-        expiryDate: new Date(1_777_200_000_000),
-      },
+    expect(credentials.refresh).toHaveBeenCalledWith(row, {
+      access_token: 'new-access-token',
     });
   });
 });

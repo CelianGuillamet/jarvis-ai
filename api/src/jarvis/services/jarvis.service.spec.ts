@@ -115,7 +115,7 @@ function makeService(options: ServiceOptions = {}) {
       count: jest.fn().mockResolvedValue(options.notesTotal ?? 0),
     },
     googleOAuthToken: {
-      findUnique: jest.fn().mockResolvedValue(
+      findFirst: jest.fn().mockResolvedValue(
         options.googleScope !== undefined
           ? {
               scope: options.googleScope,
