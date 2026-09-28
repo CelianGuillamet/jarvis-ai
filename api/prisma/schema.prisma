@@ -7,8 +7,8 @@ datasource db {
 }
 
 model Todo {
-  ownerId   String?
-  owner     User?     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String    @id @default(uuid())
   text      String
   done      Boolean   @default(false)
@@ -19,8 +19,8 @@ model Todo {
 }
 
 model CalendarEvent {
-  ownerId   String?
-  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  ownerId   String
+  owner     User    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String   @id @default(uuid())
   title     String
   when      DateTime
@@ -30,8 +30,8 @@ model CalendarEvent {
 }
 
 model Note {
-  ownerId   String?
-  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  ownerId   String
+  owner     User    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String   @id @default(uuid())
   title     String?
   text      String
@@ -41,8 +41,8 @@ model Note {
 }
 
 model ShoppingItem {
-  ownerId   String?
-  owner     User?     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String    @id @default(uuid())
   text      String
   bought    Boolean   @default(false)
@@ -491,11 +491,13 @@ model User {
 // Legacy session IDs require an explicit, verified mapping in the ownership cutover.
 model Conversation {
   id        String   @id @default(uuid())
+  clientKey String
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now())
 
   @@index([ownerId, createdAt])
+  @@unique([ownerId, clientKey])
 }
 
 // Separate from Better Auth's login Account. Tokens are migrated in JAR-014.

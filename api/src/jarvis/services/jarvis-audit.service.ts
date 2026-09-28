@@ -75,7 +75,7 @@ export class JarvisAuditService {
     if (!staleIds.length) return;
 
     await this.prisma.jarvisActionEvent.updateMany({
-      where: { id: { in: staleIds } },
+      where: { id: { in: staleIds }, sessionId },
       data: {
         status: 'expired',
         errorMessage: 'Action expirée sans confirmation.',
@@ -175,6 +175,7 @@ export class JarvisAuditService {
         const updated = await this.prisma.jarvisActionEvent.updateMany({
           where: {
             pendingActionId: input.pendingActionId,
+            sessionId: input.sessionId,
           },
           data: {
             status: 'completed',
@@ -226,6 +227,7 @@ export class JarvisAuditService {
         const updated = await this.prisma.jarvisActionEvent.updateMany({
           where: {
             pendingActionId: input.pendingActionId,
+            sessionId: input.sessionId,
           },
           data: {
             status: 'failed',

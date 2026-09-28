@@ -43,6 +43,11 @@ function makeService(options: ServiceOptions = {}) {
   };
 
   const prisma = {
+    conversation: {
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({ id: 'session-1', ownerId: 'user-1' }),
+    },
     googleOAuthToken: {
       findUnique: jest
         .fn()
@@ -72,6 +77,22 @@ function makeService(options: ServiceOptions = {}) {
 }
 
 describe('GoogleAuthService', () => {
+  it('rejects another account before reading or exchanging tokens', async () => {
+    const { service, prisma, oauthClient } = makeService();
+    prisma.conversation.findFirst.mockResolvedValueOnce(null);
+
+    await expect(
+      service.handleCallback('google-code', 'state-token', 'other-user'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
+      where: { id: 'session-1', ownerId: 'other-user' },
+    });
+    expect(prisma.googleOAuthToken.findUnique).not.toHaveBeenCalled();
+    expect(prisma.googleOAuthToken.upsert).not.toHaveBeenCalled();
+    expect(oauthClient.getToken).not.toHaveBeenCalled();
+  });
+
   it('reuses the stored refresh token when Google does not return a new one', async () => {
     const { service, prisma } = makeService({
       existingRefreshToken: 'refresh-token-stored',
@@ -84,7 +105,7 @@ describe('GoogleAuthService', () => {
     });
 
     await expect(
-      service.handleCallback('google-code', 'state-token'),
+      service.handleCallback('google-code', 'state-token', 'user-1'),
     ).resolves.toBe('session-1');
 
     expect(prisma.googleOAuthToken.upsert).toHaveBeenCalledWith({
@@ -115,7 +136,7 @@ describe('GoogleAuthService', () => {
     });
 
     await expect(
-      service.handleCallback('google-code', 'state-token'),
+      service.handleCallback('google-code', 'state-token', 'user-1'),
     ).rejects.toThrow(BadRequestException);
   });
 

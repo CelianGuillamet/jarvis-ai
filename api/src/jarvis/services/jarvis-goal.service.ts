@@ -32,6 +32,13 @@ export class JarvisGoalService {
     },
   ): Promise<GoalRecord | null> {
     try {
+      if (
+        input.parentGoalId &&
+        !(await this.prisma.jarvisGoal.findFirst({
+          where: { id: input.parentGoalId, sessionId },
+        }))
+      )
+        return null;
       const goal = await this.prisma.jarvisGoal.create({
         data: {
           sessionId,
@@ -117,12 +124,13 @@ export class JarvisGoalService {
   }
 
   async updateStatus(
+    sessionId: string,
     goalId: string,
     status: string,
   ): Promise<GoalRecord | null> {
     try {
       const goal = await this.prisma.jarvisGoal.update({
-        where: { id: goalId },
+        where: { id: goalId, sessionId },
         data: { status },
       });
 
@@ -164,6 +172,7 @@ export class JarvisGoalService {
     const subGoals = await this.prisma.jarvisGoal.findMany({
       where: {
         parentGoalId: goal.id,
+        sessionId: goal.sessionId,
         status: 'active',
       },
       orderBy: { priority: 'desc' },

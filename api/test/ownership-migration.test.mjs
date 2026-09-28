@@ -81,6 +81,53 @@ async function snapshots(client) {
   return all;
 }
 
+test('non-null cutover preserves mapped rows and quarantines every ambiguous legacy row', async () => {
+  await fixture('contract', async (client, expand) => {
+    await seed(client);
+    const before = await snapshots(client);
+    await expand();
+    await client.query(
+      `UPDATE "Todo" SET "ownerId" = 'owner-a' WHERE id = 'Todo-known'`,
+    );
+    await client.query(
+      await readFile(
+        new URL('20260928160000_ownership_contract/migration.sql', root),
+        'utf8',
+      ),
+    );
+    assert.equal(
+      (
+        await client.query(
+          'SELECT count(*)::int AS count FROM "LegacyOwnershipRecord" WHERE "batchId" = $1',
+          ['ownership-contract-20260928'],
+        )
+      ).rows[0].count,
+      7,
+    );
+    assert.equal(
+      (await client.query('SELECT "ownerId" FROM "Todo"')).rows[0].ownerId,
+      'owner-a',
+    );
+    for (const table of ownershipTables) {
+      const saved = await client.query(
+        'SELECT original - \'ownerId\' AS original FROM "LegacyOwnershipRecord" WHERE "tableName" = $1 ORDER BY "recordId"',
+        [table],
+      );
+      const live = await snapshots(client);
+      const restoredSet = [...saved.rows, ...live[table]].sort((a, b) =>
+        a.original.id.localeCompare(b.original.id),
+      );
+      assert.deepEqual(restoredSet, before[table]);
+    }
+    await assert.rejects(
+      client.query(
+        `INSERT INTO "Todo" (id,text) VALUES ('unowned-new','forbidden')`,
+      ),
+      /not-null/,
+    );
+  });
+});
+
 function manifestFor(inventory, batchId = 'reviewed-fixture') {
   return {
     version: 1,

@@ -5,7 +5,10 @@ import {
   Get,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import { ConversationService } from '../auth/conversation.service';
+import type { AuthenticatedRequest } from '../auth/session.guard';
 
 import { InboxZeroApplyDto } from './dto/inbox-zero-apply.dto';
 import { InboxZeroDraftReplyDto } from './dto/inbox-zero-draft-reply.dto';
@@ -15,39 +18,81 @@ import { InboxZeroService } from './inbox-zero.service';
 
 @Controller('inbox-zero')
 export class InboxZeroController {
-  constructor(private readonly inboxZero: InboxZeroService) {}
+  constructor(
+    private readonly inboxZero: InboxZeroService,
+    private readonly conversations: ConversationService,
+  ) {}
 
   @Post('scan')
-  scan(@Body() body: InboxZeroScanDto) {
-    return this.inboxZero.scan(body);
+  async scan(
+    @Body() body: InboxZeroScanDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inboxZero.scan({
+      ...body,
+      sessionId: await this.conversations.resolve(
+        request.identity.userId,
+        body.sessionId,
+      ),
+    });
   }
 
   @Get('session')
-  session(@Query('sessionId') sessionId?: string) {
-    return this.inboxZero.getSession(sessionId);
+  async session(
+    @Req() request: AuthenticatedRequest,
+    @Query('sessionId') sessionId?: string,
+  ) {
+    return this.inboxZero.getSession(
+      await this.conversations.resolve(request.identity.userId, sessionId),
+    );
   }
 
   @Post('step')
-  step(@Body() body: InboxZeroStepDto) {
-    return this.inboxZero.setStep(body.sessionId, body.step);
+  async step(
+    @Body() body: InboxZeroStepDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inboxZero.setStep(
+      await this.conversations.resolve(request.identity.userId, body.sessionId),
+      body.step,
+    );
   }
 
   @Post('apply')
-  apply(@Body() body: InboxZeroApplyDto) {
-    return this.inboxZero.apply(body);
+  async apply(
+    @Body() body: InboxZeroApplyDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inboxZero.apply({
+      ...body,
+      sessionId: await this.conversations.resolve(
+        request.identity.userId,
+        body.sessionId,
+      ),
+    });
   }
 
   @Get('message')
-  message(
+  async message(
+    @Req() request: AuthenticatedRequest,
     @Query('sessionId') sessionId: string | undefined,
     @Query('messageId') messageId: string | undefined,
   ) {
     if (!messageId?.trim()) throw new BadRequestException('messageId manquant');
-    return this.inboxZero.getMessage(sessionId, messageId.trim());
+    return this.inboxZero.getMessage(
+      await this.conversations.resolve(request.identity.userId, sessionId),
+      messageId.trim(),
+    );
   }
 
   @Post('draft-reply')
-  draftReply(@Body() body: InboxZeroDraftReplyDto) {
-    return this.inboxZero.draftReply(body.sessionId, body.messageId);
+  async draftReply(
+    @Body() body: InboxZeroDraftReplyDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inboxZero.draftReply(
+      await this.conversations.resolve(request.identity.userId, body.sessionId),
+      body.messageId,
+    );
   }
 }

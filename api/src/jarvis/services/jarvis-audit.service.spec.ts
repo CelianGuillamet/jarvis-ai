@@ -92,7 +92,7 @@ describe('JarvisAuditService', () => {
     const events = await service.listRecent('audit-session', { limit: 5 });
 
     expect(prisma.jarvisActionEvent.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['audit-1'] } },
+      where: { id: { in: ['audit-1'] }, sessionId: 'audit-session' },
       data: expect.objectContaining({
         status: 'expired',
         errorMessage: 'Action expirée sans confirmation.',

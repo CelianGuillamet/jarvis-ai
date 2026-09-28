@@ -78,6 +78,10 @@ function makeService(options: ServiceOptions = {}) {
   }));
 
   const prisma = {
+    ownerId: 'fixture-owner',
+    forConversation: jest
+      .fn()
+      .mockImplementation(() => Promise.resolve(prisma)),
     jarvisLog: {
       create: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue(options.logs ?? []),

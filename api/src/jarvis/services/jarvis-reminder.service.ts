@@ -90,7 +90,7 @@ export class JarvisReminderService {
   ): Promise<ReminderRecord | null> {
     try {
       const r = await this.prisma.reminder.update({
-        where: { id },
+        where: { id, sessionId },
         data: { snoozedUntil: until, triggerAt: until },
       });
       return this.map(r);

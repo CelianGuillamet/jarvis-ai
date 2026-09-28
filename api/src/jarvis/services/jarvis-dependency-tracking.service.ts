@@ -31,6 +31,14 @@ export class JarvisDependencyTrackingService {
     options?: { dependencyType?: string; estimatedDays?: number },
   ): Promise<DependencyRecord | null> {
     try {
+      if (sourceTaskId === targetTaskId) return null;
+      const domain = await this.prisma.forConversation(sessionId);
+      if (
+        (await domain.todo.count({
+          where: { id: { in: [sourceTaskId, targetTaskId] } },
+        })) !== 2
+      )
+        return null;
       const existing = await this.prisma.jarvisTaskDependency.findFirst({
         where: {
           sessionId,

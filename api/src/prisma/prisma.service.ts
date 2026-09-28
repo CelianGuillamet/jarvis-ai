@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { ownedDomainClient } from './owned-domain';
 
 @Injectable()
 export class PrismaService
@@ -16,6 +17,14 @@ export class PrismaService
 
   async onModuleInit() {
     await this.$connect();
+  }
+
+  async forConversation(conversationId: string) {
+    const conversation = await this.conversation.findUniqueOrThrow({
+      where: { id: conversationId },
+      select: { ownerId: true },
+    });
+    return ownedDomainClient(this, conversation.ownerId);
   }
 
   async onModuleDestroy() {

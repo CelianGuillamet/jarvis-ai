@@ -38,12 +38,18 @@ export class GoogleAuthService {
     }
   }
 
-  async handleCallback(code: string, state: string) {
+  async handleCallback(code: string, state: string, ownerId: string) {
     if (!code?.trim()) throw new BadRequestException('Code OAuth manquant');
     if (!state?.trim()) throw new BadRequestException('State OAuth manquant');
 
     const sessionId = this.state.consume(state);
     if (!sessionId)
+      throw new BadRequestException('State OAuth invalide/expiré');
+
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: sessionId, ownerId },
+    });
+    if (!conversation)
       throw new BadRequestException('State OAuth invalide/expiré');
 
     const existingToken = await this.prisma.googleOAuthToken.findUnique({

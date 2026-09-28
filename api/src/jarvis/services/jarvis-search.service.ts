@@ -31,10 +31,11 @@ export class JarvisSearchService {
     ];
     if (!q) return [];
     const results: SearchResultItem[] = [];
+    const prisma = await this.prisma.forConversation(sessionId);
 
     try {
       if (types.includes('todo')) {
-        const rows = await this.prisma.todo.findMany({
+        const rows = await prisma.todo.findMany({
           where: { text: { contains: input.query, mode: 'insensitive' } },
           orderBy: { createdAt: 'desc' },
           take: limit,
@@ -52,7 +53,7 @@ export class JarvisSearchService {
       }
 
       if (types.includes('note')) {
-        const rows = await this.prisma.note.findMany({
+        const rows = await prisma.note.findMany({
           where: {
             OR: [
               { text: { contains: input.query, mode: 'insensitive' } },
@@ -76,7 +77,7 @@ export class JarvisSearchService {
       }
 
       if (types.includes('shopping')) {
-        const rows = await this.prisma.shoppingItem.findMany({
+        const rows = await prisma.shoppingItem.findMany({
           where: { text: { contains: input.query, mode: 'insensitive' } },
           orderBy: { createdAt: 'desc' },
           take: limit,

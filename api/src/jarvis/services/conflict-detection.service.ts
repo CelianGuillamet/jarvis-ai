@@ -35,17 +35,14 @@ export class ConflictDetectionService {
     sessionId: string,
   ): Promise<ConflictReport | null> {
     try {
+      const prisma = await this.prisma.forConversation(sessionId);
       const [todos, events] = await Promise.all([
-        this.prisma.todo.findMany({
-          where: {
-            /* filtered by session somehow */
-          },
+        prisma.todo.findMany({
+          where: {},
           select: { id: true, text: true, doneAt: true, createdAt: true },
         }),
-        this.prisma.calendarEvent.findMany({
-          where: {
-            /* filtered by session */
-          },
+        prisma.calendarEvent.findMany({
+          where: {},
           select: { id: true, title: true, when: true, createdAt: true },
         }),
       ]);
@@ -95,10 +92,9 @@ export class ConflictDetectionService {
 
   async detectDuplicates(sessionId: string): Promise<ConflictReport | null> {
     try {
-      const todos = await this.prisma.todo.findMany({
-        where: {
-          /* filtered by session */
-        },
+      const prisma = await this.prisma.forConversation(sessionId);
+      const todos = await prisma.todo.findMany({
+        where: {},
         select: { id: true, text: true },
       });
 
