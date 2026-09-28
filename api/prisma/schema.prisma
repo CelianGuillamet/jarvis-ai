@@ -7,33 +7,49 @@ datasource db {
 }
 
 model Todo {
+  ownerId   String?
+  owner     User?     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String    @id @default(uuid())
   text      String
   done      Boolean   @default(false)
   doneAt    DateTime?
   createdAt DateTime  @default(now())
+
+  @@index([ownerId, createdAt])
 }
 
 model CalendarEvent {
+  ownerId   String?
+  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String   @id @default(uuid())
   title     String
   when      DateTime
   createdAt DateTime @default(now())
+
+  @@index([ownerId, when])
 }
 
 model Note {
+  ownerId   String?
+  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String   @id @default(uuid())
   title     String?
   text      String
   createdAt DateTime @default(now())
+
+  @@index([ownerId, createdAt])
 }
 
 model ShoppingItem {
+  ownerId   String?
+  owner     User?     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String    @id @default(uuid())
   text      String
   bought    Boolean   @default(false)
   boughtAt  DateTime?
   createdAt DateTime  @default(now())
+
+  @@index([ownerId, createdAt])
 }
 
 model PendingAction {
@@ -60,6 +76,8 @@ model JarvisLog {
 }
 
 model GoogleOAuthToken {
+  integrationAccountId String? @unique
+  integrationAccount IntegrationAccount? @relation(fields: [integrationAccountId], references: [id], onDelete: Restrict)
   id           String    @id @default(uuid())
   sessionId    String    @unique
   refreshToken String
@@ -461,6 +479,59 @@ model User {
   updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
+  todos         Todo[]
+  notes         Note[]
+  shoppingItems ShoppingItem[]
+  calendarEvents CalendarEvent[]
+  conversations Conversation[]
+  integrations  IntegrationAccount[]
+}
+
+// A conversation is not an authentication session or a provider identity.
+// Legacy session IDs require an explicit, verified mapping in the ownership cutover.
+model Conversation {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+}
+
+// Separate from Better Auth's login Account. Tokens are migrated in JAR-014.
+model IntegrationAccount {
+  id              String @id @default(uuid())
+  ownerId         String
+  owner           User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  provider        String
+  providerSubject String
+  createdAt       DateTime @default(now())
+  googleToken     GoogleOAuthToken?
+
+  @@unique([provider, providerSubject])
+  @@index([ownerId, provider])
+}
+
+// Operator-only rollback evidence. No application route exposes these snapshots.
+model LegacyOwnershipBatch {
+  id         String @id
+  digest     String
+  manifest   Json
+  appliedAt  DateTime @default(now())
+  restoredAt DateTime?
+  records    LegacyOwnershipRecord[]
+}
+
+model LegacyOwnershipRecord {
+  batchId    String
+  batch      LegacyOwnershipBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  tableName  String
+  recordId   String
+  original   Json
+  // Null means the record was removed from the live table into quarantine.
+  assignedOwnerId String?
+
+  @@id([batchId, tableName, recordId])
 }
 
 model Session {
