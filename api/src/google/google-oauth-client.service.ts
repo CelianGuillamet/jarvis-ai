@@ -41,9 +41,7 @@ export class GoogleOAuthClientService {
         // Request bodies, headers, tokens, provider messages and causes must not
         // reach Nest logging or the browser through a raw transport exception.
         const safe = new Error(
-          scopeMissing
-            ? 'Insufficient permissions.'
-            : 'Google request failed.',
+          scopeMissing ? 'Insufficient permissions.' : 'Google request failed.',
         );
         Object.assign(safe, {
           code: status,
