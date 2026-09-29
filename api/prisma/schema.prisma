@@ -497,9 +497,51 @@ model Conversation {
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now())
+  commands Command[]
 
   @@index([ownerId, createdAt])
   @@unique([ownerId, clientKey])
+  @@unique([id, ownerId])
+}
+
+// Immutable command envelope; transitions and approvals are constrained in SQL.
+model Command {
+  id String @id @default(uuid())
+  ownerId String
+  conversationId String
+  conversation Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  requestId String
+  toolName String
+  toolVersion String
+  arguments Json
+  targets Json
+  digest String
+  state String @default("proposed")
+  revision Int @default(0)
+  approvedDigest String?
+  approvedAt DateTime?
+  outcomeCode String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+  transitions CommandTransition[]
+
+  @@unique([ownerId, requestId])
+  @@index([ownerId, createdAt])
+  @@index([state, expiresAt])
+}
+
+model CommandTransition {
+  commandId String
+  command Command @relation(fields: [commandId], references: [id], onDelete: Restrict)
+  revision Int
+  fromState String?
+  toState String
+  approvedDigest String?
+  outcomeCode String?
+  createdAt DateTime @default(now())
+
+  @@id([commandId, revision])
 }
 
 // Separate from Better Auth's login Account. Tokens are migrated in JAR-014.
