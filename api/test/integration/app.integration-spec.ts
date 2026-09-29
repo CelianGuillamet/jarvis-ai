@@ -318,6 +318,66 @@ describe('API against disposable migrated PostgreSQL', () => {
     );
   });
 
+  it('journals equivalent chat and Inbox archives with the same durable outcome', async () => {
+    const conversations = app.get(ConversationService);
+    const chatId = await conversations.resolve(
+      'integration-user',
+      'archive-chat',
+    );
+    const inboxId = await conversations.resolve(
+      'integration-user',
+      'archive-inbox',
+    );
+    await seedGoogle(chatId);
+    const before = gmail.modifyLabels.mock.calls.length;
+    for (const text of ['Liste mes emails', 'Archive email #1']) {
+      await request(baseUrl)
+        .post('/jarvis/chat')
+        .set('Cookie', sessionCookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ sessionId: chatId, text })
+        .expect(201);
+    }
+    await request(baseUrl)
+      .post('/inbox-zero/scan')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId: inboxId })
+      .expect(201);
+    await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({
+        sessionId: inboxId,
+        action: 'archive',
+        messageIds: ['fixture-message'],
+      })
+      .expect(201);
+    expect(gmail.modifyLabels.mock.calls.slice(before)).toEqual([
+      [chatId, 'fixture-message', [], ['INBOX']],
+      [inboxId, 'fixture-message', [], ['INBOX']],
+    ]);
+    for (const [conversationId, source] of [
+      [chatId, 'chat'],
+      [inboxId, 'inbox'],
+    ]) {
+      const command = await prisma.command.findFirstOrThrow({
+        where: { conversationId, toolName: 'gmail.archive' },
+      });
+      expect(command).toMatchObject({
+        source,
+        state: 'completed',
+        outcomeCode: 'TOOL_RETURNED',
+      });
+      expect(command.targets).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'fixture-message' }),
+        ]),
+      );
+    }
+  });
+
   it('simulates Inbox mutations without touching providers or marking messages processed', async () => {
     const sessionId = await app
       .get(ConversationService)

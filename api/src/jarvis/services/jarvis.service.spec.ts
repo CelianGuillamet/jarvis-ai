@@ -1,4 +1,6 @@
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
+import type { CommandExecution } from '../../commands/command-execution.service';
+import { executeWithPolicy } from '../../commands/execution-policy';
 import type {
   GmailMessageDetail,
   GmailMessageItem,
@@ -373,6 +375,13 @@ function makeService(options: ServiceOptions = {}) {
     financeStore as unknown as ServiceDependencies[22],
     calendar,
     gmail,
+    {
+      execute: (
+        input: CommandExecution,
+        mutate: () => Promise<unknown>,
+        simulate: () => unknown,
+      ) => executeWithPolicy(input.policy, mutate, simulate),
+    } as unknown as ServiceDependencies[25],
   );
   jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 

@@ -36,7 +36,8 @@ import {
 import { normalizeToolOnlyCall, parseToolCall } from '../tools/tool-call';
 import { gateToolCall } from '../tools/tool-engine';
 import { TOOL_META } from '../tools/tool-registry';
-import { executeWithPolicy } from '../../commands/execution-policy';
+import { CommandExecutionService } from '../../commands/command-execution.service';
+import { googleAccountTarget } from '../../commands/google-account-binding';
 import {
   assertSameGoogleAccount,
   loadGoogleAccount,
@@ -467,6 +468,7 @@ export class JarvisService {
     private readonly financeStore: JarvisFinanceService,
     @Inject(CALENDAR_PROVIDER) private readonly calendar: CalendarProvider,
     @Inject(GMAIL_PROVIDER) private readonly gmail: GmailProvider,
+    private readonly executor: CommandExecutionService,
   ) {
     this.simulation = configBool(this.config.get<string>('SIMULATION'), true);
     this.allowDefaultSession = configBool(
@@ -1691,6 +1693,7 @@ export class JarvisService {
     call: ToolOnly,
     targets?: Prisma.JsonValue,
     googleAccount?: GoogleAccountBinding | null,
+    commandId?: string,
   ) {
     const context = await this.buildToolContext(sessionId, call, targets);
     if (!TOOL_META[call.name].sideEffect) return runTool(context, call);
@@ -1709,21 +1712,43 @@ export class JarvisService {
     if (requiresLocalTargets(call) && targets === undefined) {
       context.frozenLocalTargets = await prepareLocalTargets(context, call);
     }
-    return executeWithPolicy(
+    const resolvedTargets = context.frozenCalendarTarget
+      ? [freezeCalendarTarget(context.frozenCalendarTarget)]
+      : context.frozenGmailTargets
+        ? freezeGmailTargets(context.frozenGmailTargets)
+        : context.frozenLocalTargets
+          ? freezeLocalTargets(context.frozenLocalTargets)
+          : [];
+    return this.executor.execute(
       {
+        ...(commandId
+          ? { source: 'confirmation' as const, commandId }
+          : { source: 'chat' as const }),
+        conversationId: sessionId,
+        toolName: call.name,
+        arguments: JSON.parse(
+          JSON.stringify(call.args),
+        ) as Prisma.InputJsonObject,
+        targets:
+          account === undefined
+            ? resolvedTargets
+            : [...resolvedTargets, googleAccountTarget(account)],
         ownerId: context.prisma.ownerId,
-        simulation: context.simulation,
-        capabilities: [call.name],
-        loadGoogleStatus: async () => {
-          if (usesGoogleAccount(call.name)) {
-            assertSameGoogleAccount(
-              account,
-              await loadGoogleAccount(this.prisma, context.prisma.ownerId),
+        policy: {
+          ownerId: context.prisma.ownerId,
+          simulation: context.simulation,
+          capabilities: [call.name],
+          loadGoogleStatus: async () => {
+            if (usesGoogleAccount(call.name)) {
+              assertSameGoogleAccount(
+                account,
+                await loadGoogleAccount(this.prisma, context.prisma.ownerId),
+              );
+            }
+            return buildGoogleConnectionStatus(
+              (await this.googleTokenForConversation(sessionId))?.scope,
             );
-          }
-          return buildGoogleConnectionStatus(
-            (await this.googleTokenForConversation(sessionId))?.scope,
-          );
+          },
         },
       },
       () =>
@@ -3981,6 +4006,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         item.call,
         item.targets,
         item.googleAccount,
+        item.id,
       );
       const choices = await this.buildAutoFollowUpChoices(
         item.sessionId,

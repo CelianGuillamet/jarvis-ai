@@ -6,7 +6,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { executeWithPolicy } from '../commands/execution-policy';
+import { CommandExecutionService } from '../commands/command-execution.service';
+import { freezeGmailTargets } from '../commands/gmail-target';
+import { googleAccountTarget } from '../commands/google-account-binding';
 import {
   assertSameGoogleAccount,
   loadGoogleAccount,
@@ -137,6 +139,7 @@ export class InboxZeroService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     @Inject(GMAIL_PROVIDER) private readonly gmail: GmailProvider,
+    private readonly executor: CommandExecutionService,
   ) {
     this.tz = this.config.get<string>('JARVIS_TZ')?.trim() || 'Europe/Paris';
 
@@ -554,21 +557,63 @@ export class InboxZeroService {
               : effectiveAction === 'delete'
                 ? ['gmail.delete']
                 : ['gmail.mark_read'];
-        return await executeWithPolicy(
+        const toolName =
+          effectiveAction === 'archive'
+            ? 'gmail.archive'
+            : effectiveAction === 'mark_read'
+              ? 'gmail.mark_read'
+              : effectiveAction === 'trash'
+                ? 'gmail.trash'
+                : effectiveAction === 'send_reply'
+                  ? 'gmail.send'
+                  : `inbox.${effectiveAction}`;
+        return await this.executor.execute(
           {
+            source: 'inbox',
             ownerId,
-            simulation,
-            capabilities,
-            loadGoogleStatus: async () => {
-              assertSameGoogleAccount(
-                googleAccount,
-                await loadGoogleAccount(this.prisma, ownerId),
-              );
-              const token = await this.prisma.googleOAuthToken.findFirst({
-                where: { integrationAccount: { ownerId, provider: 'google' } },
-                select: { scope: true },
-              });
-              return buildGoogleConnectionStatus(token?.scope);
+            conversationId: sessionId,
+            toolName,
+            arguments: {
+              action: effectiveAction,
+              messageId: row.messageId,
+              archiveAfter,
+              replyText: input.replyText ?? null,
+              reminderWhen: input.reminderWhen ?? null,
+              reminderText: input.reminderText ?? null,
+            },
+            targets: [
+              ...freezeGmailTargets([
+                {
+                  id: row.messageId,
+                  threadId: row.threadId,
+                  subject: row.subject,
+                  from: row.from,
+                  to: row.to,
+                  date: row.date,
+                  snippet: row.snippet,
+                  labels,
+                  unread: row.unread,
+                },
+              ]),
+              googleAccountTarget(googleAccount),
+            ],
+            policy: {
+              ownerId,
+              simulation,
+              capabilities,
+              loadGoogleStatus: async () => {
+                assertSameGoogleAccount(
+                  googleAccount,
+                  await loadGoogleAccount(this.prisma, ownerId),
+                );
+                const token = await this.prisma.googleOAuthToken.findFirst({
+                  where: {
+                    integrationAccount: { ownerId, provider: 'google' },
+                  },
+                  select: { scope: true },
+                });
+                return buildGoogleConnectionStatus(token?.scope);
+              },
             },
           },
           () =>

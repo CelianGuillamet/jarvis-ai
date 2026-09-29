@@ -170,6 +170,7 @@ export class PendingActionsService {
       where: {
         ownerId: owner.ownerId,
         conversationId: sessionId,
+        source: 'confirmation',
         state: 'waiting',
         expiresAt: { gt: new Date() },
       },
@@ -344,7 +345,11 @@ export class PendingActionsService {
     if (!owner) return null;
     return this.replayRow(
       await this.prisma.command.findFirst({
-        where: { ownerId: owner.ownerId, conversationId: sessionId },
+        where: {
+          ownerId: owner.ownerId,
+          conversationId: sessionId,
+          source: 'confirmation',
+        },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
     );
