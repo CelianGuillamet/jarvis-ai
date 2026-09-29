@@ -4,10 +4,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { configureDevelopmentAssets } from './configure-development-assets';
 import { configureAuth } from './auth/configure-auth';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { configureHttpSafety } from './http/configure-http-safety';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  configureHttpSafety(app);
   await configureAuth(app);
   configureDevelopmentAssets(app);
 

@@ -4,6 +4,7 @@ import { createAuth } from '../../src/auth/create-auth';
 import { readAuthConfig } from '../../src/auth/auth-config';
 import { createHmac } from 'node:crypto';
 import { configureAuth } from '../../src/auth/configure-auth';
+import { configureHttpSafety } from '../../src/http/configure-http-safety';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
@@ -62,6 +63,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       .useValue(gmail)
       .compile();
     const nestApp = module.createNestApplication<NestExpressApplication>();
+    configureHttpSafety(nestApp);
     await configureAuth(nestApp);
     app = nestApp;
     app.useLogger(false);
@@ -107,6 +109,72 @@ describe('API against disposable migrated PostgreSQL', () => {
     await app?.close();
     jest.spyOn(OllamaProvider.prototype, 'chat').mockRestore();
     jest.spyOn(OpenAIProvider.prototype, 'chat').mockRestore();
+  });
+
+  it('bounds DTOs and throttles verified accounts across conversation changes', async () => {
+    await prisma.betaInvite.create({
+      data: { email: 'limits@example.invalid' },
+    });
+    await prisma.user.create({
+      data: {
+        id: 'limits-user',
+        name: 'Limits',
+        email: 'limits@example.invalid',
+        emailVerified: true,
+      },
+    });
+    const token = 'limits-session-token';
+    await prisma.session.create({
+      data: {
+        id: 'limits-session',
+        token,
+        userId: 'limits-user',
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    await request(baseUrl)
+      .get('/jarvis/status')
+      .query({ sessionId: 'x'.repeat(129) })
+      .set('Cookie', cookie)
+      .expect(400);
+    await request(baseUrl)
+      .get('/inbox-zero/message')
+      .query({ messageId: ['one', 'two'] })
+      .set('Cookie', cookie)
+      .expect(400);
+    await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({
+        action: 'archive',
+        messageIds: Array.from({ length: 21 }, (_, i) => String(i)),
+      })
+      .expect(400);
+    for (let i = 0; i < 19; i++) {
+      await request(baseUrl)
+        .post('/jarvis/chat')
+        .set('Cookie', cookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ text: 'x'.repeat(8001), sessionId: `conversation-${i}` })
+        .expect(400);
+    }
+    const limited = await request(baseUrl)
+      .post('/jarvis/chat')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ text: 'bonjour', sessionId: 'new-conversation' })
+      .expect(429);
+    expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+    // Reads have their own larger account allowance after the mutation quota.
+    await request(baseUrl)
+      .get('/jarvis/status')
+      .set('Cookie', cookie)
+      .expect(200);
   });
 
   async function seedGoogle(clientKey: string) {
