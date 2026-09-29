@@ -3054,6 +3054,10 @@ export class JarvisService {
       const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
 
       // CONFIRMATION “HUMAINE” : si une action pending existe, on peut répondre "oui/non"
+      if (this.parseYesNo(userText) === 'yes') {
+        const replay = await this.pending.replayLatest(resolvedSessionId);
+        if (replay) return replay;
+      }
       const pending = await this.pending.peekLatest(resolvedSessionId);
       if (pending) {
         const correctedPendingCall = this.maybeCorrectPendingCall(
@@ -3175,76 +3179,7 @@ export class JarvisService {
             }
           }
 
-          const consumed = await this.pending.consume(
-            pending.id,
-            resolvedSessionId,
-          );
-          if (!consumed) {
-            return {
-              text: this.humanizeEnabled
-                ? humanizeNoPending(profile)
-                : "Je n'ai plus d'action en attente.",
-              meta: {
-                simulation: this.simulation,
-                sessionId: resolvedSessionId,
-              },
-            };
-          }
-
-          auditContext = {
-            sessionId: resolvedSessionId,
-            source: 'confirm_text',
-            pendingActionId: consumed.id,
-          };
-          const result = await runTool(
-            await this.buildToolContext(resolvedSessionId),
-            consumed.call,
-          );
-          const choices = await this.buildAutoFollowUpChoices(
-            resolvedSessionId,
-            consumed.call.name,
-            result,
-          );
-
-          await this.logSafe({
-            sessionId: resolvedSessionId,
-            userText: `[CONFIRM yes] ${userText}`,
-            modelRaw: '',
-            toolName: consumed.call.name,
-            toolArgs: JSON.stringify(consumed.call.args),
-            simulation: this.simulation,
-            result,
-          });
-          await this.auditStore.recordCompletion({
-            sessionId: resolvedSessionId,
-            pendingActionId: consumed.id,
-            result,
-            source: 'confirm_text',
-          });
-          auditContext = null;
-
-          const humanText = this.humanizeToolOutput(profile, result, {
-            fromConfirmation: true,
-          });
-          this.rememberToolTurn(
-            resolvedSessionId,
-            userText,
-            consumed.call,
-            result,
-            { prefix: 'Confirmation executee pour' },
-          );
-          await this.persistMissionPlanIfNeeded(
-            resolvedSessionId,
-            consumed.call,
-            result,
-          );
-          await this.refreshPersistentSessionState(resolvedSessionId);
-
-          return {
-            text: humanText,
-            choices: choices.length ? choices : undefined,
-            meta: { simulation: this.simulation, sessionId: resolvedSessionId },
-          };
+          return this.confirm(pending.id, resolvedSessionId);
         }
 
         if (yn === 'no') {
@@ -3811,6 +3746,8 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       );
     }
 
+    const replay = await this.pending.replay(actionId, expectedSessionId);
+    if (replay) return replay;
     const fallbackProfile = await this.getHumanProfile(
       expectedSessionId ?? 'default',
     );
@@ -3861,12 +3798,14 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
     const item = await this.pending.consume(actionId, expectedSessionId);
     if (!item)
-      return {
-        text: this.humanizeEnabled
-          ? humanizeNoPending(fallbackProfile)
-          : 'Action introuvable ou expirée.',
-        meta: { simulation: this.simulation },
-      };
+      return (
+        (await this.pending.replay(actionId, expectedSessionId)) ?? {
+          text: this.humanizeEnabled
+            ? humanizeNoPending(fallbackProfile)
+            : 'Action introuvable ou expirée.',
+          meta: { simulation: this.simulation },
+        }
+      );
 
     let auditContext: AuditExecutionContext | null = {
       sessionId: item.sessionId,
@@ -3916,13 +3855,15 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       await this.persistMissionPlanIfNeeded(item.sessionId, item.call, result);
       await this.refreshPersistentSessionState(item.sessionId);
 
-      return {
+      const response = {
         text: humanText,
         choices: choices.length ? choices : undefined,
         meta: { simulation: this.simulation, sessionId: item.sessionId },
       };
+      await this.pending.complete(item.id, item.sessionId, response);
+      return response;
     } catch (error) {
-      const profile = await this.getHumanProfile(item.sessionId);
+      await this.pending.markUnknown(item.id, item.sessionId);
       const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
       this.logger.error(
         `Erreur confirm (session=${item.sessionId}): ${message}`,
@@ -3955,14 +3896,13 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         item.sessionId,
         error,
       );
-      if (recoverable) return recoverable;
-
-      return {
-        text: this.humanizeEnabled
-          ? humanizeError(profile)
-          : 'Je rencontre une erreur technique. Réessaie dans quelques secondes.',
-        meta: { simulation: this.simulation, sessionId: item.sessionId },
-      };
+      return (
+        (await this.pending.replay(item.id, item.sessionId)) ??
+        recoverable ?? {
+          text: 'Le résultat de cette action doit être vérifié. Elle ne sera pas relancée.',
+          meta: { simulation: this.simulation, sessionId: item.sessionId },
+        }
+      );
     }
   }
 }

@@ -248,16 +248,37 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Origin', 'http://localhost:5173')
       .send({ text: 'Ajoute un rendez-vous demain à 18h', sessionId })
       .expect(201);
-    const pending = await prisma.pendingAction.findUniqueOrThrow({
-      where: { sessionId },
+    const pending = await prisma.command.findFirstOrThrow({
+      where: { conversationId: sessionId, state: 'waiting' },
     });
     expect(calendar.createEvent).not.toHaveBeenCalled();
-    await request(baseUrl)
+    await Promise.all(
+      Array.from({ length: 2 }, () =>
+        request(baseUrl)
+          .post('/jarvis/confirm')
+          .set('Cookie', sessionCookie)
+          .set('Origin', 'http://localhost:5173')
+          .send({ actionId: pending.id, sessionId })
+          .expect(201),
+      ),
+    );
+    const saved = await prisma.command.findUniqueOrThrow({
+      where: { id: pending.id },
+    });
+    const replay = await request(baseUrl)
       .post('/jarvis/confirm')
       .set('Cookie', sessionCookie)
       .set('Origin', 'http://localhost:5173')
       .send({ actionId: pending.id, sessionId })
       .expect(201);
+    expect(replay.body).toEqual(saved.response);
+    const textReplay = await request(baseUrl)
+      .post('/jarvis/chat')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ text: 'oui', sessionId })
+      .expect(201);
+    expect(textReplay.body).toEqual(saved.response);
     expect(calendar.createEvent).toHaveBeenCalledTimes(1);
     expect(calendar.createEvent.mock.calls[0][0]).toBe(sessionId);
     expect(await prisma.pendingAction.count({ where: { sessionId } })).toBe(0);

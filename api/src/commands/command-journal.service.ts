@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Inject,
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
@@ -59,7 +60,10 @@ function canonicalJson(value: unknown, depth = 0): string {
 /** Durable foundation. Callers must pass the verified owner and resolved targets. */
 @Injectable()
 export class CommandJournalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService)
+    private readonly prisma: Pick<PrismaService, 'command' | 'conversation'>,
+  ) {}
 
   private assertIdentifiers(...ids: string[]) {
     if (

@@ -193,6 +193,10 @@ function makeService(options: ServiceOptions = {}) {
   };
 
   const pending = {
+    replay: jest.fn().mockResolvedValue(null),
+    replayLatest: jest.fn().mockResolvedValue(null),
+    complete: jest.fn().mockResolvedValue(undefined),
+    markUnknown: jest.fn().mockResolvedValue(undefined),
     peekLatest: jest.fn().mockResolvedValue(
       options.pendingAction
         ? {
