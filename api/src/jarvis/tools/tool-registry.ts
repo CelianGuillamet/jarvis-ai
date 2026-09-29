@@ -224,7 +224,7 @@ export const TOOL_META: Record<ToolName, ToolMetadata> = {
   },
   'mission.plan': {
     requiresConfirmation: false,
-    sideEffect: false,
+    sideEffect: true,
     risk: 'low',
   },
 

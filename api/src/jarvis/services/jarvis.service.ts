@@ -1751,12 +1751,15 @@ export class JarvisService {
           },
         },
       },
-      () =>
-        account === undefined
+      async () => {
+        const result = await (account === undefined
           ? runTool(context, call)
           : withGoogleAccountBinding(sessionId, account, () =>
               runTool(context, call),
-            ),
+            ));
+        await this.persistMissionPlanIfNeeded(sessionId, call, result);
+        return result;
+      },
       () =>
         `Simulation : l’action « ${call.name} » n’a effectué aucune modification.`,
     );
@@ -1768,7 +1771,7 @@ export class JarvisService {
     result: string,
   ) {
     if (this.simulation || call.name !== 'mission.plan') return;
-    await this.missionStore.recordPlan(
+    const saved = await this.missionStore.recordPlan(
       sessionId,
       {
         objective: call.args.objective,
@@ -1776,6 +1779,8 @@ export class JarvisService {
       },
       result,
     );
+    if (!saved)
+      throw new Error('Le plan de mission n’a pas pu être enregistré.');
   }
 
   async status(sessionId?: string) {
@@ -3839,11 +3844,6 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
       const humanText = this.humanizeToolOutput(profile, finalResult);
       this.rememberToolTurn(resolvedSessionId, userText, toolCall, finalResult);
-      await this.persistMissionPlanIfNeeded(
-        resolvedSessionId,
-        toolCall,
-        finalResult,
-      );
       await this.refreshPersistentSessionState(resolvedSessionId);
 
       return {
@@ -4041,7 +4041,6 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         result,
         { prefix: 'Confirmation executee pour' },
       );
-      await this.persistMissionPlanIfNeeded(item.sessionId, item.call, result);
       await this.refreshPersistentSessionState(item.sessionId);
 
       const response = {

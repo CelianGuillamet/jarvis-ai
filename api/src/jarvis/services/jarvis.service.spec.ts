@@ -18,6 +18,7 @@ import { JarvisService } from './jarvis.service';
 type ServiceDependencies = ConstructorParameters<typeof JarvisService>;
 
 type ServiceOptions = {
+  simulation?: boolean;
   todos?: Array<{ id: string; text: string; done: boolean; createdAt?: Date }>;
   shopping?: Array<{ id: string; text: string; bought: boolean }>;
   notes?: Array<{ title: string | null; text: string; createdAt?: Date }>;
@@ -340,7 +341,7 @@ function makeService(options: ServiceOptions = {}) {
     get: jest.fn((key: string) => {
       switch (key) {
         case 'SIMULATION':
-          return 'false';
+          return String(options.simulation ?? false);
         case 'HUMANIZE_RESPONSES':
           return 'true';
         default:
@@ -599,6 +600,27 @@ describe('JarvisService', () => {
       },
       expect.stringContaining('Mission plan - la démo investisseur'),
     );
+  });
+
+  it('does not persist mission plans in simulation', async () => {
+    const { service, missionStore } = makeService({ simulation: true });
+    const response = await service.chat(
+      'Prépare un plan de mission pour la démo investisseur',
+      'mission-simulation',
+    );
+    expect(response.text).toContain('Simulation');
+    expect(missionStore.recordPlan).not.toHaveBeenCalled();
+  });
+
+  it('does not report a completed mission plan when persistence fails', async () => {
+    const { service, missionStore } = makeService();
+    missionStore.recordPlan.mockResolvedValueOnce(null);
+    const response = await service.chat(
+      'Prépare un plan de mission pour la démo investisseur',
+      'mission-failure',
+    );
+    expect(missionStore.recordPlan).toHaveBeenCalledTimes(1);
+    expect(response).not.toHaveProperty('meta.toolName', 'mission.plan');
   });
 
   it('routes mission closure requests to mission.close with confirmation', async () => {
