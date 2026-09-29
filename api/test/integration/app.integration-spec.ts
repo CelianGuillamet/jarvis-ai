@@ -1,5 +1,6 @@
 import { ConversationService } from '../../src/auth/conversation.service';
 import { GoogleCredentialService } from '../../src/google/google-credential.service';
+import { OAuthStateService } from '../../src/google/oauth-state.service';
 import { createAuth } from '../../src/auth/create-auth';
 import { readAuthConfig } from '../../src/auth/auth-config';
 import { createHmac } from 'node:crypto';
@@ -7,6 +8,10 @@ import { configureAuth } from '../../src/auth/configure-auth';
 import { configureHttpSafety } from '../../src/http/configure-http-safety';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod } from '@nestjs/common';
+import { ModulesContainer, Reflector } from '@nestjs/core';
+import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
+import { PUBLIC_ENDPOINT } from '../../src/auth/public-endpoint';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AddressInfo } from 'node:net';
@@ -307,7 +312,7 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(process.env.OPENAI_API_KEY).toBe('');
     expect(process.env.GOOGLE_CLIENT_SECRET).toBe('');
   });
-  it('mounts the ESM auth handler before Nest body parsing', async () => {
+  it('mounts the ESM auth handler after bounded body parsing', async () => {
     await request(baseUrl).get('/api/auth/ok').expect(200, { ok: true });
     await request(baseUrl)
       .post('/api/auth/sign-in/social')
@@ -316,8 +321,62 @@ describe('API against disposable migrated PostgreSQL', () => {
       .expect(404);
   });
 
+  it('keeps the private endpoint inventory aligned with the security matrix', () => {
+    const routes: string[] = [];
+    const reflector = app.get(Reflector);
+    for (const module of app.get(ModulesContainer).values()) {
+      for (const wrapper of module.controllers.values()) {
+        const controller = wrapper.metatype;
+        if (!controller) continue;
+        const prefix = reflector.get<string>(PATH_METADATA, controller) ?? '';
+        const prototype = controller.prototype as object;
+        for (const descriptor of Object.values(
+          Object.getOwnPropertyDescriptors(prototype),
+        )) {
+          const handler: unknown = descriptor.value;
+          if (typeof handler !== 'function') continue;
+          const method = reflector.get<RequestMethod | undefined>(
+            METHOD_METADATA,
+            handler,
+          );
+          if (
+            method === undefined ||
+            reflector.getAllAndOverride<boolean>(PUBLIC_ENDPOINT, [
+              handler,
+              controller,
+            ])
+          )
+            continue;
+          const path = reflector.get<string>(PATH_METADATA, handler) ?? '';
+          routes.push(
+            `${RequestMethod[method]} /${[prefix, path].filter((part) => part && part !== '/').join('/')}`,
+          );
+        }
+      }
+    }
+    expect(routes.sort()).toEqual(
+      [
+        'GET /account/me',
+        'GET /auth/google',
+        'GET /auth/google/callback',
+        'GET /auth/google/status',
+        'GET /inbox-zero/message',
+        'GET /inbox-zero/session',
+        'GET /jarvis/status',
+        'POST /auth/google/disconnect',
+        'POST /inbox-zero/apply',
+        'POST /inbox-zero/draft-reply',
+        'POST /inbox-zero/scan',
+        'POST /inbox-zero/step',
+        'POST /jarvis/chat',
+        'POST /jarvis/confirm',
+      ].sort(),
+    );
+  });
+
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
     for (const path of [
+      '/account/me',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
@@ -332,6 +391,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         .expect(401);
     }
     for (const path of [
+      '/auth/google/disconnect',
       '/jarvis/chat',
       '/jarvis/confirm',
       '/inbox-zero/scan',
@@ -600,11 +660,17 @@ describe('API against disposable migrated PostgreSQL', () => {
     for (const path of [
       '/jarvis/status',
       '/inbox-zero/session',
+      '/inbox-zero/message',
+      '/auth/google',
       '/auth/google/status',
     ]) {
       await request(baseUrl)
         .get(path)
-        .query({ sessionId: first })
+        .query(
+          path === '/inbox-zero/message'
+            ? { sessionId: first, messageId: 'fixture-message' }
+            : { sessionId: first },
+        )
         .set('Cookie', cookie)
         .expect(404);
     }
@@ -620,6 +686,80 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Origin', 'http://localhost:5173')
       .send({ sessionId: first, text: 'liste mes tâches' })
       .expect(404);
+    for (const [path, body] of [
+      ['/inbox-zero/scan', { query: 'in:inbox' }],
+      ['/inbox-zero/step', { step: 'urgent' }],
+      [
+        '/inbox-zero/apply',
+        { action: 'archive', messageIds: ['fixture-message'] },
+      ],
+      ['/inbox-zero/draft-reply', { messageId: 'fixture-message' }],
+    ] as const) {
+      await request(baseUrl)
+        .post(path)
+        .set('Cookie', cookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ ...body, sessionId: first })
+        .expect(404);
+    }
+    const pending = await prisma.pendingAction.create({
+      data: {
+        sessionId: first,
+        name: 'todo.delete',
+        argsJson: JSON.stringify({ query: 'private-task' }),
+        expiresAt: new Date(Date.now() + 600000),
+      },
+    });
+    await request(baseUrl)
+      .post('/jarvis/confirm')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId: second, actionId: pending.id })
+      .expect(201);
+    expect(
+      await prisma.pendingAction.findUnique({ where: { id: pending.id } }),
+    ).not.toBeNull();
+    const pendingState = await app.get(OAuthStateService).create({
+      ownerId: 'integration-user',
+      authSessionId: 'integration-session',
+      conversationId: first,
+    });
+    await request(baseUrl)
+      .get('/auth/google/callback')
+      .query({ code: 'foreign-code', state: pendingState.state })
+      .set('Cookie', cookie)
+      .expect(400);
+    expect(
+      await app
+        .get(OAuthStateService)
+        .consume(pendingState.state, 'integration-user', 'integration-session'),
+    ).not.toBeNull();
+    const me = await request(baseUrl)
+      .get('/account/me')
+      .query({ userId: 'integration-user' })
+      .set('X-User-Id', 'integration-user')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(me.body).toEqual({
+      id: 'second-user',
+      name: 'Second',
+      email: 'second@example.invalid',
+    });
+    await seedGoogle(first);
+    const firstAccount = await prisma.integrationAccount.findFirstOrThrow({
+      where: { ownerId: 'integration-user' },
+    });
+    await request(baseUrl)
+      .post('/auth/google/disconnect')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ ownerId: 'integration-user' })
+      .expect(201);
+    expect(
+      await prisma.integrationAccount.findUnique({
+        where: { id: firstAccount.id },
+      }),
+    ).not.toBeNull();
     await request(baseUrl)
       .get('/inbox-zero/session')
       .query({ sessionId: 'same-browser-alias' })
@@ -629,6 +769,17 @@ describe('API against disposable migrated PostgreSQL', () => {
       (await prisma.conversation.findUniqueOrThrow({ where: { id: second } }))
         .ownerId,
     ).toBe('second-user');
+    await request(baseUrl)
+      .post('/api/auth/sign-out')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({})
+      .expect(200);
+    await request(baseUrl).get('/account/me').set('Cookie', cookie).expect(401);
+    await request(baseUrl)
+      .get('/account/me')
+      .set('Cookie', sessionCookie)
+      .expect(200);
   });
 
   it('disconnects only the authenticated Google account behind the origin guard', async () => {
