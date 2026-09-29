@@ -35,6 +35,8 @@ import {
 } from '../tools/tools';
 import { normalizeToolOnlyCall, parseToolCall } from '../tools/tool-call';
 import { gateToolCall } from '../tools/tool-engine';
+import { TOOL_META } from '../tools/tool-registry';
+import { executeWithPolicy } from '../../commands/execution-policy';
 import { resolveRange } from '../lib/resolve-range';
 import { resolveWhenWindow } from '../lib/resolve-when';
 import { planCalendarWrite } from '../lib/calendar-intent';
@@ -1600,6 +1602,25 @@ export class JarvisService {
       timeInsights: this.timeInsightsStore,
       contacts: this.contactStore,
     };
+  }
+
+  private async executeTool(sessionId: string, call: ToolOnly) {
+    const context = await this.buildToolContext(sessionId);
+    if (!TOOL_META[call.name].sideEffect) return runTool(context, call);
+    return executeWithPolicy(
+      {
+        ownerId: context.prisma.ownerId,
+        simulation: context.simulation,
+        capabilities: [call.name],
+        loadGoogleStatus: async () =>
+          buildGoogleConnectionStatus(
+            (await this.googleTokenForConversation(sessionId))?.scope,
+          ),
+      },
+      () => runTool(context, call),
+      () =>
+        `Simulation : l’action « ${call.name} » n’a effectué aucune modification.`,
+    );
   }
 
   private async persistMissionPlanIfNeeded(
@@ -3628,10 +3649,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         call: toolCall,
         plan: executionPlan,
       };
-      const result = await runTool(
-        await this.buildToolContext(resolvedSessionId),
-        toolCall,
-      );
+      const result = await this.executeTool(resolvedSessionId, toolCall);
       const finalResult = await this.maybeSummarizeWebResult(
         userText,
         toolCall,
@@ -3815,10 +3833,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
     try {
       const profile = await this.getHumanProfile(item.sessionId);
-      const result = await runTool(
-        await this.buildToolContext(item.sessionId),
-        item.call,
-      );
+      const result = await this.executeTool(item.sessionId, item.call);
       const choices = await this.buildAutoFollowUpChoices(
         item.sessionId,
         item.call.name,

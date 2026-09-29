@@ -68,7 +68,7 @@ function hasGmailSend(scopes: string[]) {
 }
 
 export function gateToolCall(
-  call: ToolOnly,
+  call: Pick<ToolOnly, 'name'>,
   googleStatus: GoogleConnectionStatus,
 ): GoogleIntegrationError | null {
   const scopes = googleStatus.scopes ?? [];

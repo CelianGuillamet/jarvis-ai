@@ -6,6 +6,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { executeWithPolicy } from '../commands/execution-policy';
+import { buildGoogleConnectionStatus } from '../google/google-scopes';
+import type { ToolName } from '../jarvis/tools/tool-registry';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { GMAIL_PROVIDER } from '../gmail/gmail.module';
@@ -507,6 +510,9 @@ export class InboxZeroService {
 
     const archiveAfter = input.archiveAfter ?? true;
     const now = new Date();
+    const { ownerId } = await this.prisma.forConversation(sessionId);
+    const simulation =
+      String(this.config.get('SIMULATION') ?? 'true').toLowerCase() === 'true';
 
     const results = await mapWithConcurrency(rows, 4, async (row) => {
       const labels = safeParseJson<string[]>(row.labelsJson, []);
@@ -531,175 +537,210 @@ export class InboxZeroService {
             `Action recommandée "${effectiveAction}" nécessite une étape dédiée.`,
           );
         }
-
         if (effectiveAction === 'apply_recommended') {
           throw new BadRequestException('apply_recommended non résolu.');
         }
-
-        const itemPatch: Partial<RawItemRow> & {
-          labelsJson?: string;
-          unread?: boolean;
-          status?: string;
-          lastActionAt?: Date | null;
-        } = {};
-
-        if (effectiveAction === 'star') {
-          const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
-          const nextLabels = applyLabels(labels, ['STARRED'], remove);
-          await this.withGoogleGuard(() =>
-            this.gmail.modifyLabels(
-              sessionId,
-              row.messageId,
-              ['STARRED'],
-              remove,
-            ),
-          );
-          itemPatch.labelsJson = JSON.stringify(nextLabels);
-          itemPatch.unread = false;
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else if (effectiveAction === 'archive') {
-          const nextLabels = applyLabels(labels, [], ['INBOX']);
-          await this.withGoogleGuard(() =>
-            this.gmail.modifyLabels(sessionId, row.messageId, [], ['INBOX']),
-          );
-          itemPatch.labelsJson = JSON.stringify(nextLabels);
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else if (effectiveAction === 'mark_read') {
-          const nextLabels = applyLabels(labels, [], ['UNREAD']);
-          await this.withGoogleGuard(() =>
-            this.gmail.modifyLabels(sessionId, row.messageId, [], ['UNREAD']),
-          );
-          itemPatch.labelsJson = JSON.stringify(nextLabels);
-          itemPatch.unread = false;
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else if (effectiveAction === 'mark_read_archive') {
-          const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
-          const nextLabels = applyLabels(labels, [], remove);
-          await this.withGoogleGuard(() =>
-            this.gmail.modifyLabels(sessionId, row.messageId, [], remove),
-          );
-          itemPatch.labelsJson = JSON.stringify(nextLabels);
-          itemPatch.unread = false;
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else if (effectiveAction === 'trash') {
-          await this.withGoogleGuard(() =>
-            this.gmail.trashMessage(sessionId, row.messageId),
-          );
-          itemPatch.labelsJson = JSON.stringify(
-            applyLabels(labels, ['TRASH'], ['INBOX']),
-          );
-          itemPatch.unread = false;
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else if (effectiveAction === 'delete') {
-          await this.withGoogleGuard(() =>
-            this.gmail.deleteMessage(sessionId, row.messageId),
-          );
-          itemPatch.labelsJson = JSON.stringify([]);
-          itemPatch.unread = false;
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else if (effectiveAction === 'remind') {
-          if (!input.reminderWhen?.trim()) {
-            throw new BadRequestException('reminderWhen manquant pour remind.');
-          }
-          const when = resolveWhenWindow(input.reminderWhen, this.tz);
-          const triggerAt = new Date(when.startIso);
-          const reminderText =
-            input.reminderText?.trim() ||
-            compactText(`Inbox Zero: ${row.subject} (${row.from})`, 140);
-
-          await this.prisma.reminder.create({
-            data: {
-              sessionId,
-              text: reminderText,
-              triggerAt,
+        const capabilities: ToolName[] =
+          effectiveAction === 'send_reply'
+            ? ['gmail.send', 'gmail.mark_read']
+            : effectiveAction === 'remind'
+              ? ['reminder.create', 'gmail.mark_read']
+              : effectiveAction === 'delete'
+                ? ['gmail.delete']
+                : ['gmail.mark_read'];
+        return await executeWithPolicy(
+          {
+            ownerId,
+            simulation,
+            capabilities,
+            loadGoogleStatus: async () => {
+              const token = await this.prisma.googleOAuthToken.findFirst({
+                where: { integrationAccount: { ownerId, provider: 'google' } },
+                select: { scope: true },
+              });
+              return buildGoogleConnectionStatus(token?.scope);
             },
-            select: { id: true },
-          });
+          },
+          async () => {
+            const itemPatch: Partial<RawItemRow> & {
+              labelsJson?: string;
+              unread?: boolean;
+              status?: string;
+              lastActionAt?: Date | null;
+            } = {};
 
-          const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
-          const nextLabels = applyLabels(labels, [], remove);
-          await this.withGoogleGuard(() =>
-            this.gmail.modifyLabels(sessionId, row.messageId, [], remove),
-          );
+            if (effectiveAction === 'star') {
+              const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
+              const nextLabels = applyLabels(labels, ['STARRED'], remove);
+              await this.withGoogleGuard(() =>
+                this.gmail.modifyLabels(
+                  sessionId,
+                  row.messageId,
+                  ['STARRED'],
+                  remove,
+                ),
+              );
+              itemPatch.labelsJson = JSON.stringify(nextLabels);
+              itemPatch.unread = false;
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else if (effectiveAction === 'archive') {
+              const nextLabels = applyLabels(labels, [], ['INBOX']);
+              await this.withGoogleGuard(() =>
+                this.gmail.modifyLabels(
+                  sessionId,
+                  row.messageId,
+                  [],
+                  ['INBOX'],
+                ),
+              );
+              itemPatch.labelsJson = JSON.stringify(nextLabels);
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else if (effectiveAction === 'mark_read') {
+              const nextLabels = applyLabels(labels, [], ['UNREAD']);
+              await this.withGoogleGuard(() =>
+                this.gmail.modifyLabels(
+                  sessionId,
+                  row.messageId,
+                  [],
+                  ['UNREAD'],
+                ),
+              );
+              itemPatch.labelsJson = JSON.stringify(nextLabels);
+              itemPatch.unread = false;
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else if (effectiveAction === 'mark_read_archive') {
+              const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
+              const nextLabels = applyLabels(labels, [], remove);
+              await this.withGoogleGuard(() =>
+                this.gmail.modifyLabels(sessionId, row.messageId, [], remove),
+              );
+              itemPatch.labelsJson = JSON.stringify(nextLabels);
+              itemPatch.unread = false;
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else if (effectiveAction === 'trash') {
+              await this.withGoogleGuard(() =>
+                this.gmail.trashMessage(sessionId, row.messageId),
+              );
+              itemPatch.labelsJson = JSON.stringify(
+                applyLabels(labels, ['TRASH'], ['INBOX']),
+              );
+              itemPatch.unread = false;
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else if (effectiveAction === 'delete') {
+              await this.withGoogleGuard(() =>
+                this.gmail.deleteMessage(sessionId, row.messageId),
+              );
+              itemPatch.labelsJson = JSON.stringify([]);
+              itemPatch.unread = false;
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else if (effectiveAction === 'remind') {
+              if (!input.reminderWhen?.trim()) {
+                throw new BadRequestException(
+                  'reminderWhen manquant pour remind.',
+                );
+              }
+              const when = resolveWhenWindow(input.reminderWhen, this.tz);
+              const triggerAt = new Date(when.startIso);
+              const reminderText =
+                input.reminderText?.trim() ||
+                compactText(`Inbox Zero: ${row.subject} (${row.from})`, 140);
 
-          itemPatch.labelsJson = JSON.stringify(nextLabels);
-          itemPatch.unread = false;
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else if (effectiveAction === 'send_reply') {
-          if (!input.replyText?.trim()) {
-            throw new BadRequestException(
-              'replyText manquant pour send_reply.',
+              await this.prisma.reminder.create({
+                data: {
+                  sessionId,
+                  text: reminderText,
+                  triggerAt,
+                },
+                select: { id: true },
+              });
+
+              const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
+              const nextLabels = applyLabels(labels, [], remove);
+              await this.withGoogleGuard(() =>
+                this.gmail.modifyLabels(sessionId, row.messageId, [], remove),
+              );
+
+              itemPatch.labelsJson = JSON.stringify(nextLabels);
+              itemPatch.unread = false;
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else if (effectiveAction === 'send_reply') {
+              if (!input.replyText?.trim()) {
+                throw new BadRequestException(
+                  'replyText manquant pour send_reply.',
+                );
+              }
+              const detail = await this.withGoogleGuard(() =>
+                this.gmail.getMessage(sessionId, row.messageId),
+              );
+              const to = extractEmailAddress(detail.from) || detail.from;
+              const subject = buildReplySubject(detail.subject);
+              const text = input.replyText.trim();
+              const inReplyTo = detail.messageIdHeader ?? undefined;
+              const references = (() => {
+                const refs = (detail.referencesHeader || '').trim();
+                if (!inReplyTo) return refs || undefined;
+                if (!refs) return inReplyTo;
+                return refs.includes(inReplyTo) ? refs : `${refs} ${inReplyTo}`;
+              })();
+
+              await this.withGoogleGuard(() =>
+                this.gmail.sendMessage(sessionId, {
+                  to,
+                  subject,
+                  text,
+                  threadId: row.threadId,
+                  inReplyTo,
+                  references,
+                }),
+              );
+
+              const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
+              const nextLabels = applyLabels(labels, [], remove);
+              await this.withGoogleGuard(() =>
+                this.gmail.modifyLabels(sessionId, row.messageId, [], remove),
+              );
+
+              itemPatch.labelsJson = JSON.stringify(nextLabels);
+              itemPatch.unread = false;
+              itemPatch.status = 'processed';
+              itemPatch.lastActionAt = now;
+            } else {
+              throw new BadRequestException(
+                `Action InboxZero non supportée: ${effectiveAction}`,
+              );
+            }
+
+            await this.withInboxZeroDbGuard(() =>
+              this.prisma.inboxZeroItem.update({
+                where: { id: row.id },
+                data: {
+                  ...(itemPatch.labelsJson !== undefined
+                    ? { labelsJson: itemPatch.labelsJson }
+                    : {}),
+                  ...(itemPatch.unread !== undefined
+                    ? { unread: itemPatch.unread }
+                    : {}),
+                  ...(itemPatch.status !== undefined
+                    ? { status: itemPatch.status }
+                    : {}),
+                  ...(itemPatch.lastActionAt !== undefined
+                    ? { lastActionAt: itemPatch.lastActionAt }
+                    : {}),
+                },
+              }),
             );
-          }
-          const detail = await this.withGoogleGuard(() =>
-            this.gmail.getMessage(sessionId, row.messageId),
-          );
-          const to = extractEmailAddress(detail.from) || detail.from;
-          const subject = buildReplySubject(detail.subject);
-          const text = input.replyText.trim();
-          const inReplyTo = detail.messageIdHeader ?? undefined;
-          const references = (() => {
-            const refs = (detail.referencesHeader || '').trim();
-            if (!inReplyTo) return refs || undefined;
-            if (!refs) return inReplyTo;
-            return refs.includes(inReplyTo) ? refs : `${refs} ${inReplyTo}`;
-          })();
 
-          await this.withGoogleGuard(() =>
-            this.gmail.sendMessage(sessionId, {
-              to,
-              subject,
-              text,
-              threadId: row.threadId,
-              inReplyTo,
-              references,
-            }),
-          );
-
-          const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
-          const nextLabels = applyLabels(labels, [], remove);
-          await this.withGoogleGuard(() =>
-            this.gmail.modifyLabels(sessionId, row.messageId, [], remove),
-          );
-
-          itemPatch.labelsJson = JSON.stringify(nextLabels);
-          itemPatch.unread = false;
-          itemPatch.status = 'processed';
-          itemPatch.lastActionAt = now;
-        } else {
-          throw new BadRequestException(
-            `Action InboxZero non supportée: ${effectiveAction}`,
-          );
-        }
-
-        await this.withInboxZeroDbGuard(() =>
-          this.prisma.inboxZeroItem.update({
-            where: { id: row.id },
-            data: {
-              ...(itemPatch.labelsJson !== undefined
-                ? { labelsJson: itemPatch.labelsJson }
-                : {}),
-              ...(itemPatch.unread !== undefined
-                ? { unread: itemPatch.unread }
-                : {}),
-              ...(itemPatch.status !== undefined
-                ? { status: itemPatch.status }
-                : {}),
-              ...(itemPatch.lastActionAt !== undefined
-                ? { lastActionAt: itemPatch.lastActionAt }
-                : {}),
-            },
-          }),
+            return { messageId: row.messageId, ok: true };
+          },
+          () => ({ messageId: row.messageId, ok: true, simulated: true }),
         );
-
-        return { messageId: row.messageId, ok: true };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         return { messageId: row.messageId, ok: false, error: msg };
@@ -714,12 +755,13 @@ export class InboxZeroService {
           messageId:
             action === 'send_reply' ? (rows[0]?.messageId ?? null) : null,
           actionType: action,
-          status: allOk ? 'completed' : 'failed',
+          status: allOk ? (simulation ? 'simulated' : 'completed') : 'failed',
           errorMessage: allOk ? null : 'Certaines actions ont échoué.',
           payloadJson: JSON.stringify({
             action,
             messageIds,
             archiveAfter,
+            simulation,
             ...(action === 'remind'
               ? {
                   reminderWhen: input.reminderWhen,
