@@ -43,7 +43,16 @@ import {
   TargetResolutionError,
 } from '../../commands/calendar-target';
 import type { Prisma } from '@prisma/client';
-import { prepareCalendarTarget, prepareGmailTargets } from '../tools/tools';
+import {
+  prepareCalendarTarget,
+  prepareGmailTargets,
+  prepareLocalTargets,
+} from '../tools/tools';
+import {
+  freezeLocalTargets,
+  readLocalTargets,
+  requiresLocalTargets,
+} from '../../commands/local-target';
 import {
   freezeGmailTargets,
   readGmailTargets,
@@ -1600,6 +1609,11 @@ export class JarvisService {
   ): Promise<ToolContext> {
     return {
       ...(confirmedCall &&
+      requiresLocalTargets(confirmedCall) &&
+      targets !== undefined
+        ? { frozenLocalTargets: readLocalTargets(confirmedCall, targets) }
+        : {}),
+      ...(confirmedCall &&
       requiresGmailTargets(confirmedCall) &&
       targets !== undefined
         ? { frozenGmailTargets: readGmailTargets(targets) }
@@ -1635,6 +1649,8 @@ export class JarvisService {
     if (calendar) context.frozenCalendarTarget = calendar;
     const gmail = await prepareGmailTargets(context, call);
     if (gmail) context.frozenGmailTargets = gmail;
+    const local = await prepareLocalTargets(context, call);
+    if (local) context.frozenLocalTargets = local;
     const id = await this.pending.create(
       sessionId,
       call,
@@ -1642,7 +1658,9 @@ export class JarvisService {
         ? [freezeCalendarTarget(calendar)]
         : gmail
           ? freezeGmailTargets(gmail)
-          : [],
+          : local
+            ? freezeLocalTargets(local)
+            : [],
     );
     return { id, context };
   }
@@ -1656,6 +1674,9 @@ export class JarvisService {
     if (!TOOL_META[call.name].sideEffect) return runTool(context, call);
     if (requiresGmailTargets(call) && targets === undefined) {
       context.frozenGmailTargets = await prepareGmailTargets(context, call);
+    }
+    if (requiresLocalTargets(call) && targets === undefined) {
+      context.frozenLocalTargets = await prepareLocalTargets(context, call);
     }
     return executeWithPolicy(
       {

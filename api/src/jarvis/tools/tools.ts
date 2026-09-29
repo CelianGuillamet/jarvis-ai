@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import type { ToolOnly } from './tool-registry';
 import { TargetResolutionError } from '../../commands/calendar-target';
 import { requiresGmailTargets } from '../../commands/gmail-target';
+import type { LocalTargets } from '../../commands/local-target';
 import {
   isDeferredCapability,
   DEFERRED_CAPABILITY_MESSAGE,
@@ -554,6 +555,7 @@ export type ToolContext = {
   sessionId: string;
   frozenCalendarTarget?: CalendarEventItem;
   frozenGmailTargets?: GmailMessageItem[];
+  frozenLocalTargets?: LocalTargets;
   calendar: CalendarProvider;
   web: WebProvider;
   weather: WeatherProvider;
@@ -1356,6 +1358,17 @@ export async function previewTool(
   call: Extract<ToolCall, { type: 'tool' }>,
 ): Promise<string | null> {
   if (isDeferredCapability(call.name)) return DEFERRED_CAPABILITY_MESSAGE;
+  if (ctx.frozenLocalTargets) {
+    return (
+      `Cibles (${ctx.frozenLocalTargets.items.length}) :\n` +
+      ctx.frozenLocalTargets.items
+        .map(
+          (item: LocalTargets['items'][number]) =>
+            `- ${compactText(item.text, 160)}`,
+        )
+        .join('\n')
+    );
+  }
   try {
     const { prisma, tz, sessionId } = ctx;
 
@@ -2228,10 +2241,127 @@ export async function prepareGmailTargets(ctx: ToolContext, call: ToolOnly) {
   return [target];
 }
 
+export async function prepareLocalTargets(
+  ctx: ToolContext,
+  call: ToolOnly,
+): Promise<LocalTargets | undefined> {
+  const resolve = createToolResolvers(ctx);
+  let targets: LocalTargets;
+  switch (call.name) {
+    case 'todo.done':
+    case 'todo.reopen':
+    case 'todo.update':
+    case 'todo.delete': {
+      const { row, error } = await resolve.resolveTodo(
+        call.args.query,
+        call.name === 'todo.done'
+          ? false
+          : call.name === 'todo.reopen'
+            ? true
+            : undefined,
+      );
+      if (error) throw new TargetResolutionError(error);
+      targets = { kind: 'todo', items: row ? [row] : [] };
+      break;
+    }
+    case 'todo.bulk_done':
+    case 'todo.bulk_delete': {
+      const { rows, error } = resolve.resolveTodoRefs(
+        call.args.refs,
+        call.name === 'todo.bulk_done' ? false : undefined,
+      );
+      if (error) throw new TargetResolutionError(error);
+      targets = { kind: 'todo', items: rows };
+      break;
+    }
+    case 'todo.done_all':
+    case 'todo.clear_done':
+    case 'todo.clear_all':
+      targets = {
+        kind: 'todo',
+        items: await ctx.prisma.todo.findMany({
+          where:
+            call.name === 'todo.clear_all'
+              ? {}
+              : { done: call.name === 'todo.clear_done' },
+          select: { id: true, text: true, done: true },
+          take: 201,
+          orderBy: { id: 'asc' },
+        }),
+      };
+      break;
+    case 'shopping.bought':
+    case 'shopping.unbought':
+    case 'shopping.update':
+    case 'shopping.delete': {
+      const { row, error } = await resolve.resolveShopping(
+        call.args.query,
+        call.name === 'shopping.bought'
+          ? false
+          : call.name === 'shopping.unbought'
+            ? true
+            : undefined,
+      );
+      if (error) throw new TargetResolutionError(error);
+      targets = { kind: 'shopping', items: row ? [row] : [] };
+      break;
+    }
+    case 'shopping.bulk_bought':
+    case 'shopping.bulk_delete': {
+      const { rows, error } = resolve.resolveShoppingRefs(
+        call.args.refs,
+        call.name === 'shopping.bulk_bought' ? false : undefined,
+      );
+      if (error) throw new TargetResolutionError(error);
+      targets = { kind: 'shopping', items: rows };
+      break;
+    }
+    case 'shopping.bought_all':
+    case 'shopping.clear_bought':
+    case 'shopping.clear_all':
+      targets = {
+        kind: 'shopping',
+        items: await ctx.prisma.shoppingItem.findMany({
+          where:
+            call.name === 'shopping.clear_all'
+              ? {}
+              : { bought: call.name === 'shopping.clear_bought' },
+          select: { id: true, text: true, bought: true },
+          take: 201,
+          orderBy: { id: 'asc' },
+        }),
+      };
+      break;
+    case 'note.update':
+    case 'note.delete': {
+      const { row, error } = await resolve.resolveNote(call.args.query);
+      if (error) throw new TargetResolutionError(error);
+      targets = { kind: 'note', items: row ? [row] : [] };
+      break;
+    }
+    default:
+      return undefined;
+  }
+  if (!targets.items.length)
+    throw new TargetResolutionError(
+      'Aucun élément ciblé. Précise les éléments à modifier.',
+    );
+  if (targets.items.length > 200)
+    throw new TargetResolutionError(
+      'La sélection dépasse 200 éléments. Réduis-la avant de confirmer.',
+    );
+  return targets;
+}
+
 function createToolResolvers(ctx: ToolContext) {
   const { prisma, tz, sessionId } = ctx;
 
   const resolveTodo = async (query: string, done?: boolean) => {
+    if (ctx.frozenLocalTargets?.kind === 'todo')
+      return {
+        row: ctx.frozenLocalTargets.items[0],
+        error: null as string | null,
+      };
     const ref = parseNumberRef(query);
     if (ref !== null) {
       const list = getLastTodoList(sessionId);
@@ -2279,6 +2409,11 @@ function createToolResolvers(ctx: ToolContext) {
   };
 
   const resolveTodoRefs = (refs: number[], done?: boolean) => {
+    if (ctx.frozenLocalTargets?.kind === 'todo')
+      return {
+        rows: ctx.frozenLocalTargets.items,
+        error: null as string | null,
+      };
     const cleaned = cleanRefs(refs);
     if (!cleaned.length) {
       return {
@@ -2321,6 +2456,11 @@ function createToolResolvers(ctx: ToolContext) {
   };
 
   const resolveShopping = async (query: string, bought?: boolean) => {
+    if (ctx.frozenLocalTargets?.kind === 'shopping')
+      return {
+        row: ctx.frozenLocalTargets.items[0],
+        error: null as string | null,
+      };
     const ref = parseNumberRef(query);
     if (ref !== null) {
       const list = getLastShoppingList(sessionId);
@@ -2371,6 +2511,11 @@ function createToolResolvers(ctx: ToolContext) {
   };
 
   const resolveShoppingRefs = (refs: number[], bought?: boolean) => {
+    if (ctx.frozenLocalTargets?.kind === 'shopping')
+      return {
+        rows: ctx.frozenLocalTargets.items,
+        error: null as string | null,
+      };
     const cleaned = cleanRefs(refs);
     if (!cleaned.length) {
       return {
@@ -2413,6 +2558,11 @@ function createToolResolvers(ctx: ToolContext) {
   };
 
   const resolveNote = async (query: string) => {
+    if (ctx.frozenLocalTargets?.kind === 'note')
+      return {
+        row: ctx.frozenLocalTargets.items[0],
+        error: null as string | null,
+      };
     const ref = parseNumberRef(query);
     if (ref !== null) {
       const list = getLastNoteList(sessionId);
@@ -2933,6 +3083,14 @@ export async function runTool(
   if (call.type === 'tool' && isDeferredCapability(call.name))
     return DEFERRED_CAPABILITY_MESSAGE;
   const { prisma, tz, sessionId } = ctx;
+  const todoSelection =
+    ctx.frozenLocalTargets?.kind === 'todo'
+      ? { id: { in: ctx.frozenLocalTargets.items.map((item) => item.id) } }
+      : {};
+  const shoppingSelection =
+    ctx.frozenLocalTargets?.kind === 'shopping'
+      ? { id: { in: ctx.frozenLocalTargets.items.map((item) => item.id) } }
+      : {};
   const {
     resolveTodo,
     resolveTodoRefs,
@@ -3039,13 +3197,13 @@ export async function runTool(
 
         case 'todo.done_all': {
           const before = await prisma.todo.findMany({
-            where: { done: false },
+            where: { ...todoSelection, done: false },
             select: { id: true, done: true, doneAt: true },
           });
           if (!before.length) return 'Aucun todo ouvert à terminer.';
 
           await prisma.todo.updateMany({
-            where: { done: false },
+            where: { ...todoSelection, done: false },
             data: { done: true, doneAt: new Date() },
           });
           for (const row of before)
@@ -3196,7 +3354,7 @@ export async function runTool(
 
         case 'todo.clear_done': {
           const before = await prisma.todo.findMany({
-            where: { done: true },
+            where: { ...todoSelection, done: true },
             select: {
               id: true,
               text: true,
@@ -3207,7 +3365,9 @@ export async function runTool(
           });
           if (!before.length) return 'Aucun todo terminé à supprimer.';
 
-          await prisma.todo.deleteMany({ where: { done: true } });
+          await prisma.todo.deleteMany({
+            where: { ...todoSelection, done: true },
+          });
           for (const row of before) removeTodoFromCache(sessionId, row.id);
 
           rememberUndo(
@@ -3231,6 +3391,7 @@ export async function runTool(
 
         case 'todo.clear_all': {
           const before = await prisma.todo.findMany({
+            where: todoSelection,
             select: {
               id: true,
               text: true,
@@ -3241,7 +3402,7 @@ export async function runTool(
           });
           if (!before.length) return 'Aucun todo à supprimer.';
 
-          await prisma.todo.deleteMany({});
+          await prisma.todo.deleteMany({ where: todoSelection });
           LAST_TODO_LIST.delete(sessionId);
 
           rememberUndo(
@@ -3767,13 +3928,13 @@ export async function runTool(
 
         case 'shopping.bought_all': {
           const before = await prisma.shoppingItem.findMany({
-            where: { bought: false },
+            where: { ...shoppingSelection, bought: false },
             select: { id: true, bought: true, boughtAt: true },
           });
           if (!before.length) return 'Aucun article non acheté à marquer.';
 
           await prisma.shoppingItem.updateMany({
-            where: { bought: false },
+            where: { ...shoppingSelection, bought: false },
             data: { bought: true, boughtAt: new Date() },
           });
           for (const row of before) {
@@ -3929,7 +4090,7 @@ export async function runTool(
 
         case 'shopping.clear_bought': {
           const before = await prisma.shoppingItem.findMany({
-            where: { bought: true },
+            where: { ...shoppingSelection, bought: true },
             select: {
               id: true,
               text: true,
@@ -3940,7 +4101,9 @@ export async function runTool(
           });
           if (!before.length) return 'Aucun article acheté à supprimer.';
 
-          await prisma.shoppingItem.deleteMany({ where: { bought: true } });
+          await prisma.shoppingItem.deleteMany({
+            where: { ...shoppingSelection, bought: true },
+          });
           for (const row of before) removeShoppingFromCache(sessionId, row.id);
 
           rememberUndo(
@@ -3964,6 +4127,7 @@ export async function runTool(
 
         case 'shopping.clear_all': {
           const before = await prisma.shoppingItem.findMany({
+            where: shoppingSelection,
             select: {
               id: true,
               text: true,
@@ -3974,7 +4138,7 @@ export async function runTool(
           });
           if (!before.length) return 'Aucun article à supprimer.';
 
-          await prisma.shoppingItem.deleteMany({});
+          await prisma.shoppingItem.deleteMany({ where: shoppingSelection });
           LAST_SHOPPING_LIST.delete(sessionId);
 
           rememberUndo(

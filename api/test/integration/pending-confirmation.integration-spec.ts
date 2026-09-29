@@ -12,6 +12,9 @@ describe('Durable pending confirmations', () => {
     name: 'todo.delete',
     args: { query: 'fixture-target' },
   };
+  const localTargets = [
+    { kind: 'todo', id: 'fixture-target', text: 'Fixture', done: false },
+  ];
   let session: string;
   let foreign: string;
   beforeAll(async () => {
@@ -29,7 +32,7 @@ describe('Durable pending confirmations', () => {
   });
 
   it('claims once concurrently and replays the persisted response after restart', async () => {
-    const id = await pending.create(session, call);
+    const id = await pending.create(session, call, localTargets);
     const claims = await Promise.all(
       Array.from({ length: 6 }, () => pending.consume(id, session)),
     );
@@ -123,9 +126,9 @@ describe('Durable pending confirmations', () => {
   });
 
   it('preserves a claimed intent across crashes and subsequent proposals', async () => {
-    const id = await pending.create(session, call);
+    const id = await pending.create(session, call, localTargets);
     expect(await pending.consume(id, session)).not.toBeNull();
-    await pending.create(session, call);
+    await pending.create(session, call, localTargets);
     expect(await pending.consume(id, session)).toBeNull();
     expect((await pending.replay(id, session))?.meta.commandState).toBe(
       'executing',
@@ -142,8 +145,8 @@ describe('Durable pending confirmations', () => {
   });
 
   it('serializes cancellation versus claims and retains superseded proposals', async () => {
-    const old = await pending.create(session, call);
-    const id = await pending.create(session, call);
+    const old = await pending.create(session, call, localTargets);
+    const id = await pending.create(session, call, localTargets);
     expect(
       (await prisma.command.findUniqueOrThrow({ where: { id: old } })).state,
     ).toBe('cancelled');
@@ -161,7 +164,7 @@ describe('Durable pending confirmations', () => {
       prisma,
       new ConfigService({ PENDING_TTL_MINUTES: 0.01 }),
     );
-    const id = await fast.create(session, call);
+    const id = await fast.create(session, call, localTargets);
     await prisma.$queryRaw`SELECT 1 FROM pg_sleep(0.8)`;
     expect(await fast.consume(id, session)).toBeNull();
     expect(
@@ -176,7 +179,7 @@ describe('Durable pending confirmations', () => {
       prisma,
       new ConfigService({ PENDING_TTL_MINUTES: 0.02 }),
     );
-    const id = await fast.create(session, call);
+    const id = await fast.create(session, call, localTargets);
     let acquired!: () => void;
     const locked = new Promise<void>((resolve) => {
       acquired = resolve;
