@@ -378,6 +378,90 @@ describe('API against disposable migrated PostgreSQL', () => {
     }
   });
 
+  it('requires a fresh Inbox scan after a Google account change or a legacy unbound scan', async () => {
+    const ownerId = 'origin-inbox-user';
+    await prisma.betaInvite.create({
+      data: { email: `${ownerId}@example.invalid` },
+    });
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        name: 'Origin',
+        email: `${ownerId}@example.invalid`,
+        emailVerified: true,
+      },
+    });
+    const token = 'origin-inbox-session-token';
+    await prisma.session.create({
+      data: {
+        id: token,
+        token,
+        userId: ownerId,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const sessionId = await app
+      .get(ConversationService)
+      .resolve(ownerId, 'origin-inbox');
+    await app
+      .get(GoogleCredentialService)
+      .save(ownerId, 'origin-subject', sessionId, {
+        refresh_token: 'fixture-token',
+        scope: scopes,
+      });
+    await request(baseUrl)
+      .post('/inbox-zero/scan')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId })
+      .expect(201);
+    const account = await prisma.integrationAccount.findFirstOrThrow({
+      where: { ownerId, provider: 'google' },
+    });
+    const modifications = gmail.modifyLabels.mock.calls.length;
+    try {
+      await prisma.integrationAccount.update({
+        where: { id: account.id },
+        data: { providerSubject: 'replacement-subject' },
+      });
+      const changed = await request(baseUrl)
+        .post('/inbox-zero/apply')
+        .set('Cookie', cookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ sessionId, action: 'archive', messageIds: ['fixture-message'] })
+        .expect(201);
+      expect(
+        (changed.body as { results: { ok: boolean }[] }).results[0].ok,
+      ).toBe(false);
+    } finally {
+      await prisma.integrationAccount.update({
+        where: { id: account.id },
+        data: { providerSubject: account.providerSubject },
+      });
+    }
+    await prisma.inboxZeroItem.updateMany({
+      where: { sessionId },
+      data: { googleAccountId: null, googleAccountSubject: null },
+    });
+    const legacy = await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId, action: 'archive', messageIds: ['fixture-message'] })
+      .expect(201);
+    expect((legacy.body as { results: { ok: boolean }[] }).results[0].ok).toBe(
+      false,
+    );
+    expect(gmail.modifyLabels.mock.calls.length).toBe(modifications);
+    expect(
+      await prisma.command.count({ where: { conversationId: sessionId } }),
+    ).toBe(0);
+  });
+
   it('simulates Inbox mutations without touching providers or marking messages processed', async () => {
     const sessionId = await app
       .get(ConversationService)

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Inject,
   Logger,
@@ -193,12 +194,24 @@ export class InboxZeroService {
     const shouldRefresh = input.refresh ?? !session.scannedAt;
 
     if (shouldRefresh) {
+      const { ownerId } = await this.prisma.forConversation(sessionId);
+      const account = await loadGoogleAccount(this.prisma, ownerId);
+      if (!account)
+        throw new ConflictException(
+          'Reconnecte Google avant de scanner les emails.',
+        );
       const now = new Date();
       const messages = await this.withGoogleGuard(() =>
-        this.gmail.listMessages(sessionId, {
-          q: nextQuery,
-          maxResults: limit,
-        }),
+        withGoogleAccountBinding(sessionId, account, () =>
+          this.gmail.listMessages(sessionId, {
+            q: nextQuery,
+            maxResults: limit,
+          }),
+        ),
+      );
+      assertSameGoogleAccount(
+        account,
+        await loadGoogleAccount(this.prisma, ownerId),
       );
 
       await this.withInboxZeroDbGuard(async () => {
@@ -212,6 +225,8 @@ export class InboxZeroService {
             where: { sessionId_messageId: { sessionId, messageId: m.id } },
             create: {
               sessionId,
+              googleAccountId: account.id,
+              googleAccountSubject: account.providerSubject,
               messageId: m.id,
               threadId: m.threadId,
               subject: m.subject,
@@ -230,6 +245,8 @@ export class InboxZeroService {
               lastActionAt: null,
             },
             update: {
+              googleAccountId: account.id,
+              googleAccountSubject: account.providerSubject,
               threadId: m.threadId,
               subject: m.subject,
               from: m.from,
@@ -481,10 +498,12 @@ export class InboxZeroService {
       throw new BadRequestException('messageIds vides.');
     }
 
-    const rows = (await this.withInboxZeroDbGuard(() =>
+    const rows = await this.withInboxZeroDbGuard(() =>
       this.prisma.inboxZeroItem.findMany({
         where: { sessionId, messageId: { in: messageIds } },
         select: {
+          googleAccountId: true,
+          googleAccountSubject: true,
           id: true,
           messageId: true,
           threadId: true,
@@ -504,7 +523,7 @@ export class InboxZeroService {
           lastActionAt: true,
         },
       }),
-    )) as unknown as RawItemRow[];
+    );
 
     const foundIds = new Set(rows.map((r) => r.messageId));
     const missing = messageIds.filter((id) => !foundIds.has(id));
@@ -536,6 +555,17 @@ export class InboxZeroService {
           : action;
 
       try {
+        if (!row.googleAccountId || !row.googleAccountSubject)
+          throw new ConflictException(
+            'Relance le scan Inbox avant cette action.',
+          );
+        assertSameGoogleAccount(
+          {
+            id: row.googleAccountId,
+            providerSubject: row.googleAccountSubject,
+          },
+          googleAccount,
+        );
         if (
           action === 'apply_recommended' &&
           (effectiveAction === 'draft_reply' ||

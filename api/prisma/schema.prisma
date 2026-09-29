@@ -428,6 +428,8 @@ model InboxZeroSession {
 model InboxZeroItem {
   id           String   @id @default(uuid())
   sessionId    String
+  googleAccountId String?
+  googleAccountSubject String?
   messageId    String
   threadId     String
   subject      String
