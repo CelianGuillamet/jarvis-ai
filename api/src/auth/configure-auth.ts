@@ -3,7 +3,7 @@ import { AuthService } from './auth.service';
 import { isTrustedMutationOrigin } from './auth-policy';
 import type { Request, Response, NextFunction } from 'express';
 
-/** Call before app.init/listen so auth reads the unconsumed request stream. */
+/** Call after bounded parsers and before app.init/listen. */
 export async function configureAuth(
   app: NestExpressApplication,
 ): Promise<void> {

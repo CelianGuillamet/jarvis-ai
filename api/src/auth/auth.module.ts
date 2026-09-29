@@ -5,6 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthService } from './auth.service';
 import { SessionGuard } from './session.guard';
 import { ConversationService } from './conversation.service';
+import { RequestQuotaService } from '../http/request-quota.service';
 
 @Module({
   imports: [PrismaModule],
@@ -12,8 +13,9 @@ import { ConversationService } from './conversation.service';
   providers: [
     AuthService,
     ConversationService,
+    RequestQuotaService,
     { provide: APP_GUARD, useClass: SessionGuard },
   ],
-  exports: [AuthService, ConversationService],
+  exports: [AuthService, ConversationService, RequestQuotaService],
 })
 export class AuthModule {}

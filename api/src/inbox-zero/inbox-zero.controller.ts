@@ -15,6 +15,7 @@ import { InboxZeroDraftReplyDto } from './dto/inbox-zero-draft-reply.dto';
 import { InboxZeroScanDto } from './dto/inbox-zero-scan.dto';
 import { InboxZeroStepDto } from './dto/inbox-zero-step.dto';
 import { InboxZeroService } from './inbox-zero.service';
+import { ConversationQueryDto, MessageQueryDto } from '../http/query.dto';
 
 @Controller('inbox-zero')
 export class InboxZeroController {
@@ -40,10 +41,13 @@ export class InboxZeroController {
   @Get('session')
   async session(
     @Req() request: AuthenticatedRequest,
-    @Query('sessionId') sessionId?: string,
+    @Query() query: ConversationQueryDto,
   ) {
     return this.inboxZero.getSession(
-      await this.conversations.resolve(request.identity.userId, sessionId),
+      await this.conversations.resolve(
+        request.identity.userId,
+        query.sessionId,
+      ),
     );
   }
 
@@ -75,9 +79,9 @@ export class InboxZeroController {
   @Get('message')
   async message(
     @Req() request: AuthenticatedRequest,
-    @Query('sessionId') sessionId: string | undefined,
-    @Query('messageId') messageId: string | undefined,
+    @Query() query: MessageQueryDto,
   ) {
+    const { sessionId, messageId } = query;
     if (!messageId?.trim()) throw new BadRequestException('messageId manquant');
     return this.inboxZero.getMessage(
       await this.conversations.resolve(request.identity.userId, sessionId),

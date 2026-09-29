@@ -10,12 +10,14 @@ import { InboxZeroModule } from './inbox-zero/inbox-zero.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { validateRuntimeConfig } from './config/runtime-config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: process.env.NODE_ENV === 'test',
+      validate: validateRuntimeConfig,
     }),
     PrismaModule,
     AuthModule,

@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from '../auth/session.guard';
 import { JarvisService } from './services/jarvis.service';
 import { ChatDto } from './dto/chat.dto';
 import { ConfirmDto } from './dto/confirm.dto';
+import { ConversationQueryDto } from '../http/query.dto';
 
 @Controller('jarvis')
 export class JarvisController {
@@ -34,10 +35,13 @@ export class JarvisController {
   @Get('status')
   async status(
     @Req() request: AuthenticatedRequest,
-    @Query('sessionId') sessionId?: string,
+    @Query() query: ConversationQueryDto,
   ) {
     return this.jarvis.status(
-      await this.conversations.resolve(request.identity.userId, sessionId),
+      await this.conversations.resolve(
+        request.identity.userId,
+        query.sessionId,
+      ),
     );
   }
 }
