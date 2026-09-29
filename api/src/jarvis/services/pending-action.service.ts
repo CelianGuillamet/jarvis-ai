@@ -7,6 +7,10 @@ import { CommandJournalService } from '../../commands/command-journal.service';
 import type { ToolOnly } from '../tools/tool-registry';
 import { normalizeToolOnlyCall } from '../tools/tool-call';
 import { readCalendarTarget } from '../../commands/calendar-target';
+import {
+  readGmailTargets,
+  requiresGmailTargets,
+} from '../../commands/gmail-target';
 
 export type ConfirmationReplay = {
   text: string;
@@ -31,6 +35,15 @@ export class PendingActionsService {
       name: row.toolName,
       args: row.arguments,
     });
+    if (call && requiresGmailTargets(call)) {
+      try {
+        const targets = readGmailTargets(row.targets);
+        if (call.name !== 'gmail.bulk_mark_read' && targets.length !== 1)
+          return null;
+      } catch {
+        return null;
+      }
+    }
     if (call?.name === 'calendar.update' || call?.name === 'calendar.delete') {
       try {
         readCalendarTarget(row.targets);

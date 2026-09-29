@@ -43,7 +43,12 @@ import {
   TargetResolutionError,
 } from '../../commands/calendar-target';
 import type { Prisma } from '@prisma/client';
-import { prepareCalendarTarget } from '../tools/tools';
+import { prepareCalendarTarget, prepareGmailTargets } from '../tools/tools';
+import {
+  freezeGmailTargets,
+  readGmailTargets,
+  requiresGmailTargets,
+} from '../../commands/gmail-target';
 import { resolveRange } from '../lib/resolve-range';
 import { resolveWhenWindow } from '../lib/resolve-when';
 import { planCalendarWrite } from '../lib/calendar-intent';
@@ -1594,6 +1599,11 @@ export class JarvisService {
     targets?: Prisma.JsonValue,
   ): Promise<ToolContext> {
     return {
+      ...(confirmedCall &&
+      requiresGmailTargets(confirmedCall) &&
+      targets !== undefined
+        ? { frozenGmailTargets: readGmailTargets(targets) }
+        : {}),
       ...(confirmedCall?.name === 'calendar.update' ||
       confirmedCall?.name === 'calendar.delete'
         ? { frozenCalendarTarget: readCalendarTarget(targets) }
@@ -1623,10 +1633,16 @@ export class JarvisService {
     const context = await this.buildToolContext(sessionId);
     const calendar = await prepareCalendarTarget(context, call);
     if (calendar) context.frozenCalendarTarget = calendar;
+    const gmail = await prepareGmailTargets(context, call);
+    if (gmail) context.frozenGmailTargets = gmail;
     const id = await this.pending.create(
       sessionId,
       call,
-      calendar ? [freezeCalendarTarget(calendar)] : [],
+      calendar
+        ? [freezeCalendarTarget(calendar)]
+        : gmail
+          ? freezeGmailTargets(gmail)
+          : [],
     );
     return { id, context };
   }
@@ -1638,6 +1654,9 @@ export class JarvisService {
   ) {
     const context = await this.buildToolContext(sessionId, call, targets);
     if (!TOOL_META[call.name].sideEffect) return runTool(context, call);
+    if (requiresGmailTargets(call) && targets === undefined) {
+      context.frozenGmailTargets = await prepareGmailTargets(context, call);
+    }
     return executeWithPolicy(
       {
         ownerId: context.prisma.ownerId,

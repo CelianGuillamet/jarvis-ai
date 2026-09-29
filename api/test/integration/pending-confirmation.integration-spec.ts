@@ -92,6 +92,36 @@ describe('Durable pending confirmations', () => {
     ).toEqual([expected]);
   });
 
+  it('requires durable Gmail target snapshots and preserves bulk selection after restart', async () => {
+    const gmailCall: ToolOnly = {
+      type: 'tool',
+      name: 'gmail.bulk_mark_read',
+      args: { refs: [1, 2] },
+    };
+    const targets = ['mail-a', 'mail-b'].map((id) => ({
+      kind: 'gmail',
+      id,
+      threadId: id,
+      subject: id,
+      from: 'sender@example.invalid',
+      to: 'recipient@example.invalid',
+      date: '2026-10-01T10:00:00Z',
+      snippet: '',
+      labels: ['UNREAD'],
+      unread: true,
+    }));
+    const id = await pending.create(session, gmailCall, targets);
+    const restarted = new PendingActionsService(prisma, new ConfigService());
+    expect((await restarted.peek(id, session))?.targets).toEqual(targets);
+    expect((await restarted.consume(id, session))?.targets).toEqual(targets);
+    const legacy = await pending.create(session, gmailCall);
+    expect(await restarted.peek(legacy, session)).toBeNull();
+    expect(await restarted.consume(legacy, session)).toBeNull();
+    expect(
+      (await prisma.command.findUniqueOrThrow({ where: { id: legacy } })).state,
+    ).toBe('cancelled');
+  });
+
   it('preserves a claimed intent across crashes and subsequent proposals', async () => {
     const id = await pending.create(session, call);
     expect(await pending.consume(id, session)).not.toBeNull();

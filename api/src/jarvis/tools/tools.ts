@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import type { ToolOnly } from './tool-registry';
 import { TargetResolutionError } from '../../commands/calendar-target';
+import { requiresGmailTargets } from '../../commands/gmail-target';
 import {
   isDeferredCapability,
   DEFERRED_CAPABILITY_MESSAGE,
@@ -552,6 +553,7 @@ export type ToolContext = {
   tz: string;
   sessionId: string;
   frozenCalendarTarget?: CalendarEventItem;
+  frozenGmailTargets?: GmailMessageItem[];
   calendar: CalendarProvider;
   web: WebProvider;
   weather: WeatherProvider;
@@ -1470,6 +1472,10 @@ export async function previewTool(
     };
 
     const previewGmailByArgs = (args: { ref?: number; query?: string }) => {
+      if (ctx.frozenGmailTargets?.length === 1) {
+        const item = ctx.frozenGmailTargets[0];
+        return `${formatMailDate(item.date, tz)} — ${item.subject} (${item.from})`;
+      }
       const explicitRef =
         typeof args.ref === 'number' && Number.isInteger(args.ref)
           ? args.ref
@@ -1507,6 +1513,14 @@ export async function previewTool(
       }
 
       case 'gmail.bulk_mark_read': {
+        if (ctx.frozenGmailTargets) {
+          return (
+            `${ctx.frozenGmailTargets.length} emails :\n` +
+            ctx.frozenGmailTargets
+              .map((item) => `- ${item.subject} (${item.from})`)
+              .join('\n')
+          );
+        }
         const unreadOnly = call.args.unreadOnly ?? true;
         const limit = Math.min(Math.max(call.args.limit ?? 50, 1), 50);
         const list = getLastGmailList(sessionId);
@@ -2171,6 +2185,49 @@ function cleanRefs(refs: number[]) {
   return out;
 }
 
+function resolveGmailBatch(
+  ctx: ToolContext,
+  args: Extract<ToolOnly, { name: 'gmail.bulk_mark_read' }>['args'],
+) {
+  if (ctx.frozenGmailTargets) return ctx.frozenGmailTargets;
+  const list = getLastGmailList(ctx.sessionId);
+  if (!list.length)
+    throw new TargetResolutionError(
+      'Je n’ai pas de liste récente d’emails. Demande d’abord "liste mes emails".',
+    );
+  const picked = args.refs?.length
+    ? args.refs.map((ref) => {
+        const item = list[ref - 1];
+        if (!item)
+          throw new TargetResolutionError(
+            `Numéro invalide (#${ref}). Donne-moi un numéro entre 1 et ${list.length}.`,
+          );
+        return item;
+      })
+    : list;
+  const unique = [...new Map(picked.map((item) => [item.id, item])).values()];
+  const items = unique
+    .filter((item) => !(args.unreadOnly ?? true) || item.unread)
+    .slice(0, Math.min(Math.max(args.limit ?? 50, 1), 50));
+  if (!items.length)
+    throw new TargetResolutionError(
+      'Aucun email dans la sélection à marquer comme lu.',
+    );
+  return items;
+}
+
+export async function prepareGmailTargets(ctx: ToolContext, call: ToolOnly) {
+  if (!requiresGmailTargets(call)) return undefined;
+  if (call.name === 'gmail.bulk_mark_read')
+    return resolveGmailBatch(ctx, call.args);
+  const { target, error } = await createToolResolvers(ctx).resolveGmailTarget(
+    call.args,
+  );
+  if (error || !target)
+    throw new TargetResolutionError(error || 'Aucun email ciblé.');
+  return [target];
+}
+
 function createToolResolvers(ctx: ToolContext) {
   const { prisma, tz, sessionId } = ctx;
 
@@ -2572,6 +2629,12 @@ function createToolResolvers(ctx: ToolContext) {
   };
 
   const resolveGmailTarget = async (args: { ref?: number; query?: string }) => {
+    if (ctx.frozenGmailTargets?.length === 1) {
+      return {
+        target: ctx.frozenGmailTargets[0],
+        error: null as string | null,
+      };
+    }
     const explicitRef =
       typeof args.ref === 'number' && Number.isInteger(args.ref)
         ? args.ref
@@ -4288,42 +4351,7 @@ export async function runTool(
         }
 
         case 'gmail.bulk_mark_read': {
-          const unreadOnly = call.args.unreadOnly ?? true;
-          const limit = Math.min(Math.max(call.args.limit ?? 50, 1), 50);
-
-          const list = getLastGmailList(sessionId);
-          if (!list.length) {
-            return 'Je n’ai pas de liste récente d’emails. Demande d’abord "liste mes emails".';
-          }
-
-          const selected = (() => {
-            const refs = call.args.refs?.length ? call.args.refs : null;
-            if (!refs) return { items: list };
-            const items: GmailListItem[] = [];
-            for (const ref of refs) {
-              const idx = ref - 1;
-              const item = list[idx];
-              if (!item) {
-                return {
-                  error: `Numéro invalide (#${ref}). Donne-moi un numéro entre 1 et ${list.length}.`,
-                };
-              }
-              items.push(item);
-            }
-            return { items };
-          })();
-
-          if ('error' in selected) return (selected as { error: string }).error;
-          let items = (selected as { items: GmailListItem[] }).items;
-          if (unreadOnly) items = items.filter((item) => item.unread);
-          if (items.length > limit) items = items.slice(0, limit);
-
-          if (!items.length) {
-            return unreadOnly
-              ? 'Aucun email non lu à marquer comme lu.'
-              : 'Aucun email à marquer comme lu.';
-          }
-
+          const items = resolveGmailBatch(ctx, call.args);
           if (ctx.simulation) {
             const sample = items
               .slice(0, 6)
