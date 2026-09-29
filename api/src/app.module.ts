@@ -11,6 +11,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { validateRuntimeConfig } from './config/runtime-config';
+import { CommandJournalModule } from './commands/command-journal.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { validateRuntimeConfig } from './config/runtime-config';
       validate: validateRuntimeConfig,
     }),
     PrismaModule,
+    CommandJournalModule,
     AuthModule,
     CalendarModule,
     GmailModule,
