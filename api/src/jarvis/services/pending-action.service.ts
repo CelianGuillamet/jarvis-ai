@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CommandJournalService } from '../../commands/command-journal.service';
 import type { ToolOnly } from '../tools/tool-registry';
 import { normalizeToolOnlyCall } from '../tools/tool-call';
+import { readCalendarTarget } from '../../commands/calendar-target';
 
 export type ConfirmationReplay = {
   text: string;
@@ -30,7 +31,21 @@ export class PendingActionsService {
       name: row.toolName,
       args: row.arguments,
     });
-    return call ? { id: row.id, sessionId: row.conversationId, call } : null;
+    if (call?.name === 'calendar.update' || call?.name === 'calendar.delete') {
+      try {
+        readCalendarTarget(row.targets);
+      } catch {
+        return null;
+      }
+    }
+    return call
+      ? {
+          id: row.id,
+          sessionId: row.conversationId,
+          call,
+          targets: row.targets,
+        }
+      : null;
   }
 
   private async owner(sessionId?: string) {
@@ -49,11 +64,18 @@ export class PendingActionsService {
     return rows[0].ownerId;
   }
 
-  async create(sessionId: string, call: ToolOnly) {
+  async create(
+    sessionId: string,
+    call: ToolOnly,
+    targets: Prisma.InputJsonObject[] = [],
+  ) {
     const args = JSON.parse(
       JSON.stringify(call.args),
     ) as Prisma.InputJsonObject;
     const name = call.name;
+    const targetSnapshot = JSON.parse(
+      JSON.stringify(targets),
+    ) as Prisma.InputJsonObject[];
     const expiresAt = new Date(
       Date.now() + Number(this.config.get('PENDING_TTL_MINUTES') ?? 10) * 60000,
     );
@@ -72,7 +94,7 @@ export class PendingActionsService {
         toolName: name,
         toolVersion: '1',
         arguments: args,
-        targets: [],
+        targets: targetSnapshot,
         expiresAt,
       });
       await journal.advance(ownerId, row.id, row.revision, 'waiting');

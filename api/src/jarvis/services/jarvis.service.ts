@@ -37,6 +37,13 @@ import { normalizeToolOnlyCall, parseToolCall } from '../tools/tool-call';
 import { gateToolCall } from '../tools/tool-engine';
 import { TOOL_META } from '../tools/tool-registry';
 import { executeWithPolicy } from '../../commands/execution-policy';
+import {
+  freezeCalendarTarget,
+  readCalendarTarget,
+  TargetResolutionError,
+} from '../../commands/calendar-target';
+import type { Prisma } from '@prisma/client';
+import { prepareCalendarTarget } from '../tools/tools';
 import { resolveRange } from '../lib/resolve-range';
 import { resolveWhenWindow } from '../lib/resolve-when';
 import { planCalendarWrite } from '../lib/calendar-intent';
@@ -1581,8 +1588,16 @@ export class JarvisService {
     });
   }
 
-  private async buildToolContext(sessionId: string): Promise<ToolContext> {
+  private async buildToolContext(
+    sessionId: string,
+    confirmedCall?: ToolOnly,
+    targets?: Prisma.JsonValue,
+  ): Promise<ToolContext> {
     return {
+      ...(confirmedCall?.name === 'calendar.update' ||
+      confirmedCall?.name === 'calendar.delete'
+        ? { frozenCalendarTarget: readCalendarTarget(targets) }
+        : {}),
       prisma: await this.prisma.forConversation(sessionId),
       memory: this.memoryStore,
       simulation: this.simulation,
@@ -1604,8 +1619,24 @@ export class JarvisService {
     };
   }
 
-  private async executeTool(sessionId: string, call: ToolOnly) {
+  private async preparePending(sessionId: string, call: ToolOnly) {
     const context = await this.buildToolContext(sessionId);
+    const calendar = await prepareCalendarTarget(context, call);
+    if (calendar) context.frozenCalendarTarget = calendar;
+    const id = await this.pending.create(
+      sessionId,
+      call,
+      calendar ? [freezeCalendarTarget(calendar)] : [],
+    );
+    return { id, context };
+  }
+
+  private async executeTool(
+    sessionId: string,
+    call: ToolOnly,
+    targets?: Prisma.JsonValue,
+  ) {
+    const context = await this.buildToolContext(sessionId, call, targets);
     if (!TOOL_META[call.name].sideEffect) return runTool(context, call);
     return executeWithPolicy(
       {
@@ -1747,7 +1778,11 @@ export class JarvisService {
 
     const pendingPreview = pendingAction
       ? await previewTool(
-          await this.buildToolContext(resolvedSessionId),
+          await this.buildToolContext(
+            resolvedSessionId,
+            pendingAction.call,
+            pendingAction.targets,
+          ),
           pendingAction.call,
         )
       : null;
@@ -3123,14 +3158,19 @@ export class JarvisService {
           await this.auditStore.markSessionPendingAsSuperseded(
             resolvedSessionId,
           );
-          const actionId = await this.pending.create(
+          const { id: actionId, context } = await this.preparePending(
             resolvedSessionId,
             correctedPendingCall,
           );
-          const correctedPendingView = this.buildPendingActionView(profile, {
-            id: actionId,
-            call: correctedPendingCall,
-          });
+          const preview = await previewTool(context, correctedPendingCall);
+          const correctedPendingView = this.buildPendingActionView(
+            profile,
+            {
+              id: actionId,
+              call: correctedPendingCall,
+            },
+            { preview },
+          );
           await this.auditStore.recordPending({
             sessionId: resolvedSessionId,
             pendingActionId: actionId,
@@ -3146,6 +3186,7 @@ export class JarvisService {
                   correctedPendingCall,
                   tz,
                   correctedPendingView.decision,
+                  { preview },
                 )
               : `Je peux exécuter "${correctedPendingCall.name}". Tu confirmes ?`,
             choices: ['oui', 'non'],
@@ -3259,7 +3300,11 @@ export class JarvisService {
         }
 
         const pendingPreview = await previewTool(
-          await this.buildToolContext(resolvedSessionId),
+          await this.buildToolContext(
+            resolvedSessionId,
+            pending.call,
+            pending.targets,
+          ),
           pending.call,
         );
         const pendingDecision = this.buildPendingActionView(profile, pending, {
@@ -3582,11 +3627,11 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       // Confirmation requise → on enregistre pending et on demande "oui/non"
       if (executionPlan.requiresConfirmation) {
         await this.auditStore.markSessionPendingAsSuperseded(resolvedSessionId);
-        const actionId = await this.pending.create(resolvedSessionId, toolCall);
-        const preview = await previewTool(
-          await this.buildToolContext(resolvedSessionId),
+        const { id: actionId, context } = await this.preparePending(
+          resolvedSessionId,
           toolCall,
         );
+        const preview = await previewTool(context, toolCall);
         const pendingActionView = this.buildPendingActionView(
           profile,
           {
@@ -3708,6 +3753,21 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         },
       };
     } catch (error) {
+      if (error instanceof TargetResolutionError) {
+        this.rememberTurn(resolvedSessionId, {
+          userText,
+          assistantText: error.message,
+          kind: 'ask',
+        });
+        return {
+          text: error.message,
+          meta: {
+            simulation: this.simulation,
+            sessionId: resolvedSessionId,
+            awaiting: 'target',
+          },
+        };
+      }
       if (error instanceof HttpException) throw error;
 
       const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
@@ -3833,7 +3893,11 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
     try {
       const profile = await this.getHumanProfile(item.sessionId);
-      const result = await this.executeTool(item.sessionId, item.call);
+      const result = await this.executeTool(
+        item.sessionId,
+        item.call,
+        item.targets,
+      );
       const choices = await this.buildAutoFollowUpChoices(
         item.sessionId,
         item.call.name,

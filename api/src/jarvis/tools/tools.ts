@@ -1,4 +1,6 @@
 import { DateTime } from 'luxon';
+import type { ToolOnly } from './tool-registry';
+import { TargetResolutionError } from '../../commands/calendar-target';
 import {
   isDeferredCapability,
   DEFERRED_CAPABILITY_MESSAGE,
@@ -549,6 +551,7 @@ export type ToolContext = {
   simulation: boolean;
   tz: string;
   sessionId: string;
+  frozenCalendarTarget?: CalendarEventItem;
   calendar: CalendarProvider;
   web: WebProvider;
   weather: WeatherProvider;
@@ -1437,6 +1440,10 @@ export async function previewTool(
     };
 
     const previewCalendarByArgs = (args: { ref?: number; query?: string }) => {
+      if (ctx.frozenCalendarTarget) {
+        const target = ctx.frozenCalendarTarget;
+        return `${formatDate(target.when, tz)} — ${target.title}`;
+      }
       const explicitRef =
         typeof args.ref === 'number' && Number.isInteger(args.ref)
           ? args.ref
@@ -2164,12 +2171,7 @@ function cleanRefs(refs: number[]) {
   return out;
 }
 
-export async function runTool(
-  ctx: ToolContext,
-  call: ToolCall,
-): Promise<string> {
-  if (call.type === 'tool' && isDeferredCapability(call.name))
-    return DEFERRED_CAPABILITY_MESSAGE;
+function createToolResolvers(ctx: ToolContext) {
   const { prisma, tz, sessionId } = ctx;
 
   const resolveTodo = async (query: string, done?: boolean) => {
@@ -2443,6 +2445,9 @@ export async function runTool(
     ref?: number;
     query?: string;
   }) => {
+    if (ctx.frozenCalendarTarget) {
+      return { target: ctx.frozenCalendarTarget, error: null as string | null };
+    }
     const explicitRef =
       typeof args.ref === 'number' && Number.isInteger(args.ref)
         ? args.ref
@@ -2835,6 +2840,46 @@ export async function runTool(
     return { target: shortlist[0], error: null as string | null };
   };
 
+  return {
+    resolveTodo,
+    resolveTodoRefs,
+    resolveShopping,
+    resolveShoppingRefs,
+    resolveNote,
+    resolveCalendarTarget,
+    resolveGmailTarget,
+    resolveMissionTarget,
+  };
+}
+
+export async function prepareCalendarTarget(ctx: ToolContext, call: ToolOnly) {
+  if (call.name !== 'calendar.update' && call.name !== 'calendar.delete')
+    return undefined;
+  const { target, error } = await createToolResolvers(
+    ctx,
+  ).resolveCalendarTarget(call.args);
+  if (error || !target)
+    throw new TargetResolutionError(error || 'Aucun rendez-vous ciblé.');
+  return target;
+}
+
+export async function runTool(
+  ctx: ToolContext,
+  call: ToolCall,
+): Promise<string> {
+  if (call.type === 'tool' && isDeferredCapability(call.name))
+    return DEFERRED_CAPABILITY_MESSAGE;
+  const { prisma, tz, sessionId } = ctx;
+  const {
+    resolveTodo,
+    resolveTodoRefs,
+    resolveShopping,
+    resolveShoppingRefs,
+    resolveNote,
+    resolveCalendarTarget,
+    resolveGmailTarget,
+    resolveMissionTarget,
+  } = createToolResolvers(ctx);
   switch (call.type) {
     case 'final':
       return call.text;

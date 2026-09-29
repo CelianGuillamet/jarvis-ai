@@ -644,6 +644,14 @@ describe('JarvisService', () => {
   it('keeps structured calendar confidence when a direct deletion phrase stays ambiguous', async () => {
     const { service, llmChat } = makeService({
       googleScope: 'https://www.googleapis.com/auth/calendar.events',
+      events: [
+        {
+          provider: 'db',
+          eventId: 'resolved-event',
+          title: 'Mon rendez-vous demain',
+          when: new Date('2026-10-01T10:00:00Z'),
+        },
+      ],
     });
 
     const response = await service.chat(
@@ -1073,7 +1081,7 @@ describe('calendar routing safety', () => {
     },
   );
 
-  it('queues an ambiguous deletion without executing it', async () => {
+  it('asks for a resolvable target instead of queueing an unresolved deletion', async () => {
     const { service, calendar, pending } = makeService({
       googleScope: 'https://www.googleapis.com/auth/calendar.events',
     });
@@ -1081,14 +1089,8 @@ describe('calendar routing safety', () => {
       'Supprime mon rendez-vous demain',
       'calendar-no-write',
     );
-    expect(response).toMatchObject({
-      pending_action: { confidence: 'medium' },
-    });
-    expect(pending.create).toHaveBeenCalledWith('calendar-no-write', {
-      type: 'tool',
-      name: 'calendar.delete',
-      args: { query: 'mon rendez-vous demain' },
-    });
+    expect(response).toMatchObject({ meta: { awaiting: 'target' } });
+    expect(pending.create).not.toHaveBeenCalled();
     expect(calendar.deleteEvent).not.toHaveBeenCalled();
   });
 

@@ -60,6 +60,38 @@ describe('Durable pending confirmations', () => {
     ).rejects.toThrow();
   });
 
+  it('keeps resolved targets immutable across caller mutation, restart and claim', async () => {
+    const target = {
+      kind: 'calendar',
+      provider: 'db',
+      eventId: 'approved-event',
+      calendarId: null,
+      title: 'Approved',
+      when: '2026-10-01T10:00:00.000Z',
+      end: null,
+    };
+    const expected = { ...target };
+    const creation = pending.create(
+      session,
+      { type: 'tool', name: 'calendar.delete', args: { ref: 1 } },
+      [target],
+    );
+    target.eventId = 'changed-after-proposal';
+    const id = await creation;
+    const restarted = new PendingActionsService(prisma, new ConfigService());
+    expect((await restarted.peek(id, session))?.targets).toEqual([expected]);
+    expect((await restarted.consume(id, session))?.targets).toEqual([expected]);
+    await expect(
+      prisma.command.update({
+        where: { id },
+        data: { targets: [target], revision: { increment: 1 } },
+      }),
+    ).rejects.toThrow();
+    expect(
+      (await prisma.command.findUniqueOrThrow({ where: { id } })).targets,
+    ).toEqual([expected]);
+  });
+
   it('preserves a claimed intent across crashes and subsequent proposals', async () => {
     const id = await pending.create(session, call);
     expect(await pending.consume(id, session)).not.toBeNull();
