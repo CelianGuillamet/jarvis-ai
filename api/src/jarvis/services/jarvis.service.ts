@@ -38,6 +38,13 @@ import { gateToolCall } from '../tools/tool-engine';
 import { TOOL_META } from '../tools/tool-registry';
 import { executeWithPolicy } from '../../commands/execution-policy';
 import {
+  assertSameGoogleAccount,
+  loadGoogleAccount,
+  usesGoogleAccount,
+  withGoogleAccountBinding,
+  type GoogleAccountBinding,
+} from '../../commands/google-account-binding';
+import {
   freezeCalendarTarget,
   readCalendarTarget,
   TargetResolutionError,
@@ -1645,9 +1652,22 @@ export class JarvisService {
 
   private async preparePending(sessionId: string, call: ToolOnly) {
     const context = await this.buildToolContext(sessionId);
-    const calendar = await prepareCalendarTarget(context, call);
+    const googleAccount = usesGoogleAccount(call.name)
+      ? await loadGoogleAccount(this.prisma, context.prisma.ownerId)
+      : undefined;
+    const calendar =
+      googleAccount !== undefined
+        ? await withGoogleAccountBinding(sessionId, googleAccount, () =>
+            prepareCalendarTarget(context, call),
+          )
+        : await prepareCalendarTarget(context, call);
     if (calendar) context.frozenCalendarTarget = calendar;
-    const gmail = await prepareGmailTargets(context, call);
+    const gmail =
+      googleAccount !== undefined
+        ? await withGoogleAccountBinding(sessionId, googleAccount, () =>
+            prepareGmailTargets(context, call),
+          )
+        : await prepareGmailTargets(context, call);
     if (gmail) context.frozenGmailTargets = gmail;
     const local = await prepareLocalTargets(context, call);
     if (local) context.frozenLocalTargets = local;
@@ -1661,6 +1681,7 @@ export class JarvisService {
           : local
             ? freezeLocalTargets(local)
             : [],
+      googleAccount,
     );
     return { id, context };
   }
@@ -1669,11 +1690,21 @@ export class JarvisService {
     sessionId: string,
     call: ToolOnly,
     targets?: Prisma.JsonValue,
+    googleAccount?: GoogleAccountBinding | null,
   ) {
     const context = await this.buildToolContext(sessionId, call, targets);
     if (!TOOL_META[call.name].sideEffect) return runTool(context, call);
+    const account = usesGoogleAccount(call.name)
+      ? googleAccount === undefined
+        ? await loadGoogleAccount(this.prisma, context.prisma.ownerId)
+        : googleAccount
+      : undefined;
     if (requiresGmailTargets(call) && targets === undefined) {
-      context.frozenGmailTargets = await prepareGmailTargets(context, call);
+      context.frozenGmailTargets = await withGoogleAccountBinding(
+        sessionId,
+        account ?? null,
+        () => prepareGmailTargets(context, call),
+      );
     }
     if (requiresLocalTargets(call) && targets === undefined) {
       context.frozenLocalTargets = await prepareLocalTargets(context, call);
@@ -1683,12 +1714,24 @@ export class JarvisService {
         ownerId: context.prisma.ownerId,
         simulation: context.simulation,
         capabilities: [call.name],
-        loadGoogleStatus: async () =>
-          buildGoogleConnectionStatus(
+        loadGoogleStatus: async () => {
+          if (usesGoogleAccount(call.name)) {
+            assertSameGoogleAccount(
+              account,
+              await loadGoogleAccount(this.prisma, context.prisma.ownerId),
+            );
+          }
+          return buildGoogleConnectionStatus(
             (await this.googleTokenForConversation(sessionId))?.scope,
-          ),
+          );
+        },
       },
-      () => runTool(context, call),
+      () =>
+        account === undefined
+          ? runTool(context, call)
+          : withGoogleAccountBinding(sessionId, account, () =>
+              runTool(context, call),
+            ),
       () =>
         `Simulation : l’action « ${call.name} » n’a effectué aucune modification.`,
     );
@@ -3937,6 +3980,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         item.sessionId,
         item.call,
         item.targets,
+        item.googleAccount,
       );
       const choices = await this.buildAutoFollowUpChoices(
         item.sessionId,

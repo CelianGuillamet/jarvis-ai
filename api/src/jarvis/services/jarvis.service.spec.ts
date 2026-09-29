@@ -114,6 +114,16 @@ function makeService(options: ServiceOptions = {}) {
       ),
       count: jest.fn().mockResolvedValue(options.notesTotal ?? 0),
     },
+    integrationAccount: {
+      findUnique: jest.fn().mockResolvedValue(
+        options.googleScope
+          ? {
+              id: 'fixture-google-account',
+              providerSubject: 'fixture-subject',
+            }
+          : null,
+      ),
+    },
     googleOAuthToken: {
       findFirst: jest.fn().mockResolvedValue(
         options.googleScope !== undefined

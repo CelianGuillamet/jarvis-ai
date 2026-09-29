@@ -3,6 +3,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationService } from '../../src/auth/conversation.service';
 import { PendingActionsService } from '../../src/jarvis/services/pending-action.service';
 import type { ToolOnly } from '../../src/jarvis/tools/tool-registry';
+import { splitCommandTargets } from '../../src/commands/google-account-binding';
 
 describe('Durable pending confirmations', () => {
   const prisma = new PrismaService();
@@ -91,7 +92,9 @@ describe('Durable pending confirmations', () => {
       }),
     ).rejects.toThrow();
     expect(
-      (await prisma.command.findUniqueOrThrow({ where: { id } })).targets,
+      splitCommandTargets(
+        (await prisma.command.findUniqueOrThrow({ where: { id } })).targets,
+      ).targets,
     ).toEqual([expected]);
   });
 
