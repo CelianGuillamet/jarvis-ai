@@ -1,4 +1,5 @@
 import { ConversationService } from '../../src/auth/conversation.service';
+import { ConfigService } from '@nestjs/config';
 import { GoogleCredentialService } from '../../src/google/google-credential.service';
 import { OAuthStateService } from '../../src/google/oauth-state.service';
 import { createAuth } from '../../src/auth/create-auth';
@@ -315,6 +316,234 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(gmail.sendMessage.mock.calls[0][1].to).toBe(
       'sender@example.invalid',
     );
+  });
+
+  it('journals equivalent chat and Inbox archives with the same durable outcome', async () => {
+    const conversations = app.get(ConversationService);
+    const chatId = await conversations.resolve(
+      'integration-user',
+      'archive-chat',
+    );
+    const inboxId = await conversations.resolve(
+      'integration-user',
+      'archive-inbox',
+    );
+    await seedGoogle(chatId);
+    const before = gmail.modifyLabels.mock.calls.length;
+    for (const text of ['Liste mes emails', 'Archive email #1']) {
+      await request(baseUrl)
+        .post('/jarvis/chat')
+        .set('Cookie', sessionCookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ sessionId: chatId, text })
+        .expect(201);
+    }
+    await request(baseUrl)
+      .post('/inbox-zero/scan')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId: inboxId })
+      .expect(201);
+    await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({
+        sessionId: inboxId,
+        action: 'archive',
+        messageIds: ['fixture-message'],
+      })
+      .expect(201);
+    expect(gmail.modifyLabels.mock.calls.slice(before)).toEqual([
+      [chatId, 'fixture-message', [], ['INBOX']],
+      [inboxId, 'fixture-message', [], ['INBOX']],
+    ]);
+    for (const [conversationId, source] of [
+      [chatId, 'chat'],
+      [inboxId, 'inbox'],
+    ]) {
+      const command = await prisma.command.findFirstOrThrow({
+        where: { conversationId, toolName: 'gmail.archive' },
+      });
+      expect(command).toMatchObject({
+        source,
+        state: 'completed',
+        outcomeCode: 'TOOL_RETURNED',
+      });
+      expect(command.targets).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'fixture-message' }),
+        ]),
+      );
+    }
+  });
+
+  it('requires a fresh Inbox scan after a Google account change or a legacy unbound scan', async () => {
+    const ownerId = 'origin-inbox-user';
+    await prisma.betaInvite.create({
+      data: { email: `${ownerId}@example.invalid` },
+    });
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        name: 'Origin',
+        email: `${ownerId}@example.invalid`,
+        emailVerified: true,
+      },
+    });
+    const token = 'origin-inbox-session-token';
+    await prisma.session.create({
+      data: {
+        id: token,
+        token,
+        userId: ownerId,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const sessionId = await app
+      .get(ConversationService)
+      .resolve(ownerId, 'origin-inbox');
+    await app
+      .get(GoogleCredentialService)
+      .save(ownerId, 'origin-subject', sessionId, {
+        refresh_token: 'fixture-token',
+        scope: scopes,
+      });
+    await request(baseUrl)
+      .post('/inbox-zero/scan')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId })
+      .expect(201);
+    const account = await prisma.integrationAccount.findFirstOrThrow({
+      where: { ownerId, provider: 'google' },
+    });
+    const modifications = gmail.modifyLabels.mock.calls.length;
+    try {
+      await prisma.integrationAccount.update({
+        where: { id: account.id },
+        data: { providerSubject: 'replacement-subject' },
+      });
+      const changed = await request(baseUrl)
+        .post('/inbox-zero/apply')
+        .set('Cookie', cookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ sessionId, action: 'archive', messageIds: ['fixture-message'] })
+        .expect(201);
+      expect(
+        (changed.body as { results: { ok: boolean }[] }).results[0].ok,
+      ).toBe(false);
+    } finally {
+      await prisma.integrationAccount.update({
+        where: { id: account.id },
+        data: { providerSubject: account.providerSubject },
+      });
+    }
+    await prisma.inboxZeroItem.updateMany({
+      where: { sessionId },
+      data: { googleAccountId: null, googleAccountSubject: null },
+    });
+    const legacy = await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId, action: 'archive', messageIds: ['fixture-message'] })
+      .expect(201);
+    expect((legacy.body as { results: { ok: boolean }[] }).results[0].ok).toBe(
+      false,
+    );
+    expect(gmail.modifyLabels.mock.calls.length).toBe(modifications);
+    expect(
+      await prisma.command.count({ where: { conversationId: sessionId } }),
+    ).toBe(0);
+  });
+
+  it('simulates Inbox mutations without touching providers or marking messages processed', async () => {
+    const sessionId = await app
+      .get(ConversationService)
+      .resolve('integration-user', 'simulation-inbox');
+    await seedGoogle(sessionId);
+    await request(baseUrl)
+      .post('/inbox-zero/scan')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId })
+      .expect(201);
+    const before = await prisma.inboxZeroItem.findMany({
+      where: { sessionId },
+    });
+    const sends = gmail.sendMessage.mock.calls.length;
+    const modifications = gmail.modifyLabels.mock.calls.length;
+    const config = app.get(ConfigService);
+    const previous = config.get<string>('SIMULATION');
+    config.set('SIMULATION', 'true');
+    try {
+      const response = await request(baseUrl)
+        .post('/inbox-zero/apply')
+        .set('Cookie', sessionCookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({
+          sessionId,
+          action: 'send_reply',
+          messageIds: ['fixture-message'],
+          replyText: 'Simulation seulement',
+        })
+        .expect(201);
+      expect((response.body as { results: unknown[] }).results).toEqual([
+        { messageId: 'fixture-message', ok: true, simulated: true },
+      ]);
+      expect(
+        await prisma.inboxZeroItem.findMany({ where: { sessionId } }),
+      ).toEqual(before);
+      expect(gmail.sendMessage.mock.calls.length).toBe(sends);
+      expect(gmail.modifyLabels.mock.calls.length).toBe(modifications);
+      const audit = await prisma.inboxZeroAction.findFirstOrThrow({
+        where: { sessionId },
+      });
+      expect(audit.status).toBe('simulated');
+    } finally {
+      config.set('SIMULATION', previous);
+    }
+  });
+
+  it('rejects revoked permissions and deferred Inbox operations before any provider mutation', async () => {
+    const sessionId = await app
+      .get(ConversationService)
+      .resolve('integration-user', 'revoked-inbox');
+    await seedGoogle(sessionId);
+    await request(baseUrl)
+      .post('/inbox-zero/scan')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId })
+      .expect(201);
+    await prisma.googleOAuthToken.updateMany({
+      where: { integrationAccount: { ownerId: 'integration-user' } },
+      data: { scope: 'https://www.googleapis.com/auth/gmail.readonly' },
+    });
+    const modifications = gmail.modifyLabels.mock.calls.length;
+    const deletes = gmail.deleteMessage.mock.calls.length;
+    for (const action of ['archive', 'delete']) {
+      const response = await request(baseUrl)
+        .post('/inbox-zero/apply')
+        .set('Cookie', sessionCookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ sessionId, action, messageIds: ['fixture-message'] })
+        .expect(201);
+      expect(
+        (response.body as { results: Array<{ ok: boolean }> }).results[0].ok,
+      ).toBe(false);
+    }
+    expect(gmail.modifyLabels.mock.calls.length).toBe(modifications);
+    expect(gmail.deleteMessage.mock.calls.length).toBe(deletes);
+    expect(
+      (await prisma.inboxZeroItem.findFirstOrThrow({ where: { sessionId } }))
+        .status,
+    ).toBe('pending');
   });
 
   it('blocks accidental external transport even if a provider override is missed', async () => {

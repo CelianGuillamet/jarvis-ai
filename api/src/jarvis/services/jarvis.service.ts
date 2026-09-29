@@ -35,6 +35,37 @@ import {
 } from '../tools/tools';
 import { normalizeToolOnlyCall, parseToolCall } from '../tools/tool-call';
 import { gateToolCall } from '../tools/tool-engine';
+import { TOOL_META } from '../tools/tool-registry';
+import { CommandExecutionService } from '../../commands/command-execution.service';
+import { googleAccountTarget } from '../../commands/google-account-binding';
+import {
+  assertSameGoogleAccount,
+  loadGoogleAccount,
+  usesGoogleAccount,
+  withGoogleAccountBinding,
+  type GoogleAccountBinding,
+} from '../../commands/google-account-binding';
+import {
+  freezeCalendarTarget,
+  readCalendarTarget,
+  TargetResolutionError,
+} from '../../commands/calendar-target';
+import type { Prisma } from '@prisma/client';
+import {
+  prepareCalendarTarget,
+  prepareGmailTargets,
+  prepareLocalTargets,
+} from '../tools/tools';
+import {
+  freezeLocalTargets,
+  readLocalTargets,
+  requiresLocalTargets,
+} from '../../commands/local-target';
+import {
+  freezeGmailTargets,
+  readGmailTargets,
+  requiresGmailTargets,
+} from '../../commands/gmail-target';
 import { resolveRange } from '../lib/resolve-range';
 import { resolveWhenWindow } from '../lib/resolve-when';
 import { planCalendarWrite } from '../lib/calendar-intent';
@@ -437,6 +468,7 @@ export class JarvisService {
     private readonly financeStore: JarvisFinanceService,
     @Inject(CALENDAR_PROVIDER) private readonly calendar: CalendarProvider,
     @Inject(GMAIL_PROVIDER) private readonly gmail: GmailProvider,
+    private readonly executor: CommandExecutionService,
   ) {
     this.simulation = configBool(this.config.get<string>('SIMULATION'), true);
     this.allowDefaultSession = configBool(
@@ -1579,8 +1611,26 @@ export class JarvisService {
     });
   }
 
-  private async buildToolContext(sessionId: string): Promise<ToolContext> {
+  private async buildToolContext(
+    sessionId: string,
+    confirmedCall?: ToolOnly,
+    targets?: Prisma.JsonValue,
+  ): Promise<ToolContext> {
     return {
+      ...(confirmedCall &&
+      requiresLocalTargets(confirmedCall) &&
+      targets !== undefined
+        ? { frozenLocalTargets: readLocalTargets(confirmedCall, targets) }
+        : {}),
+      ...(confirmedCall &&
+      requiresGmailTargets(confirmedCall) &&
+      targets !== undefined
+        ? { frozenGmailTargets: readGmailTargets(targets) }
+        : {}),
+      ...(confirmedCall?.name === 'calendar.update' ||
+      confirmedCall?.name === 'calendar.delete'
+        ? { frozenCalendarTarget: readCalendarTarget(targets) }
+        : {}),
       prisma: await this.prisma.forConversation(sessionId),
       memory: this.memoryStore,
       simulation: this.simulation,
@@ -1602,13 +1652,126 @@ export class JarvisService {
     };
   }
 
+  private async preparePending(sessionId: string, call: ToolOnly) {
+    const context = await this.buildToolContext(sessionId);
+    const googleAccount = usesGoogleAccount(call.name)
+      ? await loadGoogleAccount(this.prisma, context.prisma.ownerId)
+      : undefined;
+    const calendar =
+      googleAccount !== undefined
+        ? await withGoogleAccountBinding(sessionId, googleAccount, () =>
+            prepareCalendarTarget(context, call),
+          )
+        : await prepareCalendarTarget(context, call);
+    if (calendar) context.frozenCalendarTarget = calendar;
+    const gmail =
+      googleAccount !== undefined
+        ? await withGoogleAccountBinding(sessionId, googleAccount, () =>
+            prepareGmailTargets(context, call),
+          )
+        : await prepareGmailTargets(context, call);
+    if (gmail) context.frozenGmailTargets = gmail;
+    const local = await prepareLocalTargets(context, call);
+    if (local) context.frozenLocalTargets = local;
+    const id = await this.pending.create(
+      sessionId,
+      call,
+      calendar
+        ? [freezeCalendarTarget(calendar)]
+        : gmail
+          ? freezeGmailTargets(gmail)
+          : local
+            ? freezeLocalTargets(local)
+            : [],
+      googleAccount,
+    );
+    return { id, context };
+  }
+
+  private async executeTool(
+    sessionId: string,
+    call: ToolOnly,
+    targets?: Prisma.JsonValue,
+    googleAccount?: GoogleAccountBinding | null,
+    commandId?: string,
+  ) {
+    const context = await this.buildToolContext(sessionId, call, targets);
+    if (!TOOL_META[call.name].sideEffect) return runTool(context, call);
+    const account = usesGoogleAccount(call.name)
+      ? googleAccount === undefined
+        ? await loadGoogleAccount(this.prisma, context.prisma.ownerId)
+        : googleAccount
+      : undefined;
+    if (requiresGmailTargets(call) && targets === undefined) {
+      context.frozenGmailTargets = await withGoogleAccountBinding(
+        sessionId,
+        account ?? null,
+        () => prepareGmailTargets(context, call),
+      );
+    }
+    if (requiresLocalTargets(call) && targets === undefined) {
+      context.frozenLocalTargets = await prepareLocalTargets(context, call);
+    }
+    const resolvedTargets = context.frozenCalendarTarget
+      ? [freezeCalendarTarget(context.frozenCalendarTarget)]
+      : context.frozenGmailTargets
+        ? freezeGmailTargets(context.frozenGmailTargets)
+        : context.frozenLocalTargets
+          ? freezeLocalTargets(context.frozenLocalTargets)
+          : [];
+    return this.executor.execute(
+      {
+        ...(commandId
+          ? { source: 'confirmation' as const, commandId }
+          : { source: 'chat' as const }),
+        conversationId: sessionId,
+        toolName: call.name,
+        arguments: JSON.parse(
+          JSON.stringify(call.args),
+        ) as Prisma.InputJsonObject,
+        targets:
+          account === undefined
+            ? resolvedTargets
+            : [...resolvedTargets, googleAccountTarget(account)],
+        ownerId: context.prisma.ownerId,
+        policy: {
+          ownerId: context.prisma.ownerId,
+          simulation: context.simulation,
+          capabilities: [call.name],
+          loadGoogleStatus: async () => {
+            if (usesGoogleAccount(call.name)) {
+              assertSameGoogleAccount(
+                account,
+                await loadGoogleAccount(this.prisma, context.prisma.ownerId),
+              );
+            }
+            return buildGoogleConnectionStatus(
+              (await this.googleTokenForConversation(sessionId))?.scope,
+            );
+          },
+        },
+      },
+      async () => {
+        const result = await (account === undefined
+          ? runTool(context, call)
+          : withGoogleAccountBinding(sessionId, account, () =>
+              runTool(context, call),
+            ));
+        await this.persistMissionPlanIfNeeded(sessionId, call, result);
+        return result;
+      },
+      () =>
+        `Simulation : l’action « ${call.name} » n’a effectué aucune modification.`,
+    );
+  }
+
   private async persistMissionPlanIfNeeded(
     sessionId: string,
     call: ToolOnly,
     result: string,
   ) {
     if (this.simulation || call.name !== 'mission.plan') return;
-    await this.missionStore.recordPlan(
+    const saved = await this.missionStore.recordPlan(
       sessionId,
       {
         objective: call.args.objective,
@@ -1616,6 +1779,8 @@ export class JarvisService {
       },
       result,
     );
+    if (!saved)
+      throw new Error('Le plan de mission n’a pas pu être enregistré.');
   }
 
   async status(sessionId?: string) {
@@ -1726,7 +1891,11 @@ export class JarvisService {
 
     const pendingPreview = pendingAction
       ? await previewTool(
-          await this.buildToolContext(resolvedSessionId),
+          await this.buildToolContext(
+            resolvedSessionId,
+            pendingAction.call,
+            pendingAction.targets,
+          ),
           pendingAction.call,
         )
       : null;
@@ -3102,14 +3271,19 @@ export class JarvisService {
           await this.auditStore.markSessionPendingAsSuperseded(
             resolvedSessionId,
           );
-          const actionId = await this.pending.create(
+          const { id: actionId, context } = await this.preparePending(
             resolvedSessionId,
             correctedPendingCall,
           );
-          const correctedPendingView = this.buildPendingActionView(profile, {
-            id: actionId,
-            call: correctedPendingCall,
-          });
+          const preview = await previewTool(context, correctedPendingCall);
+          const correctedPendingView = this.buildPendingActionView(
+            profile,
+            {
+              id: actionId,
+              call: correctedPendingCall,
+            },
+            { preview },
+          );
           await this.auditStore.recordPending({
             sessionId: resolvedSessionId,
             pendingActionId: actionId,
@@ -3125,6 +3299,7 @@ export class JarvisService {
                   correctedPendingCall,
                   tz,
                   correctedPendingView.decision,
+                  { preview },
                 )
               : `Je peux exécuter "${correctedPendingCall.name}". Tu confirmes ?`,
             choices: ['oui', 'non'],
@@ -3238,7 +3413,11 @@ export class JarvisService {
         }
 
         const pendingPreview = await previewTool(
-          await this.buildToolContext(resolvedSessionId),
+          await this.buildToolContext(
+            resolvedSessionId,
+            pending.call,
+            pending.targets,
+          ),
           pending.call,
         );
         const pendingDecision = this.buildPendingActionView(profile, pending, {
@@ -3561,11 +3740,11 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       // Confirmation requise → on enregistre pending et on demande "oui/non"
       if (executionPlan.requiresConfirmation) {
         await this.auditStore.markSessionPendingAsSuperseded(resolvedSessionId);
-        const actionId = await this.pending.create(resolvedSessionId, toolCall);
-        const preview = await previewTool(
-          await this.buildToolContext(resolvedSessionId),
+        const { id: actionId, context } = await this.preparePending(
+          resolvedSessionId,
           toolCall,
         );
+        const preview = await previewTool(context, toolCall);
         const pendingActionView = this.buildPendingActionView(
           profile,
           {
@@ -3628,10 +3807,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         call: toolCall,
         plan: executionPlan,
       };
-      const result = await runTool(
-        await this.buildToolContext(resolvedSessionId),
-        toolCall,
-      );
+      const result = await this.executeTool(resolvedSessionId, toolCall);
       const finalResult = await this.maybeSummarizeWebResult(
         userText,
         toolCall,
@@ -3668,11 +3844,6 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
       const humanText = this.humanizeToolOutput(profile, finalResult);
       this.rememberToolTurn(resolvedSessionId, userText, toolCall, finalResult);
-      await this.persistMissionPlanIfNeeded(
-        resolvedSessionId,
-        toolCall,
-        finalResult,
-      );
       await this.refreshPersistentSessionState(resolvedSessionId);
 
       return {
@@ -3690,6 +3861,21 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         },
       };
     } catch (error) {
+      if (error instanceof TargetResolutionError) {
+        this.rememberTurn(resolvedSessionId, {
+          userText,
+          assistantText: error.message,
+          kind: 'ask',
+        });
+        return {
+          text: error.message,
+          meta: {
+            simulation: this.simulation,
+            sessionId: resolvedSessionId,
+            awaiting: 'target',
+          },
+        };
+      }
       if (error instanceof HttpException) throw error;
 
       const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
@@ -3815,9 +4001,12 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
     try {
       const profile = await this.getHumanProfile(item.sessionId);
-      const result = await runTool(
-        await this.buildToolContext(item.sessionId),
+      const result = await this.executeTool(
+        item.sessionId,
         item.call,
+        item.targets,
+        item.googleAccount,
+        item.id,
       );
       const choices = await this.buildAutoFollowUpChoices(
         item.sessionId,
@@ -3852,7 +4041,6 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         result,
         { prefix: 'Confirmation executee pour' },
       );
-      await this.persistMissionPlanIfNeeded(item.sessionId, item.call, result);
       await this.refreshPersistentSessionState(item.sessionId);
 
       const response = {

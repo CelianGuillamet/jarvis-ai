@@ -5,7 +5,16 @@ import type {
 } from '../../calendar/providers/calendar.provider';
 import type { GmailProvider } from '../../gmail/providers/gmail.provider';
 import type { WebProvider } from '../providers/web.provider';
-import { runTool, type ToolContext } from './tools';
+import {
+  runTool,
+  previewTool,
+  prepareCalendarTarget,
+  type ToolContext,
+} from './tools';
+import {
+  freezeCalendarTarget,
+  readCalendarTarget,
+} from '../../commands/calendar-target';
 
 function makeCalendarProvider(seed: CalendarEventItem[]) {
   const events = [...seed];
@@ -85,6 +94,69 @@ describe('runTool calendar context resolver', () => {
       gmail: {} as GmailProvider,
     };
   }
+
+  it('executes the persisted target after the displayed list changes', async () => {
+    const first: CalendarEventItem = {
+      provider: 'db',
+      eventId: 'approved-event',
+      title: 'Cible approuvée',
+      when: new Date('2026-10-01T10:00:00Z'),
+    };
+    const second: CalendarEventItem = {
+      provider: 'db',
+      eventId: 'other-event',
+      title: 'Autre rendez-vous',
+      when: new Date('2026-10-01T12:00:00Z'),
+    };
+    const { provider } = makeCalendarProvider([first, second]);
+    const ctx = makeContext(provider);
+    const list = {
+      type: 'tool',
+      name: 'calendar.list',
+      args: {
+        startIso: '2026-10-01T00:00:00Z',
+        endIso: '2026-10-02T00:00:00Z',
+      },
+    } as const;
+    await runTool(ctx, list);
+    const call = {
+      type: 'tool',
+      name: 'calendar.delete',
+      args: { ref: 1 },
+    } as const;
+    const target = await prepareCalendarTarget(ctx, call);
+    expect(target?.eventId).toBe('approved-event');
+    if (!target) throw new Error('Expected prepared target');
+    const persisted = JSON.stringify([freezeCalendarTarget(target)]);
+    const decoded: unknown = JSON.parse(persisted);
+    // A restart can load the snapshot without restoring the volatile list.
+    const frozen = readCalendarTarget(
+      decoded as import('@prisma/client').Prisma.JsonValue,
+    );
+    const replacement = makeCalendarProvider([second]);
+    await runTool({ ...ctx, calendar: replacement.provider }, list);
+    const remove = jest.spyOn(provider, 'deleteEvent');
+    const executionContext = { ...ctx, frozenCalendarTarget: frozen };
+    expect(await previewTool(executionContext, call)).toContain(
+      'Cible approuvée',
+    );
+    await runTool(executionContext, call);
+    expect(remove).toHaveBeenCalledWith(
+      sessionId,
+      'db',
+      'approved-event',
+      undefined,
+    );
+  });
+
+  it('refuses missing or malformed persisted targets instead of resolving the current list', () => {
+    expect(() => readCalendarTarget([])).toThrow('Propose à nouveau');
+    expect(() =>
+      readCalendarTarget([
+        { kind: 'calendar', eventId: 'id', when: 'invalid' },
+      ]),
+    ).toThrow('Propose à nouveau');
+  });
 
   it('uses focused event with "__last__" query', async () => {
     const seed: CalendarEventItem[] = [

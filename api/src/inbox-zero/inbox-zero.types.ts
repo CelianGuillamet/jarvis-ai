@@ -91,6 +91,7 @@ export type InboxZeroApplyResponse = {
   results: Array<{
     messageId: string;
     ok: boolean;
+    simulated?: boolean;
     error?: string;
   }>;
 };

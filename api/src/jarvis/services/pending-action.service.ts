@@ -6,6 +6,23 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CommandJournalService } from '../../commands/command-journal.service';
 import type { ToolOnly } from '../tools/tool-registry';
 import { normalizeToolOnlyCall } from '../tools/tool-call';
+import {
+  assertSameGoogleAccount,
+  googleAccountTarget,
+  loadGoogleAccount,
+  splitCommandTargets,
+  usesGoogleAccount,
+  type GoogleAccountBinding,
+} from '../../commands/google-account-binding';
+import { readCalendarTarget } from '../../commands/calendar-target';
+import {
+  readLocalTargets,
+  requiresLocalTargets,
+} from '../../commands/local-target';
+import {
+  readGmailTargets,
+  requiresGmailTargets,
+} from '../../commands/gmail-target';
 
 export type ConfirmationReplay = {
   text: string;
@@ -30,7 +47,51 @@ export class PendingActionsService {
       name: row.toolName,
       args: row.arguments,
     });
-    return call ? { id: row.id, sessionId: row.conversationId, call } : null;
+    let selection: ReturnType<typeof splitCommandTargets>;
+    try {
+      selection = splitCommandTargets(row.targets);
+      if (
+        call &&
+        usesGoogleAccount(call.name) &&
+        selection.googleAccount === undefined
+      )
+        return null;
+    } catch {
+      return null;
+    }
+    const { targets: domainTargets, googleAccount } = selection;
+    if (call && requiresLocalTargets(call)) {
+      try {
+        readLocalTargets(call, domainTargets);
+      } catch {
+        return null;
+      }
+    }
+    if (call && requiresGmailTargets(call)) {
+      try {
+        const targets = readGmailTargets(domainTargets);
+        if (call.name !== 'gmail.bulk_mark_read' && targets.length !== 1)
+          return null;
+      } catch {
+        return null;
+      }
+    }
+    if (call?.name === 'calendar.update' || call?.name === 'calendar.delete') {
+      try {
+        readCalendarTarget(domainTargets);
+      } catch {
+        return null;
+      }
+    }
+    return call
+      ? {
+          id: row.id,
+          sessionId: row.conversationId,
+          call,
+          targets: domainTargets,
+          googleAccount,
+        }
+      : null;
   }
 
   private async owner(sessionId?: string) {
@@ -49,16 +110,35 @@ export class PendingActionsService {
     return rows[0].ownerId;
   }
 
-  async create(sessionId: string, call: ToolOnly) {
+  async create(
+    sessionId: string,
+    call: ToolOnly,
+    targets: Prisma.InputJsonObject[] = [],
+    expectedGoogleAccount?: GoogleAccountBinding | null,
+  ) {
     const args = JSON.parse(
       JSON.stringify(call.args),
     ) as Prisma.InputJsonObject;
     const name = call.name;
+    const expectedAccount =
+      expectedGoogleAccount === undefined
+        ? undefined
+        : expectedGoogleAccount === null
+          ? null
+          : { ...expectedGoogleAccount };
+    const targetSnapshot = JSON.parse(
+      JSON.stringify(targets),
+    ) as Prisma.InputJsonObject[];
     const expiresAt = new Date(
       Date.now() + Number(this.config.get('PENDING_TTL_MINUTES') ?? 10) * 60000,
     );
     return this.prisma.$transaction(async (tx) => {
       const ownerId = await this.lock(tx, sessionId);
+      const account = usesGoogleAccount(name)
+        ? await loadGoogleAccount(tx, ownerId)
+        : undefined;
+      if (expectedAccount !== undefined && account !== undefined)
+        assertSameGoogleAccount(expectedAccount, account, true);
       // Replacing the pending proposal cancels it; executing intents remain intact.
       await tx.command.updateMany({
         where: { ownerId, conversationId: sessionId, state: 'waiting' },
@@ -72,7 +152,10 @@ export class PendingActionsService {
         toolName: name,
         toolVersion: '1',
         arguments: args,
-        targets: [],
+        targets:
+          account === undefined
+            ? targetSnapshot
+            : [...targetSnapshot, googleAccountTarget(account)],
         expiresAt,
       });
       await journal.advance(ownerId, row.id, row.revision, 'waiting');
@@ -87,6 +170,7 @@ export class PendingActionsService {
       where: {
         ownerId: owner.ownerId,
         conversationId: sessionId,
+        source: 'confirmation',
         state: 'waiting',
         expiresAt: { gt: new Date() },
       },
@@ -129,6 +213,12 @@ export class PendingActionsService {
           await journal.advance(ownerId, id, row.revision, 'cancelled');
           return null;
         }
+        if (usesGoogleAccount(item.call.name))
+          assertSameGoogleAccount(
+            item.googleAccount,
+            await loadGoogleAccount(tx, ownerId),
+            true,
+          );
         await journal.approve(ownerId, id, row.revision, row.digest);
         await journal.advance(ownerId, id, row.revision + 1, 'executing');
         return item;
@@ -255,7 +345,11 @@ export class PendingActionsService {
     if (!owner) return null;
     return this.replayRow(
       await this.prisma.command.findFirst({
-        where: { ownerId: owner.ownerId, conversationId: sessionId },
+        where: {
+          ownerId: owner.ownerId,
+          conversationId: sessionId,
+          source: 'confirmation',
+        },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
     );

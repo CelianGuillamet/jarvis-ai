@@ -428,6 +428,8 @@ model InboxZeroSession {
 model InboxZeroItem {
   id           String   @id @default(uuid())
   sessionId    String
+  googleAccountId String?
+  googleAccountSubject String?
   messageId    String
   threadId     String
   subject      String
@@ -513,6 +515,7 @@ model Command {
   requestId String
   toolName String
   toolVersion String
+  source String @default("confirmation")
   arguments Json
   targets Json
   digest String

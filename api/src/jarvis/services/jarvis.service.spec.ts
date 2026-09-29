@@ -1,4 +1,6 @@
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
+import type { CommandExecution } from '../../commands/command-execution.service';
+import { executeWithPolicy } from '../../commands/execution-policy';
 import type {
   GmailMessageDetail,
   GmailMessageItem,
@@ -16,6 +18,7 @@ import { JarvisService } from './jarvis.service';
 type ServiceDependencies = ConstructorParameters<typeof JarvisService>;
 
 type ServiceOptions = {
+  simulation?: boolean;
   todos?: Array<{ id: string; text: string; done: boolean; createdAt?: Date }>;
   shopping?: Array<{ id: string; text: string; bought: boolean }>;
   notes?: Array<{ title: string | null; text: string; createdAt?: Date }>;
@@ -113,6 +116,16 @@ function makeService(options: ServiceOptions = {}) {
         })),
       ),
       count: jest.fn().mockResolvedValue(options.notesTotal ?? 0),
+    },
+    integrationAccount: {
+      findUnique: jest.fn().mockResolvedValue(
+        options.googleScope
+          ? {
+              id: 'fixture-google-account',
+              providerSubject: 'fixture-subject',
+            }
+          : null,
+      ),
     },
     googleOAuthToken: {
       findFirst: jest.fn().mockResolvedValue(
@@ -328,7 +341,7 @@ function makeService(options: ServiceOptions = {}) {
     get: jest.fn((key: string) => {
       switch (key) {
         case 'SIMULATION':
-          return 'false';
+          return String(options.simulation ?? false);
         case 'HUMANIZE_RESPONSES':
           return 'true';
         default:
@@ -363,6 +376,13 @@ function makeService(options: ServiceOptions = {}) {
     financeStore as unknown as ServiceDependencies[22],
     calendar,
     gmail,
+    {
+      execute: (
+        input: CommandExecution,
+        mutate: () => Promise<unknown>,
+        simulate: () => unknown,
+      ) => executeWithPolicy(input.policy, mutate, simulate),
+    } as unknown as ServiceDependencies[25],
   );
   jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 
@@ -582,6 +602,27 @@ describe('JarvisService', () => {
     );
   });
 
+  it('does not persist mission plans in simulation', async () => {
+    const { service, missionStore } = makeService({ simulation: true });
+    const response = await service.chat(
+      'Prépare un plan de mission pour la démo investisseur',
+      'mission-simulation',
+    );
+    expect(response.text).toContain('Simulation');
+    expect(missionStore.recordPlan).not.toHaveBeenCalled();
+  });
+
+  it('does not report a completed mission plan when persistence fails', async () => {
+    const { service, missionStore } = makeService();
+    missionStore.recordPlan.mockResolvedValueOnce(null);
+    const response = await service.chat(
+      'Prépare un plan de mission pour la démo investisseur',
+      'mission-failure',
+    );
+    expect(missionStore.recordPlan).toHaveBeenCalledTimes(1);
+    expect(response).not.toHaveProperty('meta.toolName', 'mission.plan');
+  });
+
   it('routes mission closure requests to mission.close with confirmation', async () => {
     const { service, llmChat, auditStore } = makeService();
 
@@ -644,6 +685,14 @@ describe('JarvisService', () => {
   it('keeps structured calendar confidence when a direct deletion phrase stays ambiguous', async () => {
     const { service, llmChat } = makeService({
       googleScope: 'https://www.googleapis.com/auth/calendar.events',
+      events: [
+        {
+          provider: 'db',
+          eventId: 'resolved-event',
+          title: 'Mon rendez-vous demain',
+          when: new Date('2026-10-01T10:00:00Z'),
+        },
+      ],
     });
 
     const response = await service.chat(
@@ -1073,7 +1122,7 @@ describe('calendar routing safety', () => {
     },
   );
 
-  it('queues an ambiguous deletion without executing it', async () => {
+  it('asks for a resolvable target instead of queueing an unresolved deletion', async () => {
     const { service, calendar, pending } = makeService({
       googleScope: 'https://www.googleapis.com/auth/calendar.events',
     });
@@ -1081,14 +1130,8 @@ describe('calendar routing safety', () => {
       'Supprime mon rendez-vous demain',
       'calendar-no-write',
     );
-    expect(response).toMatchObject({
-      pending_action: { confidence: 'medium' },
-    });
-    expect(pending.create).toHaveBeenCalledWith('calendar-no-write', {
-      type: 'tool',
-      name: 'calendar.delete',
-      args: { query: 'mon rendez-vous demain' },
-    });
+    expect(response).toMatchObject({ meta: { awaiting: 'target' } });
+    expect(pending.create).not.toHaveBeenCalled();
     expect(calendar.deleteEvent).not.toHaveBeenCalled();
   });
 

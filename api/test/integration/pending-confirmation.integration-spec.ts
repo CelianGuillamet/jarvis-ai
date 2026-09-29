@@ -3,6 +3,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationService } from '../../src/auth/conversation.service';
 import { PendingActionsService } from '../../src/jarvis/services/pending-action.service';
 import type { ToolOnly } from '../../src/jarvis/tools/tool-registry';
+import { splitCommandTargets } from '../../src/commands/google-account-binding';
 
 describe('Durable pending confirmations', () => {
   const prisma = new PrismaService();
@@ -12,6 +13,9 @@ describe('Durable pending confirmations', () => {
     name: 'todo.delete',
     args: { query: 'fixture-target' },
   };
+  const localTargets = [
+    { kind: 'todo', id: 'fixture-target', text: 'Fixture', done: false },
+  ];
   let session: string;
   let foreign: string;
   beforeAll(async () => {
@@ -29,7 +33,7 @@ describe('Durable pending confirmations', () => {
   });
 
   it('claims once concurrently and replays the persisted response after restart', async () => {
-    const id = await pending.create(session, call);
+    const id = await pending.create(session, call, localTargets);
     const claims = await Promise.all(
       Array.from({ length: 6 }, () => pending.consume(id, session)),
     );
@@ -60,10 +64,74 @@ describe('Durable pending confirmations', () => {
     ).rejects.toThrow();
   });
 
+  it('keeps resolved targets immutable across caller mutation, restart and claim', async () => {
+    const target = {
+      kind: 'calendar',
+      provider: 'db',
+      eventId: 'approved-event',
+      calendarId: null,
+      title: 'Approved',
+      when: '2026-10-01T10:00:00.000Z',
+      end: null,
+    };
+    const expected = { ...target };
+    const creation = pending.create(
+      session,
+      { type: 'tool', name: 'calendar.delete', args: { ref: 1 } },
+      [target],
+    );
+    target.eventId = 'changed-after-proposal';
+    const id = await creation;
+    const restarted = new PendingActionsService(prisma, new ConfigService());
+    expect((await restarted.peek(id, session))?.targets).toEqual([expected]);
+    expect((await restarted.consume(id, session))?.targets).toEqual([expected]);
+    await expect(
+      prisma.command.update({
+        where: { id },
+        data: { targets: [target], revision: { increment: 1 } },
+      }),
+    ).rejects.toThrow();
+    expect(
+      splitCommandTargets(
+        (await prisma.command.findUniqueOrThrow({ where: { id } })).targets,
+      ).targets,
+    ).toEqual([expected]);
+  });
+
+  it('requires durable Gmail target snapshots and preserves bulk selection after restart', async () => {
+    const gmailCall: ToolOnly = {
+      type: 'tool',
+      name: 'gmail.bulk_mark_read',
+      args: { refs: [1, 2] },
+    };
+    const targets = ['mail-a', 'mail-b'].map((id) => ({
+      kind: 'gmail',
+      id,
+      threadId: id,
+      subject: id,
+      from: 'sender@example.invalid',
+      to: 'recipient@example.invalid',
+      date: '2026-10-01T10:00:00Z',
+      snippet: '',
+      labels: ['UNREAD'],
+      unread: true,
+    }));
+    const id = await pending.create(session, gmailCall, targets);
+    const restarted = new PendingActionsService(prisma, new ConfigService());
+    expect((await restarted.peek(id, session))?.targets).toEqual(targets);
+    expect((await restarted.consume(id, session))?.targets).toEqual(targets);
+    const legacy = await pending.create(session, gmailCall);
+    expect(await restarted.peek(legacy, session)).toBeNull();
+    expect(await restarted.consume(legacy, session)).toBeNull();
+    expect(
+      (await prisma.command.findUniqueOrThrow({ where: { id: legacy } })).state,
+    ).toBe('cancelled');
+  });
+
   it('preserves a claimed intent across crashes and subsequent proposals', async () => {
-    const id = await pending.create(session, call);
+    const id = await pending.create(session, call, localTargets);
     expect(await pending.consume(id, session)).not.toBeNull();
-    await pending.create(session, call);
+    await pending.create(session, call, localTargets);
     expect(await pending.consume(id, session)).toBeNull();
     expect((await pending.replay(id, session))?.meta.commandState).toBe(
       'executing',
@@ -80,8 +148,8 @@ describe('Durable pending confirmations', () => {
   });
 
   it('serializes cancellation versus claims and retains superseded proposals', async () => {
-    const old = await pending.create(session, call);
-    const id = await pending.create(session, call);
+    const old = await pending.create(session, call, localTargets);
+    const id = await pending.create(session, call, localTargets);
     expect(
       (await prisma.command.findUniqueOrThrow({ where: { id: old } })).state,
     ).toBe('cancelled');
@@ -99,7 +167,7 @@ describe('Durable pending confirmations', () => {
       prisma,
       new ConfigService({ PENDING_TTL_MINUTES: 0.01 }),
     );
-    const id = await fast.create(session, call);
+    const id = await fast.create(session, call, localTargets);
     await prisma.$queryRaw`SELECT 1 FROM pg_sleep(0.8)`;
     expect(await fast.consume(id, session)).toBeNull();
     expect(
@@ -114,7 +182,7 @@ describe('Durable pending confirmations', () => {
       prisma,
       new ConfigService({ PENDING_TTL_MINUTES: 0.02 }),
     );
-    const id = await fast.create(session, call);
+    const id = await fast.create(session, call, localTargets);
     let acquired!: () => void;
     const locked = new Promise<void>((resolve) => {
       acquired = resolve;

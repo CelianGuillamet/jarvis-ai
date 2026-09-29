@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { CommandJournalModule } from '../commands/command-journal.module';
 import { JarvisService } from './services/jarvis.service';
 import { JarvisController } from './jarvis.controller';
 import { PendingActionsService } from './services/pending-action.service';
@@ -25,7 +26,7 @@ import { JarvisContactService } from './services/jarvis-contact.service';
 import { JarvisFinanceService } from './services/jarvis-finance.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, CommandJournalModule],
   providers: [
     JarvisService,
     PendingActionsService,

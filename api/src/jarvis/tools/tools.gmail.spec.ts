@@ -6,7 +6,18 @@ import type {
 } from '../../gmail/providers/gmail.provider';
 import { getGmailCategoryFromLabels } from '../../gmail/gmail-category';
 import type { WebProvider } from '../providers/web.provider';
-import { runTool, type ToolContext } from './tools';
+import {
+  runTool,
+  previewTool,
+  prepareGmailTargets,
+  type ToolContext,
+  type ToolOnly,
+} from './tools';
+import {
+  freezeGmailTargets,
+  readGmailTargets,
+} from '../../commands/gmail-target';
+import type { Prisma } from '@prisma/client';
 
 function makeGmailMock(seed: GmailMessageDetail[]): GmailProvider {
   const store = new Map(seed.map((row) => [row.id, { ...row }]));
@@ -141,6 +152,91 @@ describe('runTool gmail tools', () => {
       gmail,
     };
   }
+
+  it.each(['gmail.trash', 'gmail.bulk_mark_read'] as const)(
+    'keeps persisted %s targets when the inbox list changes',
+    async (name) => {
+      const first: GmailMessageDetail = {
+        id: 'approved-mail',
+        threadId: 'approved-thread',
+        subject: 'Mail approuvé',
+        from: 'sender@example.invalid',
+        to: 'me@example.invalid',
+        date: new Date('2026-10-01T12:00:00Z'),
+        snippet: 'preview',
+        labels: ['INBOX', 'UNREAD'],
+        unread: true,
+        bodyText: 'private content',
+      };
+      const second = {
+        ...first,
+        id: 'other-mail',
+        threadId: 'other-thread',
+        subject: 'Autre mail',
+        date: new Date('2026-10-01T11:00:00Z'),
+      };
+      const gmail = makeGmailMock([first, second]);
+      const ctx = makeCtx(gmail);
+      await runTool(ctx, {
+        type: 'tool',
+        name: 'gmail.list',
+        args: { limit: 10 },
+      });
+      const call: ToolOnly =
+        name === 'gmail.trash'
+          ? { type: 'tool', name, args: { ref: 1 } }
+          : { type: 'tool', name, args: { refs: [1, 1], limit: 10 } };
+      const prepared = await prepareGmailTargets(ctx, call);
+      if (!prepared) throw new Error('Missing prepared targets');
+      expect(prepared.map((item) => item.id)).toEqual(['approved-mail']);
+      const encoded = JSON.stringify(freezeGmailTargets(prepared));
+      expect(encoded).not.toContain('private content');
+      const frozen = readGmailTargets(JSON.parse(encoded) as Prisma.JsonValue);
+      await runTool(
+        { ...ctx, gmail: makeGmailMock([second]) },
+        { type: 'tool', name: 'gmail.list', args: { limit: 10 } },
+      );
+      const trash = jest.spyOn(gmail, 'trashMessage');
+      const modify = jest.spyOn(gmail, 'modifyLabels');
+      const execution = { ...ctx, frozenGmailTargets: frozen };
+      expect(await previewTool(execution, call)).toContain('Mail approuvé');
+      await runTool(execution, call);
+      if (name === 'gmail.trash')
+        expect(trash).toHaveBeenCalledWith(ctx.sessionId, 'approved-mail');
+      else
+        expect(modify).toHaveBeenCalledWith(
+          ctx.sessionId,
+          'approved-mail',
+          [],
+          ['UNREAD'],
+        );
+      expect(
+        (await gmail.getMessage(ctx.sessionId, 'other-mail')).labels,
+      ).toEqual(['INBOX', 'UNREAD']);
+    },
+  );
+
+  it('rejects missing and duplicate persisted Gmail targets', () => {
+    expect(() => readGmailTargets([])).toThrow('Propose à nouveau');
+    expect(() =>
+      readGmailTargets([{ kind: 'gmail', id: 'missing-fields' }]),
+    ).toThrow('Propose à nouveau');
+    const target = {
+      kind: 'gmail',
+      id: 'duplicate',
+      threadId: 'thread',
+      subject: 'Subject',
+      from: 'a@example.invalid',
+      to: 'b@example.invalid',
+      date: '2026-10-01T10:00:00Z',
+      snippet: '',
+      labels: ['UNREAD'],
+      unread: true,
+    };
+    expect(() => readGmailTargets([target, target])).toThrow(
+      'Propose à nouveau',
+    );
+  });
 
   it('lists unread emails', async () => {
     const gmail = makeGmailMock([

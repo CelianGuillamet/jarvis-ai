@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { GoogleOAuthToken } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenEncryptionService } from './token-encryption.service';
+import { assertBoundGoogleAccount } from '../commands/google-account-binding';
 
 export type GoogleTokens = {
   refresh_token?: string | null;
@@ -28,6 +29,7 @@ export class GoogleCredentialService {
       where: { ownerId_provider: { ownerId, provider: 'google' } },
       include: { googleToken: true },
     });
+    assertBoundGoogleAccount(conversationId, integration);
     return integration?.googleToken ?? null;
   }
 
