@@ -32,6 +32,15 @@ export class TimeoutError extends Error {
   }
 }
 
+export class InvalidResponseError extends Error {
+  readonly name = "InvalidResponseError";
+  readonly code = "INVALID_RESPONSE";
+
+  constructor() {
+    super("La réponse du serveur est invalide. Son résultat ne peut pas être confirmé.");
+  }
+}
+
 function joinUrl(base: string, path: string) {
   const b = base.trim().replace(/\/+$/g, "");
   const p = path.trim();
@@ -63,11 +72,18 @@ function combineSignals(signals: AbortSignal[]) {
 }
 
 async function safeJson(response: Response) {
-  const text = await response.text().catch(() => "");
-  if (!text) return null;
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (response.ok) throw new InvalidResponseError();
+    return null;
+  }
   try {
     return JSON.parse(text) as unknown;
   } catch {
+    if (response.ok) throw new InvalidResponseError();
     return text;
   }
 }
