@@ -759,6 +759,9 @@ export class InboxZeroService {
                 itemPatch.status = 'processed';
                 itemPatch.lastActionAt = now;
               } else if (effectiveAction === 'send_reply') {
+                const replyText = input.replyText?.trim();
+                if (!replyText)
+                  throw new BadRequestException('Réponse manquante.');
                 if (!input.requestId?.trim() || !googleAccount)
                   throw new BadRequestException(
                     'Identité de tentative manquante.',
@@ -772,7 +775,7 @@ export class InboxZeroService {
                     accountId: googleAccount.id,
                     accountSubject: googleAccount.providerSubject,
                     messageId: row.messageId,
-                    replyText: input.replyText.trim(),
+                    replyText,
                     archiveAfter,
                   },
                   {
@@ -793,7 +796,7 @@ export class InboxZeroService {
                         this.gmail.sendMessage(sessionId, {
                           to: extractEmailAddress(detail.from) || detail.from,
                           subject: buildReplySubject(detail.subject),
-                          text: input.replyText.trim(),
+                          text: replyText,
                           threadId: row.threadId,
                           inReplyTo,
                           references,

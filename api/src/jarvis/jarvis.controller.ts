@@ -1,3 +1,9 @@
+import {
+  ChatRequestSchema,
+  ConfirmRequestSchema,
+  ConversationQuerySchema,
+} from '../contracts/v1';
+import { RequestContract } from '../http/request-contract';
 import { ResponseContract } from '../http/response-contract';
 import {
   JarvisChatResponseSchema,
@@ -7,9 +13,9 @@ import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { ConversationService } from '../auth/conversation.service';
 import type { AuthenticatedRequest } from '../auth/session.guard';
 import { JarvisService } from './services/jarvis.service';
-import { ChatDto } from './dto/chat.dto';
-import { ConfirmDto } from './dto/confirm.dto';
-import { ConversationQueryDto } from '../http/query.dto';
+import type { ChatDto } from './dto/chat.dto';
+import type { ConfirmDto } from './dto/confirm.dto';
+import type { ConversationQueryDto } from '../http/query.dto';
 
 @Controller('jarvis')
 export class JarvisController {
@@ -20,7 +26,10 @@ export class JarvisController {
 
   @Post('chat')
   @ResponseContract(JarvisChatResponseSchema)
-  async chat(@Body() body: ChatDto, @Req() request: AuthenticatedRequest) {
+  async chat(
+    @Body(new RequestContract(ChatRequestSchema)) body: ChatDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
     return this.jarvis.chat(
       body.text,
       await this.conversations.resolve(request.identity.userId, body.sessionId),
@@ -30,7 +39,7 @@ export class JarvisController {
   @Post('confirm')
   @ResponseContract(JarvisChatResponseSchema)
   async confirm(
-    @Body() body: ConfirmDto,
+    @Body(new RequestContract(ConfirmRequestSchema)) body: ConfirmDto,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.jarvis.confirm(
@@ -43,7 +52,8 @@ export class JarvisController {
   @ResponseContract(JarvisStatusSnapshotSchema)
   async status(
     @Req() request: AuthenticatedRequest,
-    @Query() query: ConversationQueryDto,
+    @Query(new RequestContract(ConversationQuerySchema))
+    query: ConversationQueryDto,
   ) {
     return this.jarvis.status(
       await this.conversations.resolve(

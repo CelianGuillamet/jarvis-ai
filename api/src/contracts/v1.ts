@@ -368,3 +368,79 @@ export type InboxZeroMessageResponse = z.infer<
 export type InboxZeroDraftReplyResponse = z.infer<
   typeof InboxZeroDraftReplyResponseSchema
 >;
+
+export const REQUEST_LIMITS = {
+  bodyBytes: 64 * 1024,
+  urlBytes: 8192,
+  sessionChars: 128,
+  objectIdChars: 256,
+  queryChars: 500,
+  chatChars: 8000,
+  replyChars: 20000,
+  batchItems: 20,
+} as const;
+const identifier = text.trim().min(1).max(REQUEST_LIMITS.objectIdChars);
+const sessionId = text
+  .trim()
+  .min(1)
+  .max(REQUEST_LIMITS.sessionChars)
+  .optional();
+export const ConversationQuerySchema = z.strictObject({ sessionId });
+export const MessageQuerySchema = ConversationQuerySchema.extend({
+  messageId: identifier,
+});
+export const ChatRequestSchema = z.strictObject({
+  sessionId,
+  text: text.trim().min(1).max(REQUEST_LIMITS.chatChars),
+});
+export const ConfirmRequestSchema = z.strictObject({
+  sessionId,
+  actionId: identifier,
+});
+export const InboxZeroScanRequestSchema = z.strictObject({
+  sessionId,
+  query: text.trim().min(1).max(REQUEST_LIMITS.queryChars).optional(),
+  limit: z.number().int().min(1).max(50).optional(),
+  refresh: z.boolean().optional(),
+});
+export const InboxZeroStepRequestSchema = z.strictObject({
+  sessionId,
+  step: InboxZeroStepSchema,
+});
+export const InboxZeroDraftReplyRequestSchema = MessageQuerySchema;
+export const InboxZeroApplyRequestSchema = z
+  .strictObject({
+    sessionId,
+    action: InboxZeroActionTypeSchema,
+    messageIds: z.array(identifier).min(1).max(REQUEST_LIMITS.batchItems),
+    requestId: text.trim().min(1).max(128).optional(),
+    reminderWhen: text.trim().min(1).max(REQUEST_LIMITS.queryChars).optional(),
+    reminderText: text.trim().min(1).max(REQUEST_LIMITS.chatChars).optional(),
+    replyText: text.trim().min(1).max(REQUEST_LIMITS.replyChars).optional(),
+    archiveAfter: z.boolean().optional(),
+  })
+  .superRefine((value, context) => {
+    const required =
+      value.action === 'send_reply'
+        ? (['requestId', 'replyText'] as const)
+        : value.action === 'remind'
+          ? (['reminderWhen'] as const)
+          : [];
+    for (const field of required)
+      if (!value[field])
+        context.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'Champ requis pour cette action.',
+        });
+  });
+export type ConversationQuery = z.infer<typeof ConversationQuerySchema>;
+export type MessageQuery = z.infer<typeof MessageQuerySchema>;
+export type ChatRequest = z.infer<typeof ChatRequestSchema>;
+export type ConfirmRequest = z.infer<typeof ConfirmRequestSchema>;
+export type InboxZeroScanRequest = z.infer<typeof InboxZeroScanRequestSchema>;
+export type InboxZeroStepRequest = z.infer<typeof InboxZeroStepRequestSchema>;
+export type InboxZeroDraftReplyRequest = z.infer<
+  typeof InboxZeroDraftReplyRequestSchema
+>;
+export type InboxZeroApplyRequest = z.infer<typeof InboxZeroApplyRequestSchema>;

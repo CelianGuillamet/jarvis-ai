@@ -1,3 +1,4 @@
+import type { InboxZeroApplyRequest } from '@/core/contracts/v1';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
@@ -252,7 +253,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
 
   const apply = async (
     action: InboxZeroActionType,
-    extra?: Record<string, unknown>,
+    extra?: Pick<InboxZeroApplyRequest, 'replyText' | 'reminderWhen' | 'reminderText' | 'archiveAfter'>,
     options?: { cursorHintIndex?: number },
   ) => {
     if (busy.value) return;

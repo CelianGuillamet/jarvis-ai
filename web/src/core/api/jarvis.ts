@@ -1,3 +1,21 @@
+import {
+  ChatRequestSchema,
+  ConfirmRequestSchema,
+  InboxZeroScanRequestSchema,
+  InboxZeroStepRequestSchema,
+  InboxZeroApplyRequestSchema,
+  InboxZeroDraftReplyRequestSchema,
+  ConversationQuerySchema,
+  MessageQuerySchema,
+} from "../contracts/v1";
+import type {
+  ChatRequest,
+  ConfirmRequest,
+  InboxZeroScanRequest,
+  InboxZeroStepRequest,
+  InboxZeroApplyRequest,
+  InboxZeroDraftReplyRequest,
+} from "../contracts/v1";
 import { createHttpClient, InvalidResponseError } from "./http";
 import { z } from "zod";
 import {
@@ -18,6 +36,24 @@ async function validated<T>(
   return parsed.data;
 }
 
+function checked<T>(value: unknown, schema: z.ZodType<T>): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new Error("La requête est invalide.");
+  return parsed.data;
+}
+
+function queryString(
+  input: Record<string, unknown>,
+  schema: z.ZodType<Record<string, string | undefined>>,
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(checked(input, schema))) {
+    if (value !== undefined) params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export type JarvisApiOptions = {
   baseUrl?: string;
   timeoutMs?: number;
@@ -27,66 +63,77 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
   const http = createHttpClient(options);
 
   return {
-    chat: (input: { text: string; sessionId?: string }) =>
+    chat: (input: ChatRequest) =>
       validated(
-        http.post<unknown>("/jarvis/chat", input),
+        http.post<unknown>("/jarvis/chat", checked(input, ChatRequestSchema)),
         JarvisChatResponseSchema,
       ),
-    confirm: (input: { actionId: string; sessionId?: string }) =>
+    confirm: (input: ConfirmRequest) =>
       validated(
-        http.post<unknown>("/jarvis/confirm", input),
+        http.post<unknown>(
+          "/jarvis/confirm",
+          checked(input, ConfirmRequestSchema),
+        ),
         JarvisChatResponseSchema,
       ),
     status: (sessionId?: string) =>
       validated(
         http.get<unknown>(
-          `/jarvis/status${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`,
+          "/jarvis/status" +
+            queryString({ sessionId }, ConversationQuerySchema),
         ),
         JarvisStatusSnapshotSchema,
       ),
     googleAuthUrl: (sessionId: string) =>
-      `/auth/google?sessionId=${encodeURIComponent(sessionId)}`,
+      "/auth/google" + queryString({ sessionId }, ConversationQuerySchema),
 
     // Inbox Zero
-    inboxZeroScan: (input: {
-      sessionId?: string;
-      query?: string;
-      limit?: number;
-      refresh?: boolean;
-    }) =>
+    inboxZeroScan: (input: InboxZeroScanRequest) =>
       validated(
-        http.post<unknown>("/inbox-zero/scan", input),
+        http.post<unknown>(
+          "/inbox-zero/scan",
+          checked(input, InboxZeroScanRequestSchema),
+        ),
         InboxZeroScanResponseSchema,
       ),
     inboxZeroSession: (sessionId?: string) =>
       validated(
         http.get<unknown>(
-          `/inbox-zero/session${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`,
+          "/inbox-zero/session" +
+            queryString({ sessionId }, ConversationQuerySchema),
         ),
         InboxZeroScanResponseSchema,
       ),
-    inboxZeroSetStep: (input: { sessionId?: string; step: string }) =>
+    inboxZeroSetStep: (input: InboxZeroStepRequest) =>
       validated(
-        http.post<unknown>("/inbox-zero/step", input),
+        http.post<unknown>(
+          "/inbox-zero/step",
+          checked(input, InboxZeroStepRequestSchema),
+        ),
         InboxZeroScanResponseSchema,
       ),
-    inboxZeroApply: (input: Record<string, unknown>) =>
+    inboxZeroApply: (input: InboxZeroApplyRequest) =>
       validated(
-        http.post<unknown>("/inbox-zero/apply", input),
+        http.post<unknown>(
+          "/inbox-zero/apply",
+          checked(input, InboxZeroApplyRequestSchema),
+        ),
         InboxZeroApplyResponseSchema,
       ),
     inboxZeroMessage: (sessionId: string | undefined, messageId: string) =>
       validated(
         http.get<unknown>(
-          `/inbox-zero/message?messageId=${encodeURIComponent(messageId)}${
-            sessionId ? `&sessionId=${encodeURIComponent(sessionId)}` : ""
-          }`,
+          "/inbox-zero/message" +
+            queryString({ sessionId, messageId }, MessageQuerySchema),
         ),
         InboxZeroMessageResponseSchema,
       ),
-    inboxZeroDraftReply: (input: { sessionId?: string; messageId: string }) =>
+    inboxZeroDraftReply: (input: InboxZeroDraftReplyRequest) =>
       validated(
-        http.post<unknown>("/inbox-zero/draft-reply", input),
+        http.post<unknown>(
+          "/inbox-zero/draft-reply",
+          checked(input, InboxZeroDraftReplyRequestSchema),
+        ),
         InboxZeroDraftReplyResponseSchema,
       ),
   };
