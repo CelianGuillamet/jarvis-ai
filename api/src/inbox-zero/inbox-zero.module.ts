@@ -4,10 +4,11 @@ import { CommandJournalModule } from '../commands/command-journal.module';
 
 import { InboxZeroController } from './inbox-zero.controller';
 import { InboxZeroService } from './inbox-zero.service';
+import { InboxReplyOperationService } from './inbox-reply-operation.service';
 
 @Module({
   imports: [AuthModule, CommandJournalModule],
   controllers: [InboxZeroController],
-  providers: [InboxZeroService],
+  providers: [InboxZeroService, InboxReplyOperationService],
 })
 export class InboxZeroModule {}

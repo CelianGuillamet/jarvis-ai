@@ -109,6 +109,25 @@ describe('Durable Inbox reply steps', () => {
     expect((await first).ok).toBe(true);
   });
 
+  it('never resends when receipt persistence fails after provider success', async () => {
+    const input = await fixture('receipt-write');
+    const steps = callbacks();
+    const write = jest
+      .spyOn(prisma.inboxReplyOperation, 'update')
+      .mockRejectedValueOnce(new Error('Storage unavailable'));
+    try {
+      expect((await service.execute(input, steps)).steps.send).toBe('unknown');
+    } finally {
+      write.mockRestore();
+    }
+    expect(
+      (await new InboxReplyOperationService(prisma).execute(input, steps)).steps
+        .send,
+    ).toBe('unknown');
+    expect(steps.send).toHaveBeenCalledTimes(1);
+    expect(steps.labels).not.toHaveBeenCalled();
+  });
+
   it('rejects changed intent and cross-owner conversation access before effects', async () => {
     const input = await fixture('identity');
     const steps = callbacks();

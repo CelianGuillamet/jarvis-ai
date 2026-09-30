@@ -1,6 +1,6 @@
-# Inbox send recovery (JAR-020, in progress)
+# Inbox send recovery
 
-The current Inbox reply callback sends, changes labels and updates the local item in sequence. The command journal records the overall outcome, but cannot currently distinguish a successful send followed by a label/storage failure. Repeating the request can therefore send again. This ticket is incomplete until the durable recovery path and client retry identity are implemented and verified.
+Inbox replies now preserve send, label and local-update outcomes separately. A retry with the same request identity skips a confirmed send and resumes only unfinished safe steps. An uncertain send is never retried automatically.
 
 ## Implementation decisions
 
@@ -11,10 +11,12 @@ The current Inbox reply callback sends, changes labels and updates the local ite
 - Keep the JAR-019 owner, Google identity, capability and simulation boundary around each execution/recovery attempt. Simulation must not consume a live send identity. Unknown sends must remain visible for reconciliation.
 - Return per-item and per-step states plus provider references. Avoid a generic failure that invites the client to submit a new operation blindly.
 
-## Required verification before completion
+## Verification
 
-Use fake providers and disposable PostgreSQL to inject failure after send, after label update and before local persistence. Retry with the same identity and assert one send total. Verify concurrent duplicate requests, process/service restart, unknown send outcome, missing provider receipt, conflicting payload, different owner/account, and simulation. Exercise the HTTP response and browser retry identity so this is not only a service-level guarantee.
+Fake-provider and disposable PostgreSQL tests inject label/local failure and receipt-write failure, then retry after a new service instance. They verify one send total, concurrent duplicate claims, unknown outcomes, immutable SQL evidence, conflicting intent and owner isolation. HTTP tests exercise label failure/recovery, repeated completion, uncertain sends and simulation without consuming a live operation. Provider tests reject missing receipts. Browser identity tests verify repeated/concurrent calls, isolation by canonical conversation, changed-payload refusal and matching-acknowledgment cleanup.
 
-## Current evidence
+## Client identity and limits
 
-The adapter returns Gmail's message/thread references and rejects a missing message reference without retrying. The operation service now stores immutable intent, atomically claims send once, preserves its receipt and resumes only unfinished labels/local steps. SQL rejects send-state rollback, receipt replacement and reset of completed steps. Disposable-database tests cover label/local failures across service restart, replay, concurrent send claims, uncertainty, owner isolation and conflicting intent. The service is not yet wired into Inbox: HTTP/client identity and response integration remain pending, so duplicate-send prevention is not complete in the application.
+`send_reply` requires a request ID. The browser stores only that ID and a payload hash, keyed by the server's canonical conversation and message. Web Locks coordinate identity creation across tabs. Storage/lock failure prevents sending. Unresolved changed text is refused; an acknowledged complete operation releases its client identity for a deliberate new reply. Deleting browser storage or explicitly supplying a new request ID creates new intent; the server does not deduplicate different identities by email content. An uncertain send requires reconciliation, not a new identity.
+
+Every attempt still enters the shared owner, capability and Google-account checks. The operation service runs only inside the live callback, and the local update checks the original scan identity. A storage outage after the send claim leaves a non-retryable sending/unknown state. The API exposes per-step states and provider references in the item result and action history. Typed outer command outcomes remain JAR-025; the precise compound outcome is in this operation record. Browser behavior was tested at the identity-helper level, not with a live Google account or a full browser end-to-end run.

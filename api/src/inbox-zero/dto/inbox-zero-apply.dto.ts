@@ -19,6 +19,12 @@ import { MaxLength } from 'class-validator';
 import { REQUEST_LIMITS } from '../../http/request-limits';
 
 export class InboxZeroApplyDto {
+  @ValidateIf((o: InboxZeroApplyDto) => o.action === 'send_reply')
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  requestId?: string;
+
   @IsOptional()
   @IsString()
   @MinLength(1)
