@@ -556,6 +556,12 @@ export type ToolContext = {
   frozenCalendarTarget?: CalendarEventItem;
   frozenGmailTargets?: GmailMessageItem[];
   frozenLocalTargets?: LocalTargets;
+  undoPreview?: { commandId: string; label: string };
+  recordUndo?: (
+    label: string,
+    reversible: boolean,
+    mutations?: UndoMutation[],
+  ) => void;
   calendar: CalendarProvider;
   web: WebProvider;
   weather: WeatherProvider;
@@ -707,7 +713,7 @@ type NoteSnapshot = {
   createdAt: Date;
 };
 
-type UndoMutation =
+export type UndoMutation =
   | { kind: 'todo.delete'; id: string }
   | { kind: 'todo.upsert'; row: TodoSnapshot }
   | {
@@ -730,13 +736,6 @@ type UndoMutation =
       data: { title?: string | null; text?: string };
     };
 
-type UndoEntry = {
-  createdAt: number;
-  label: string;
-  reversible: boolean;
-  mutations: UndoMutation[];
-};
-
 // cache RAM de la dernière liste pour pouvoir faire "supprime #3"
 const LAST_CAL_LIST = new Map<string, LastCalendarList>();
 const LAST_CAL_FOCUS = new Map<string, LastCalendarFocus>();
@@ -752,9 +751,6 @@ const LAST_GMAIL_FOCUS = new Map<string, LastGmailFocus>();
 const LAST_MISSION_LIST = new Map<string, LastMissionList>();
 const LAST_LIST_TTL_MS = 30 * 60_000;
 const LAST_LIST_MAX_SESSIONS = 1_000;
-const LAST_UNDO = new Map<string, UndoEntry>();
-const LAST_UNDO_TTL_MS = 60 * 60_000;
-const LAST_UNDO_MAX_SESSIONS = 1_000;
 
 function cleanupLastCalendarCache() {
   const now = Date.now();
@@ -1080,149 +1076,10 @@ function removeShoppingFromCache(sessionId: string, id: string) {
   row.createdAt = Date.now();
 }
 
-function cleanupUndoCache() {
-  const now = Date.now();
-  for (const [sessionId, row] of LAST_UNDO.entries()) {
-    if (now - row.createdAt > LAST_UNDO_TTL_MS) LAST_UNDO.delete(sessionId);
-  }
-
-  if (LAST_UNDO.size <= LAST_UNDO_MAX_SESSIONS) return;
-  const oldest = [...LAST_UNDO.entries()].sort(
-    (a, b) => a[1].createdAt - b[1].createdAt,
-  );
-  for (let i = 0; i < oldest.length - LAST_UNDO_MAX_SESSIONS; i++) {
-    LAST_UNDO.delete(oldest[i][0]);
-  }
-}
-
-function rememberUndo(
-  sessionId: string,
-  label: string,
-  reversible: boolean,
-  mutations: UndoMutation[] = [],
-) {
-  cleanupUndoCache();
-  LAST_UNDO.set(sessionId, {
-    createdAt: Date.now(),
-    label,
-    reversible,
-    mutations,
-  });
-}
-
-function consumeUndo(sessionId: string): UndoEntry | null {
-  cleanupUndoCache();
-  const entry = LAST_UNDO.get(sessionId);
-  if (!entry) return null;
-  LAST_UNDO.delete(sessionId);
-  return entry;
-}
-
-async function applyUndo(prisma: ToolContext['prisma'], entry: UndoEntry) {
-  for (const mutation of entry.mutations) {
-    switch (mutation.kind) {
-      case 'todo.delete':
-        await prisma.todo.deleteMany({ where: { id: mutation.id } });
-        break;
-
-      case 'todo.upsert':
-        await prisma.todo.upsert({
-          where: { id: mutation.row.id },
-          create: {
-            ownerId: prisma.ownerId,
-            id: mutation.row.id,
-            text: mutation.row.text,
-            done: mutation.row.done,
-            doneAt: mutation.row.doneAt,
-            createdAt: mutation.row.createdAt,
-          },
-          update: {
-            text: mutation.row.text,
-            done: mutation.row.done,
-            doneAt: mutation.row.doneAt,
-          },
-        });
-        break;
-
-      case 'todo.update':
-        await prisma.todo.updateMany({
-          where: { id: mutation.id },
-          data: mutation.data,
-        });
-        break;
-
-      case 'shopping.delete':
-        await prisma.shoppingItem.deleteMany({ where: { id: mutation.id } });
-        break;
-
-      case 'shopping.upsert':
-        await prisma.shoppingItem.upsert({
-          where: { id: mutation.row.id },
-          create: {
-            ownerId: prisma.ownerId,
-            id: mutation.row.id,
-            text: mutation.row.text,
-            bought: mutation.row.bought,
-            boughtAt: mutation.row.boughtAt,
-            createdAt: mutation.row.createdAt,
-          },
-          update: {
-            text: mutation.row.text,
-            bought: mutation.row.bought,
-            boughtAt: mutation.row.boughtAt,
-          },
-        });
-        break;
-
-      case 'shopping.update':
-        await prisma.shoppingItem.updateMany({
-          where: { id: mutation.id },
-          data: mutation.data,
-        });
-        break;
-
-      case 'note.delete':
-        await prisma.note.deleteMany({ where: { id: mutation.id } });
-        break;
-
-      case 'note.upsert':
-        await prisma.note.upsert({
-          where: { id: mutation.row.id },
-          create: {
-            ownerId: prisma.ownerId,
-            id: mutation.row.id,
-            title: mutation.row.title,
-            text: mutation.row.text,
-            createdAt: mutation.row.createdAt,
-          },
-          update: {
-            title: mutation.row.title,
-            text: mutation.row.text,
-          },
-        });
-        break;
-
-      case 'note.update':
-        await prisma.note.updateMany({
-          where: { id: mutation.id },
-          data: mutation.data,
-        });
-        break;
-    }
-  }
-}
-
-function clearSessionCaches(sessionId: string) {
+export function clearLocalToolCaches(sessionId: string) {
   LAST_TODO_LIST.delete(sessionId);
   LAST_NOTE_LIST.delete(sessionId);
-  LAST_MEMORY_LIST.delete(sessionId);
   LAST_SHOPPING_LIST.delete(sessionId);
-  LAST_WEB_SEARCH.delete(sessionId);
-  LAST_GMAIL_LIST.delete(sessionId);
-  LAST_GMAIL_FOCUS.delete(sessionId);
-  LAST_MISSION_LIST.delete(sessionId);
-  LAST_CAL_LIST.delete(sessionId);
-  LAST_CAL_FOCUS.delete(sessionId);
 }
 
 function parseNumberRef(query: string) {
@@ -1358,6 +1215,11 @@ export async function previewTool(
   call: Extract<ToolCall, { type: 'tool' }>,
 ): Promise<string | null> {
   if (isDeferredCapability(call.name)) return DEFERRED_CAPABILITY_MESSAGE;
+  if (call.name === 'undo.last_action') {
+    return ctx.undoPreview
+      ? `Retour arrière proposé : ${ctx.undoPreview.label}. Les éléments seront revérifiés avant toute modification.`
+      : 'Aucune action réversible vérifiée.';
+  }
   if (ctx.frozenLocalTargets) {
     return (
       `Cibles (${ctx.frozenLocalTargets.items.length}) :\n` +
@@ -3113,7 +2975,7 @@ export async function runTool(
             data: { ownerId: prisma.ownerId, text: call.args.text },
             select: { id: true },
           });
-          rememberUndo(sessionId, 'ajout todo', true, [
+          ctx.recordUndo?.('ajout todo', true, [
             { kind: 'todo.delete', id: created.id },
           ]);
           return `OK. Ajouté: "${call.args.text}"`;
@@ -3153,7 +3015,7 @@ export async function runTool(
           patchTodoInCache(sessionId, row.id, { done: true });
 
           if (before) {
-            rememberUndo(sessionId, 'todo marqué fait', true, [
+            ctx.recordUndo?.('todo marqué fait', true, [
               {
                 kind: 'todo.update',
                 id: row.id,
@@ -3183,7 +3045,7 @@ export async function runTool(
           patchTodoInCache(sessionId, row.id, { done: false });
 
           if (before) {
-            rememberUndo(sessionId, 'todo rouvert', true, [
+            ctx.recordUndo?.('todo rouvert', true, [
               {
                 kind: 'todo.update',
                 id: row.id,
@@ -3209,8 +3071,7 @@ export async function runTool(
           for (const row of before)
             patchTodoInCache(sessionId, row.id, { done: true });
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `todos marqués terminés (${before.length})`,
             true,
             before.map((r) => ({
@@ -3237,7 +3098,7 @@ export async function runTool(
           });
           patchTodoInCache(sessionId, row.id, { text: nextText });
 
-          rememberUndo(sessionId, 'modification todo', true, [
+          ctx.recordUndo?.('modification todo', true, [
             { kind: 'todo.update', id: row.id, data: { text: row.text } },
           ]);
 
@@ -3264,7 +3125,7 @@ export async function runTool(
           removeTodoFromCache(sessionId, row.id);
 
           if (before) {
-            rememberUndo(sessionId, 'suppression todo', true, [
+            ctx.recordUndo?.('suppression todo', true, [
               {
                 kind: 'todo.upsert',
                 row: {
@@ -3299,8 +3160,7 @@ export async function runTool(
           for (const row of rows)
             patchTodoInCache(sessionId, row.id, { done: true });
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `todo marqués faits (${rows.length})`,
             true,
             before.map((r) => ({
@@ -3333,8 +3193,7 @@ export async function runTool(
           await prisma.todo.deleteMany({ where: { id: { in: ids } } });
           for (const row of rows) removeTodoFromCache(sessionId, row.id);
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `suppression de todos (${before.length})`,
             true,
             before.map((r) => ({
@@ -3370,8 +3229,7 @@ export async function runTool(
           });
           for (const row of before) removeTodoFromCache(sessionId, row.id);
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `nettoyage des todos terminés (${before.length})`,
             true,
             before.map((r) => ({
@@ -3405,8 +3263,7 @@ export async function runTool(
           await prisma.todo.deleteMany({ where: todoSelection });
           LAST_TODO_LIST.delete(sessionId);
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `suppression complète des todos (${before.length})`,
             true,
             before.map((r) => ({
@@ -3552,7 +3409,7 @@ export async function runTool(
           }
 
           if (ctx.simulation) {
-            rememberUndo(sessionId, 'création événement (simulation)', false);
+            ctx.recordUndo?.('création événement (simulation)', false);
             return `SIMULATION: événement "${call.args.title}" prévu de ${startParsed.toISO({ suppressMilliseconds: true })} à ${effectiveEnd.toISO({ suppressMilliseconds: true })}.`;
           }
 
@@ -3564,7 +3421,7 @@ export async function runTool(
             effectiveEnd.toISO({ suppressMilliseconds: true }),
           );
 
-          rememberUndo(sessionId, 'création événement calendrier', false);
+          ctx.recordUndo?.('création événement calendrier', false);
           return `OK. Événement créé: "${call.args.title}" de ${startParsed.toISO({ suppressMilliseconds: true })} à ${effectiveEnd.toISO({ suppressMilliseconds: true })}`;
         }
 
@@ -3574,11 +3431,7 @@ export async function runTool(
           if (!target) return 'Aucun rendez-vous ciblé.';
 
           if (ctx.simulation) {
-            rememberUndo(
-              sessionId,
-              'suppression événement (simulation)',
-              false,
-            );
+            ctx.recordUndo?.('suppression événement (simulation)', false);
             return `SIMULATION: supprimé — ${formatDate(target.when, tz)} — ${target.title}`;
           }
 
@@ -3590,7 +3443,7 @@ export async function runTool(
           );
           removeCalendarFromCache(sessionId, target);
 
-          rememberUndo(sessionId, 'suppression événement calendrier', false);
+          ctx.recordUndo?.('suppression événement calendrier', false);
           return `OK. Supprimé — ${formatDate(target.when, tz)} — ${target.title}`;
         }
 
@@ -3668,11 +3521,7 @@ export async function runTool(
           const nextEndWhenIso = nextEnd.toISO({ suppressMilliseconds: true })!;
 
           if (ctx.simulation) {
-            rememberUndo(
-              sessionId,
-              'modification événement (simulation)',
-              false,
-            );
+            ctx.recordUndo?.('modification événement (simulation)', false);
             return `SIMULATION: modifié — ${nextTitle} de ${nextWhenIso} à ${nextEndWhenIso}`;
           }
 
@@ -3693,7 +3542,7 @@ export async function runTool(
             end: nextEnd.toJSDate(),
           });
 
-          rememberUndo(sessionId, 'modification événement calendrier', false);
+          ctx.recordUndo?.('modification événement calendrier', false);
           return `OK. Événement modifié: ${nextTitle} de ${nextWhenIso} à ${nextEndWhenIso}`;
         }
 
@@ -3708,7 +3557,7 @@ export async function runTool(
             select: { id: true },
           });
 
-          rememberUndo(sessionId, 'ajout note', true, [
+          ctx.recordUndo?.('ajout note', true, [
             { kind: 'note.delete', id: created.id },
           ]);
 
@@ -3792,7 +3641,7 @@ export async function runTool(
             ...(data.text === undefined ? {} : { text: data.text }),
           });
 
-          rememberUndo(sessionId, 'modification note', true, [
+          ctx.recordUndo?.('modification note', true, [
             {
               kind: 'note.update',
               id: row.id,
@@ -3817,7 +3666,7 @@ export async function runTool(
           removeNoteFromCache(sessionId, row.id);
 
           if (before) {
-            rememberUndo(sessionId, 'suppression note', true, [
+            ctx.recordUndo?.('suppression note', true, [
               {
                 kind: 'note.upsert',
                 row: {
@@ -3840,7 +3689,7 @@ export async function runTool(
             select: { id: true },
           });
 
-          rememberUndo(sessionId, 'ajout article courses', true, [
+          ctx.recordUndo?.('ajout article courses', true, [
             { kind: 'shopping.delete', id: created.id },
           ]);
 
@@ -3883,7 +3732,7 @@ export async function runTool(
           patchShoppingInCache(sessionId, row.id, { bought: true });
 
           if (before) {
-            rememberUndo(sessionId, 'article marqué acheté', true, [
+            ctx.recordUndo?.('article marqué acheté', true, [
               {
                 kind: 'shopping.update',
                 id: row.id,
@@ -3914,7 +3763,7 @@ export async function runTool(
           patchShoppingInCache(sessionId, row.id, { bought: false });
 
           if (before) {
-            rememberUndo(sessionId, 'article remis en non acheté', true, [
+            ctx.recordUndo?.('article remis en non acheté', true, [
               {
                 kind: 'shopping.update',
                 id: row.id,
@@ -3941,8 +3790,7 @@ export async function runTool(
             patchShoppingInCache(sessionId, row.id, { bought: true });
           }
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `articles marqués achetés (${before.length})`,
             true,
             before.map((r) => ({
@@ -3969,7 +3817,7 @@ export async function runTool(
           });
           patchShoppingInCache(sessionId, row.id, { text: nextText });
 
-          rememberUndo(sessionId, 'modification article courses', true, [
+          ctx.recordUndo?.('modification article courses', true, [
             {
               kind: 'shopping.update',
               id: row.id,
@@ -4000,7 +3848,7 @@ export async function runTool(
           removeShoppingFromCache(sessionId, row.id);
 
           if (before) {
-            rememberUndo(sessionId, 'suppression article courses', true, [
+            ctx.recordUndo?.('suppression article courses', true, [
               {
                 kind: 'shopping.upsert',
                 row: {
@@ -4035,8 +3883,7 @@ export async function runTool(
           for (const row of rows)
             patchShoppingInCache(sessionId, row.id, { bought: true });
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `articles marqués achetés (${rows.length})`,
             true,
             before.map((r) => ({
@@ -4069,8 +3916,7 @@ export async function runTool(
           await prisma.shoppingItem.deleteMany({ where: { id: { in: ids } } });
           for (const row of rows) removeShoppingFromCache(sessionId, row.id);
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `suppression articles courses (${before.length})`,
             true,
             before.map((r) => ({
@@ -4106,8 +3952,7 @@ export async function runTool(
           });
           for (const row of before) removeShoppingFromCache(sessionId, row.id);
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `nettoyage articles achetés (${before.length})`,
             true,
             before.map((r) => ({
@@ -4141,8 +3986,7 @@ export async function runTool(
           await prisma.shoppingItem.deleteMany({ where: shoppingSelection });
           LAST_SHOPPING_LIST.delete(sessionId);
 
-          rememberUndo(
-            sessionId,
+          ctx.recordUndo?.(
             `suppression complète des courses (${before.length})`,
             true,
             before.map((r) => ({
@@ -4661,18 +4505,8 @@ export async function runTool(
           return `OK. Email supprimé définitivement: "${target.subject}"`;
         }
 
-        case 'undo.last_action': {
-          const entry = consumeUndo(sessionId);
-          if (!entry) return 'Aucune action récente à annuler.';
-
-          if (!entry.reversible || !entry.mutations.length) {
-            return `Je ne peux pas annuler la dernière action (${entry.label}).`;
-          }
-
-          await applyUndo(prisma, entry);
-          clearSessionCaches(sessionId);
-          return `OK. Dernière action annulée (${entry.label}).`;
-        }
+        case 'undo.last_action':
+          return 'Le retour arrière nécessite une commande vérifiée.';
 
         case 'action.history': {
           const status = call.args.status ?? 'all';

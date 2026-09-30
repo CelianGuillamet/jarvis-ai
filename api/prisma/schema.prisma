@@ -549,6 +549,7 @@ model Command {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
   transitions CommandTransition[]
+  compensation CommandCompensation?
 
   @@unique([ownerId, requestId])
   @@index([ownerId, createdAt])
@@ -672,4 +673,14 @@ model BetaInvite {
   createdAt DateTime  @default(now())
   expiresAt DateTime?
   revokedAt DateTime?
+}
+
+// Inverse and expected post-state are recorded atomically with local changes.
+model CommandCompensation {
+  commandId String @id
+  command Command @relation(fields: [commandId], references: [id], onDelete: Restrict)
+  label String
+  changes Json
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
 }

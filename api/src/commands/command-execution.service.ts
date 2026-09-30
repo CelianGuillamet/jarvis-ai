@@ -27,7 +27,7 @@ export class CommandExecutionService {
 
   async execute<T>(
     input: CommandExecution,
-    mutate: () => Promise<T>,
+    mutate: (commandId: string) => Promise<T>,
     simulate: () => T | Promise<T>,
   ): Promise<T> {
     input = {
@@ -51,7 +51,7 @@ export class CommandExecutionService {
   private async run<T>(
     input: CommandExecution,
     simulation: boolean,
-    work: () => T | Promise<T>,
+    work: (commandId: string) => T | Promise<T>,
   ): Promise<T> {
     const id =
       input.source === 'confirmation'
@@ -87,7 +87,7 @@ export class CommandExecutionService {
     });
     if (!owned) throw new ConflictException('Commande indisponible.');
     try {
-      const result = await work();
+      const result = await work(id);
       if (input.source !== 'confirmation') {
         const response = JSON.parse(
           JSON.stringify({

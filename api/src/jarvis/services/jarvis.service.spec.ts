@@ -1,3 +1,4 @@
+import { runTool } from '../tools/tools';
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
 import type { CommandExecution } from '../../commands/command-execution.service';
 import { executeWithPolicy } from '../../commands/execution-policy';
@@ -223,7 +224,9 @@ function makeService(options: ServiceOptions = {}) {
         : null,
     ),
     consumeLatest: jest.fn().mockResolvedValue(null),
-    cancelLatest: jest.fn().mockResolvedValue(undefined),
+    cancelLatest: jest
+      .fn()
+      .mockResolvedValue({ state: 'cancelled', response: null }),
     create: jest.fn().mockResolvedValue('pending-1'),
     consume: jest.fn().mockResolvedValue(null),
   };
@@ -383,6 +386,13 @@ function makeService(options: ServiceOptions = {}) {
         simulate: () => unknown,
       ) => executeWithPolicy(input.policy, mutate, simulate),
     } as unknown as ServiceDependencies[25],
+    {
+      record: runTool,
+      preview: jest.fn().mockResolvedValue({
+        commandId: 'original-command',
+        label: 'ajout todo',
+      }),
+    } as unknown as ServiceDependencies[26],
   );
   jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 
@@ -399,6 +409,39 @@ function makeService(options: ServiceOptions = {}) {
 }
 
 describe('JarvisService', () => {
+  it('returns the execution state when cancellation loses the claim race', async () => {
+    const { service, pending, auditStore } = makeService({
+      pendingAction: {
+        id: 'racing-command',
+        call: { name: 'todo.delete', args: { query: 'fixture' } },
+      },
+    });
+    const response = {
+      text: 'Action déjà prise en charge.',
+      meta: { commandState: 'executing' },
+    };
+    pending.cancelLatest.mockResolvedValueOnce({
+      state: 'executing',
+      response,
+    });
+    expect(await service.chat('non', 'cancel-race')).toEqual(response);
+    expect(pending.cancelLatest).toHaveBeenCalledWith(
+      'cancel-race',
+      'racing-command',
+    );
+    expect(auditStore.markSessionPendingAsCancelled).not.toHaveBeenCalled();
+  });
+
+  it('replays a claimed action for a late bare cancellation', async () => {
+    const { service, pending, llmChat } = makeService();
+    const response = {
+      text: 'Résultat à vérifier.',
+      meta: { commandState: 'unknown' },
+    };
+    pending.replayLatest.mockResolvedValueOnce(response);
+    expect(await service.chat('annule', 'late-cancel')).toEqual(response);
+    expect(llmChat).not.toHaveBeenCalled();
+  });
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -640,6 +683,32 @@ describe('JarvisService', () => {
         sessionId: 'mission-close',
         pendingActionId: 'pending-1',
       }),
+    );
+  });
+
+  it('requires confirmation and freezes the source command for undo', async () => {
+    const { service, llmChat, pending } = makeService();
+    const response = await service.chat(
+      'annule la dernière action',
+      'undo-preview',
+    );
+    expect(llmChat).not.toHaveBeenCalled();
+    expect(response).toHaveProperty('pending_action.name', 'undo.last_action');
+    expect(response).toHaveProperty(
+      'pending_action.preview',
+      expect.stringContaining('ajout todo'),
+    );
+    expect(pending.create).toHaveBeenCalledWith(
+      'undo-preview',
+      { type: 'tool', name: 'undo.last_action', args: {} },
+      [
+        {
+          kind: 'compensation',
+          commandId: 'original-command',
+          label: 'ajout todo',
+        },
+      ],
+      undefined,
     );
   });
 

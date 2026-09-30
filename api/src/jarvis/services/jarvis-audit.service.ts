@@ -110,12 +110,14 @@ export class JarvisAuditService {
   async markSessionPendingAsCancelled(
     sessionId: string,
     reason = "Action annulée par l'utilisateur.",
+    pendingActionId?: string,
   ) {
     try {
       await this.prisma.jarvisActionEvent.updateMany({
         where: {
           sessionId,
           status: 'pending',
+          ...(pendingActionId ? { pendingActionId } : {}),
         },
         data: {
           status: 'cancelled',
