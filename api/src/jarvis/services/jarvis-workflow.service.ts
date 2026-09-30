@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -162,7 +163,7 @@ export class JarvisWorkflowService {
       this.logger.warn(
         `Impossible de lire les workflows pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return [];
+      throw dataUnavailable();
     }
   }
 

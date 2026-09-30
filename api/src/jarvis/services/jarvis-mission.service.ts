@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -193,7 +194,7 @@ export class JarvisMissionService {
       this.logger.warn(
         `Impossible de lire les missions pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return [];
+      throw dataUnavailable();
     }
   }
 

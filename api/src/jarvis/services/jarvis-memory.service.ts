@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -463,7 +464,7 @@ export class JarvisMemoryService {
       this.logger.warn(
         `Impossible de lister la mémoire utilisateur pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return [];
+      throw dataUnavailable();
     }
   }
 
@@ -514,7 +515,7 @@ export class JarvisMemoryService {
       this.logger.warn(
         `Impossible de rechercher dans la mémoire utilisateur pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return [];
+      throw dataUnavailable();
     }
   }
 
@@ -707,16 +708,7 @@ export class JarvisMemoryService {
       this.logger.warn(
         `Impossible de lire le monde personnel pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return {
-        factsByLayer: MEMORY_LAYERS.reduce(
-          (acc, layer) => {
-            acc[layer] = [];
-            return acc;
-          },
-          {} as Record<MemoryLayer, MemoryFactItem[]>,
-        ),
-        sessionSummary: null,
-      };
+      throw dataUnavailable();
     }
   }
 
