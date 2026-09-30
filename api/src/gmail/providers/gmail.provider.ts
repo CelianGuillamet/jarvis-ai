@@ -57,5 +57,5 @@ export interface GmailProvider {
       inReplyTo?: string;
       references?: string;
     },
-  ): Promise<void>;
+  ): Promise<{ messageId: string; threadId: string | null }>;
 }

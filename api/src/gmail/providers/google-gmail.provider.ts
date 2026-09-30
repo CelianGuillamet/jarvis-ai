@@ -312,14 +312,22 @@ export class GoogleGmailProvider implements GmailProvider {
       .join('\r\n');
 
     const raw = encodeBase64Url(headers);
-    await this.withScopeGuard(async () => {
+    return this.withScopeGuard(async () => {
       const gmail = await this.authedGmail(sessionId);
-      await gmail.users.messages.send({
+      const response = await gmail.users.messages.send({
         userId: 'me',
         requestBody: payload.threadId
           ? { raw, threadId: payload.threadId }
           : { raw },
       });
+      if (!response.data.id?.trim()) {
+        // The send may have happened: callers must retain an uncertain outcome.
+        throw new Error('Référence du message envoyé indisponible.');
+      }
+      return {
+        messageId: response.data.id,
+        threadId: response.data.threadId ?? null,
+      };
     });
   }
 }
