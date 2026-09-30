@@ -1,3 +1,4 @@
+import { JarvisStatusSnapshotSchema } from '../../contracts/v1';
 import { runTool } from '../tools/tools';
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
 import type { CommandExecution } from '../../commands/command-execution.service';
@@ -974,6 +975,9 @@ describe('JarvisService', () => {
       ),
     ).toBe(true);
     expect(snapshot.recentActivity[0].toolName).toBe('todo.list');
+    expect(() =>
+      JarvisStatusSnapshotSchema.parse(JSON.parse(JSON.stringify(snapshot))),
+    ).not.toThrow();
   });
 
   it('prioritizes primary emails over promotions in the status focus', async () => {

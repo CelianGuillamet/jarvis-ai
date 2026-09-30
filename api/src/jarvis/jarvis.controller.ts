@@ -1,3 +1,8 @@
+import { ResponseContract } from '../http/response-contract';
+import {
+  JarvisChatResponseSchema,
+  JarvisStatusSnapshotSchema,
+} from '../contracts/v1';
 import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { ConversationService } from '../auth/conversation.service';
 import type { AuthenticatedRequest } from '../auth/session.guard';
@@ -14,6 +19,7 @@ export class JarvisController {
   ) {}
 
   @Post('chat')
+  @ResponseContract(JarvisChatResponseSchema)
   async chat(@Body() body: ChatDto, @Req() request: AuthenticatedRequest) {
     return this.jarvis.chat(
       body.text,
@@ -22,6 +28,7 @@ export class JarvisController {
   }
 
   @Post('confirm')
+  @ResponseContract(JarvisChatResponseSchema)
   async confirm(
     @Body() body: ConfirmDto,
     @Req() request: AuthenticatedRequest,
@@ -33,6 +40,7 @@ export class JarvisController {
   }
 
   @Get('status')
+  @ResponseContract(JarvisStatusSnapshotSchema)
   async status(
     @Req() request: AuthenticatedRequest,
     @Query() query: ConversationQueryDto,

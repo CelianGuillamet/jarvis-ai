@@ -1,3 +1,10 @@
+import { ResponseContract } from '../http/response-contract';
+import {
+  InboxZeroApplyResponseSchema,
+  InboxZeroDraftReplyResponseSchema,
+  InboxZeroMessageResponseSchema,
+  InboxZeroScanResponseSchema,
+} from '../contracts/v1';
 import {
   BadRequestException,
   Body,
@@ -25,6 +32,7 @@ export class InboxZeroController {
   ) {}
 
   @Post('scan')
+  @ResponseContract(InboxZeroScanResponseSchema)
   async scan(
     @Body() body: InboxZeroScanDto,
     @Req() request: AuthenticatedRequest,
@@ -39,6 +47,7 @@ export class InboxZeroController {
   }
 
   @Get('session')
+  @ResponseContract(InboxZeroScanResponseSchema)
   async session(
     @Req() request: AuthenticatedRequest,
     @Query() query: ConversationQueryDto,
@@ -52,6 +61,7 @@ export class InboxZeroController {
   }
 
   @Post('step')
+  @ResponseContract(InboxZeroScanResponseSchema)
   async step(
     @Body() body: InboxZeroStepDto,
     @Req() request: AuthenticatedRequest,
@@ -63,6 +73,7 @@ export class InboxZeroController {
   }
 
   @Post('apply')
+  @ResponseContract(InboxZeroApplyResponseSchema)
   async apply(
     @Body() body: InboxZeroApplyDto,
     @Req() request: AuthenticatedRequest,
@@ -77,6 +88,7 @@ export class InboxZeroController {
   }
 
   @Get('message')
+  @ResponseContract(InboxZeroMessageResponseSchema)
   async message(
     @Req() request: AuthenticatedRequest,
     @Query() query: MessageQueryDto,
@@ -90,6 +102,7 @@ export class InboxZeroController {
   }
 
   @Post('draft-reply')
+  @ResponseContract(InboxZeroDraftReplyResponseSchema)
   async draftReply(
     @Body() body: InboxZeroDraftReplyDto,
     @Req() request: AuthenticatedRequest,

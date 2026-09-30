@@ -7,19 +7,21 @@
     "dev": "vite --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview --port 4173 --strictPort",
-    "typecheck": "vue-tsc --noEmit",
+    "typecheck": "npm run contracts:check && vue-tsc --noEmit",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "lint": "eslint src vite.config.ts test",
     "lint:fix": "npm run lint -- --fix",
     "prototype": "vite --mode prototype --port 5174 --strictPort",
-    "build:prototype": "vite build --mode prototype"
+    "build:prototype": "vite build --mode prototype",
+    "contracts:check": "node ../scripts/sync-contracts.mjs --check"
   },
   "dependencies": {
     "dompurify": "^3.4.15",
     "marked": "^18.0.2",
     "pinia": "^2.2.8",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
