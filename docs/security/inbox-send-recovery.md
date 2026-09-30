@@ -17,4 +17,4 @@ Use fake providers and disposable PostgreSQL to inject failure after send, after
 
 ## Current evidence
 
-Provider receipt handling is implemented first. The adapter returns Gmail's message/thread references and rejects a missing message reference without retrying. Durable operation steps and HTTP/client integration remain pending; this document does not claim duplicate-send prevention is complete.
+The adapter returns Gmail's message/thread references and rejects a missing message reference without retrying. The operation service now stores immutable intent, atomically claims send once, preserves its receipt and resumes only unfinished labels/local steps. SQL rejects send-state rollback, receipt replacement and reset of completed steps. Disposable-database tests cover label/local failures across service restart, replay, concurrent send claims, uncertainty, owner isolation and conflicting intent. The service is not yet wired into Inbox: HTTP/client identity and response integration remain pending, so duplicate-send prevention is not complete in the application.
