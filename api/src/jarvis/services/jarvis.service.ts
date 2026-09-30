@@ -1,4 +1,9 @@
 import {
+  CommandCompensationService,
+  supportsLocalCompensation,
+  readUndoPreview,
+} from '../../commands/command-compensation.service';
+import {
   BadRequestException,
   HttpException,
   Injectable,
@@ -469,6 +474,7 @@ export class JarvisService {
     @Inject(CALENDAR_PROVIDER) private readonly calendar: CalendarProvider,
     @Inject(GMAIL_PROVIDER) private readonly gmail: GmailProvider,
     private readonly executor: CommandExecutionService,
+    private readonly compensations: CommandCompensationService,
   ) {
     this.simulation = configBool(this.config.get<string>('SIMULATION'), true);
     this.allowDefaultSession = configBool(
@@ -1631,6 +1637,9 @@ export class JarvisService {
       confirmedCall?.name === 'calendar.delete'
         ? { frozenCalendarTarget: readCalendarTarget(targets) }
         : {}),
+      ...(confirmedCall?.name === 'undo.last_action' && targets !== undefined
+        ? { undoPreview: readUndoPreview(targets) }
+        : {}),
       prisma: await this.prisma.forConversation(sessionId),
       memory: this.memoryStore,
       simulation: this.simulation,
@@ -1673,16 +1682,24 @@ export class JarvisService {
     if (gmail) context.frozenGmailTargets = gmail;
     const local = await prepareLocalTargets(context, call);
     if (local) context.frozenLocalTargets = local;
+    if (call.name === 'undo.last_action') {
+      context.undoPreview = await this.compensations.preview(
+        context.prisma.ownerId,
+        sessionId,
+      );
+    }
     const id = await this.pending.create(
       sessionId,
       call,
-      calendar
-        ? [freezeCalendarTarget(calendar)]
-        : gmail
-          ? freezeGmailTargets(gmail)
-          : local
-            ? freezeLocalTargets(local)
-            : [],
+      context.undoPreview
+        ? [{ kind: 'compensation', ...context.undoPreview }]
+        : calendar
+          ? [freezeCalendarTarget(calendar)]
+          : gmail
+            ? freezeGmailTargets(gmail)
+            : local
+              ? freezeLocalTargets(local)
+              : [],
       googleAccount,
     );
     return { id, context };
@@ -1712,13 +1729,20 @@ export class JarvisService {
     if (requiresLocalTargets(call) && targets === undefined) {
       context.frozenLocalTargets = await prepareLocalTargets(context, call);
     }
-    const resolvedTargets = context.frozenCalendarTarget
-      ? [freezeCalendarTarget(context.frozenCalendarTarget)]
-      : context.frozenGmailTargets
-        ? freezeGmailTargets(context.frozenGmailTargets)
-        : context.frozenLocalTargets
-          ? freezeLocalTargets(context.frozenLocalTargets)
-          : [];
+    if (call.name === 'undo.last_action' && !context.undoPreview) {
+      throw new TargetResolutionError(
+        'Propose à nouveau le retour arrière pour le confirmer.',
+      );
+    }
+    const resolvedTargets = context.undoPreview
+      ? [{ kind: 'compensation', ...context.undoPreview }]
+      : context.frozenCalendarTarget
+        ? [freezeCalendarTarget(context.frozenCalendarTarget)]
+        : context.frozenGmailTargets
+          ? freezeGmailTargets(context.frozenGmailTargets)
+          : context.frozenLocalTargets
+            ? freezeLocalTargets(context.frozenLocalTargets)
+            : [];
     return this.executor.execute(
       {
         ...(commandId
@@ -1751,7 +1775,18 @@ export class JarvisService {
           },
         },
       },
-      async () => {
+      async (executingId) => {
+        if (call.name === 'undo.last_action') {
+          return this.compensations.apply(
+            context.prisma.ownerId,
+            sessionId,
+            context.undoPreview!,
+            executingId,
+          );
+        }
+        if (supportsLocalCompensation(call)) {
+          return this.compensations.record(context, call, executingId);
+        }
         const result = await (account === undefined
           ? runTool(context, call)
           : withGoogleAccountBinding(sessionId, account, () =>

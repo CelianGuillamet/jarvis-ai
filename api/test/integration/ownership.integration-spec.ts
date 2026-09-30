@@ -162,7 +162,7 @@ describe('Two-user ownership against real PostgreSQL', () => {
     ).rejects.toThrow();
   });
 
-  it('keeps cached numbered references, previews and undo isolated', async () => {
+  it('keeps cached references isolated and rejects undo without the command executor', async () => {
     const ctxA = context(a, dbA);
     const ctxB = context(b, dbB);
     await runTool(ctxA, {
@@ -180,7 +180,7 @@ describe('Two-user ownership against real PostgreSQL', () => {
     await runTool(ctxB, { type: 'tool', name: 'undo.last_action', args: {} });
     expect(await dbA.todo.count({ where: { text: 'cache-only-A' } })).toBe(1);
     await runTool(ctxA, { type: 'tool', name: 'undo.last_action', args: {} });
-    expect(await dbA.todo.count({ where: { text: 'cache-only-A' } })).toBe(0);
+    expect(await dbA.todo.count({ where: { text: 'cache-only-A' } })).toBe(1);
     expect(await dbB.todo.count({ where: { id: 'owned-b' } })).toBe(1);
   });
 

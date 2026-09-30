@@ -193,7 +193,7 @@ export const TOOL_META: Record<ToolName, ToolMetadata> = {
   },
 
   'undo.last_action': {
-    requiresConfirmation: false,
+    requiresConfirmation: true,
     sideEffect: true,
     risk: 'medium',
   },

@@ -1,3 +1,4 @@
+import { runTool } from '../tools/tools';
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
 import type { CommandExecution } from '../../commands/command-execution.service';
 import { executeWithPolicy } from '../../commands/execution-policy';
@@ -385,6 +386,13 @@ function makeService(options: ServiceOptions = {}) {
         simulate: () => unknown,
       ) => executeWithPolicy(input.policy, mutate, simulate),
     } as unknown as ServiceDependencies[25],
+    {
+      record: runTool,
+      preview: jest.fn().mockResolvedValue({
+        commandId: 'original-command',
+        label: 'ajout todo',
+      }),
+    } as unknown as ServiceDependencies[26],
   );
   jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 
@@ -675,6 +683,32 @@ describe('JarvisService', () => {
         sessionId: 'mission-close',
         pendingActionId: 'pending-1',
       }),
+    );
+  });
+
+  it('requires confirmation and freezes the source command for undo', async () => {
+    const { service, llmChat, pending } = makeService();
+    const response = await service.chat(
+      'annule la dernière action',
+      'undo-preview',
+    );
+    expect(llmChat).not.toHaveBeenCalled();
+    expect(response).toHaveProperty('pending_action.name', 'undo.last_action');
+    expect(response).toHaveProperty(
+      'pending_action.preview',
+      expect.stringContaining('ajout todo'),
+    );
+    expect(pending.create).toHaveBeenCalledWith(
+      'undo-preview',
+      { type: 'tool', name: 'undo.last_action', args: {} },
+      [
+        {
+          kind: 'compensation',
+          commandId: 'original-command',
+          label: 'ajout todo',
+        },
+      ],
+      undefined,
     );
   });
 
