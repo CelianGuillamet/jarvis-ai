@@ -81,6 +81,9 @@ export function fakeGmail(messages: GmailMessageDetail[] = []) {
         ReturnType<GmailProvider['sendMessage']>,
         Parameters<GmailProvider['sendMessage']>
       >()
-      .mockResolvedValue(undefined),
+      .mockResolvedValue({
+        messageId: 'fixture-sent-message',
+        threadId: 'fixture-thread',
+      }),
   } satisfies GmailProvider;
 }

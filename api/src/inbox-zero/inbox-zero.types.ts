@@ -92,6 +92,13 @@ export type InboxZeroApplyResponse = {
     messageId: string;
     ok: boolean;
     simulated?: boolean;
+    operationId?: string;
+    steps?: {
+      send: 'completed' | 'unknown';
+      labels: 'completed' | 'pending';
+      local: 'completed' | 'pending';
+    };
+    providerReference?: { messageId: string; threadId: string | null } | null;
     error?: string;
   }>;
 };

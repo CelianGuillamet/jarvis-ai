@@ -11,6 +11,7 @@ import type {
   InboxZeroStep,
 } from '@/core/types/inbox-zero';
 import { TimeoutError } from '@/core/api/http';
+import { replyRequestId, completeReplyRequest } from '@/core/api/inbox-reply-identity';
 import { useAppStore } from './appStore';
 import { useToastStore } from './toastStore';
 
@@ -254,6 +255,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     extra?: Record<string, unknown>,
     options?: { cursorHintIndex?: number },
   ) => {
+    if (busy.value) return;
     const messageIds = uniqueStrings(selectedIds.value);
     if (!messageIds.length) return;
 
@@ -270,12 +272,20 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
             ? firstSelectedIndex
             : undefined);
 
+      const conversationId = session.value?.sessionId;
+      const requestId = action === 'send_reply' ? await replyRequestId({
+        conversationId: conversationId ?? '', messageId: messageIds[0]!,
+        replyText: String(extra?.replyText ?? ''), archiveAfter: extra?.archiveAfter !== false,
+      }) : undefined;
       const res = await app.jarvis.inboxZeroApply({
         sessionId: app.sessionId,
         action,
         messageIds,
         ...(extra ?? {}),
+        ...(requestId ? { requestId } : {}),
       });
+      if (requestId && conversationId && res.results.length === 1 && res.results[0]?.ok)
+        await completeReplyRequest(conversationId, messageIds[0]!, requestId);
       applyScanResponse(res, cursorHintIndex !== undefined ? { cursorHintIndex } : undefined);
 
       const failed = res.results?.filter((r) => !r.ok) ?? [];

@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CommandExecutionService } from '../commands/command-execution.service';
+import { InboxReplyOperationService } from './inbox-reply-operation.service';
 import { freezeGmailTargets } from '../commands/gmail-target';
 import { googleAccountTarget } from '../commands/google-account-binding';
 import {
@@ -141,6 +142,7 @@ export class InboxZeroService {
     private readonly config: ConfigService,
     @Inject(GMAIL_PROVIDER) private readonly gmail: GmailProvider,
     private readonly executor: CommandExecutionService,
+    private readonly replies: InboxReplyOperationService,
   ) {
     this.tz = this.config.get<string>('JARVIS_TZ')?.trim() || 'Europe/Paris';
 
@@ -757,48 +759,91 @@ export class InboxZeroService {
                 itemPatch.status = 'processed';
                 itemPatch.lastActionAt = now;
               } else if (effectiveAction === 'send_reply') {
-                if (!input.replyText?.trim()) {
+                if (!input.requestId?.trim() || !googleAccount)
                   throw new BadRequestException(
-                    'replyText manquant pour send_reply.',
+                    'Identité de tentative manquante.',
                   );
-                }
-                const detail = await this.withGoogleGuard(() =>
-                  this.gmail.getMessage(sessionId, row.messageId),
-                );
-                const to = extractEmailAddress(detail.from) || detail.from;
-                const subject = buildReplySubject(detail.subject);
-                const text = input.replyText.trim();
-                const inReplyTo = detail.messageIdHeader ?? undefined;
-                const references = (() => {
-                  const refs = (detail.referencesHeader || '').trim();
-                  if (!inReplyTo) return refs || undefined;
-                  if (!refs) return inReplyTo;
-                  return refs.includes(inReplyTo)
-                    ? refs
-                    : `${refs} ${inReplyTo}`;
-                })();
-
-                await this.withGoogleGuard(() =>
-                  this.gmail.sendMessage(sessionId, {
-                    to,
-                    subject,
-                    text,
-                    threadId: row.threadId,
-                    inReplyTo,
-                    references,
-                  }),
-                );
-
                 const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
-                const nextLabels = applyLabels(labels, [], remove);
-                await this.withGoogleGuard(() =>
-                  this.gmail.modifyLabels(sessionId, row.messageId, [], remove),
+                const outcome = await this.replies.execute(
+                  {
+                    ownerId,
+                    conversationId: sessionId,
+                    requestId: input.requestId,
+                    accountId: googleAccount.id,
+                    accountSubject: googleAccount.providerSubject,
+                    messageId: row.messageId,
+                    replyText: input.replyText.trim(),
+                    archiveAfter,
+                  },
+                  {
+                    send: async () => {
+                      const detail = await this.withGoogleGuard(() =>
+                        this.gmail.getMessage(sessionId, row.messageId),
+                      );
+                      const inReplyTo = detail.messageIdHeader ?? undefined;
+                      const refs = (detail.referencesHeader || '').trim();
+                      const references = !inReplyTo
+                        ? refs || undefined
+                        : !refs
+                          ? inReplyTo
+                          : refs.includes(inReplyTo)
+                            ? refs
+                            : `${refs} ${inReplyTo}`;
+                      return this.withGoogleGuard(() =>
+                        this.gmail.sendMessage(sessionId, {
+                          to: extractEmailAddress(detail.from) || detail.from,
+                          subject: buildReplySubject(detail.subject),
+                          text: input.replyText.trim(),
+                          threadId: row.threadId,
+                          inReplyTo,
+                          references,
+                        }),
+                      );
+                    },
+                    labels: () =>
+                      this.withGoogleGuard(() =>
+                        this.gmail.modifyLabels(
+                          sessionId,
+                          row.messageId,
+                          [],
+                          remove,
+                        ),
+                      ),
+                    local: async () => {
+                      const updated =
+                        await this.prisma.inboxZeroItem.updateMany({
+                          where: {
+                            id: row.id,
+                            sessionId,
+                            googleAccountId: googleAccount.id,
+                            googleAccountSubject: googleAccount.providerSubject,
+                          },
+                          data: {
+                            labelsJson: JSON.stringify(
+                              applyLabels(labels, [], remove),
+                            ),
+                            unread: false,
+                            status: 'processed',
+                            lastActionAt: now,
+                          },
+                        });
+                      if (updated.count !== 1)
+                        throw new ConflictException('Le scan Inbox a changé.');
+                    },
+                  },
                 );
-
-                itemPatch.labelsJson = JSON.stringify(nextLabels);
-                itemPatch.unread = false;
-                itemPatch.status = 'processed';
-                itemPatch.lastActionAt = now;
+                return {
+                  messageId: row.messageId,
+                  ...outcome,
+                  ...(!outcome.ok
+                    ? {
+                        error:
+                          outcome.steps.send === 'unknown'
+                            ? 'Envoi incertain : aucune nouvelle tentative automatique.'
+                            : 'Email envoyé. Les étapes restantes peuvent être reprises sans nouvel envoi.',
+                      }
+                    : {}),
+                };
               } else {
                 throw new BadRequestException(
                   `Action InboxZero non supportée: ${effectiveAction}`,

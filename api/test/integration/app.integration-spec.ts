@@ -288,34 +288,103 @@ describe('API against disposable migrated PostgreSQL', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('scans and replies to a fixture email without a real Google account', async () => {
+  it('resumes an HTTP reply after label failure without sending twice', async () => {
+    const ownerId = 'reply-http-user';
+    await prisma.betaInvite.create({
+      data: { email: `${ownerId}@example.invalid` },
+    });
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        name: 'Reply',
+        email: `${ownerId}@example.invalid`,
+        emailVerified: true,
+      },
+    });
+    const token = 'reply-http-token';
+    await prisma.session.create({
+      data: {
+        id: token,
+        token,
+        userId: ownerId,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
     const sessionId = await app
       .get(ConversationService)
-      .resolve('integration-user', 'fixture-inbox');
-    await seedGoogle(sessionId);
+      .resolve(ownerId, 'fixture-inbox');
+    await app
+      .get(GoogleCredentialService)
+      .save(ownerId, 'reply-subject', sessionId, {
+        refresh_token: 'fixture-token',
+        scope: scopes,
+      });
     await request(baseUrl)
       .post('/inbox-zero/scan')
-      .set('Cookie', sessionCookie)
+      .set('Cookie', cookie)
       .set('Origin', 'http://localhost:5173')
       .send({ sessionId })
       .expect(201);
-    expect(await prisma.inboxZeroItem.count({ where: { sessionId } })).toBe(1);
-    await request(baseUrl)
+    const payload = {
+      sessionId,
+      action: 'send_reply',
+      requestId: 'fixture-reply',
+      messageIds: ['fixture-message'],
+      replyText: 'Fixture reply',
+      archiveAfter: false,
+    };
+    const before = gmail.sendMessage.mock.calls.length;
+    gmail.modifyLabels.mockRejectedValueOnce(
+      new Error('Injected label failure'),
+    );
+    const first = await request(baseUrl)
       .post('/inbox-zero/apply')
-      .set('Cookie', sessionCookie)
+      .set('Cookie', cookie)
       .set('Origin', 'http://localhost:5173')
-      .send({
-        sessionId,
-        action: 'send_reply',
-        messageIds: ['fixture-message'],
-        replyText: 'Fixture reply',
-        archiveAfter: false,
-      })
+      .send(payload)
       .expect(201);
-    expect(gmail.sendMessage).toHaveBeenCalledTimes(1);
-    expect(gmail.sendMessage.mock.calls[0][1].to).toBe(
+    expect((first.body as { results: unknown[] }).results[0]).toMatchObject({
+      ok: false,
+      steps: { send: 'completed', labels: 'pending', local: 'pending' },
+      providerReference: { messageId: 'fixture-sent-message' },
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const resumed = await request(baseUrl)
+        .post('/inbox-zero/apply')
+        .set('Cookie', cookie)
+        .set('Origin', 'http://localhost:5173')
+        .send(payload)
+        .expect(201);
+      expect((resumed.body as { results: unknown[] }).results[0]).toMatchObject(
+        {
+          ok: true,
+          steps: { send: 'completed', labels: 'completed', local: 'completed' },
+        },
+      );
+    }
+    expect(gmail.sendMessage.mock.calls.length).toBe(before + 1);
+    expect(gmail.sendMessage.mock.calls[before][1].to).toBe(
       'sender@example.invalid',
     );
+    const labelsBefore = gmail.modifyLabels.mock.calls.length;
+    gmail.sendMessage.mockRejectedValueOnce(new Error('Send timeout'));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const uncertain = await request(baseUrl)
+        .post('/inbox-zero/apply')
+        .set('Cookie', cookie)
+        .set('Origin', 'http://localhost:5173')
+        .send({ ...payload, requestId: 'uncertain-reply' })
+        .expect(201);
+      expect(
+        (uncertain.body as { results: unknown[] }).results[0],
+      ).toMatchObject({ ok: false, steps: { send: 'unknown' } });
+    }
+    expect(gmail.sendMessage.mock.calls.length).toBe(before + 2);
+    expect(gmail.modifyLabels.mock.calls.length).toBe(labelsBefore);
   });
 
   it('journals equivalent chat and Inbox archives with the same durable outcome', async () => {
@@ -489,6 +558,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         .send({
           sessionId,
           action: 'send_reply',
+          requestId: 'simulation-reply',
           messageIds: ['fixture-message'],
           replyText: 'Simulation seulement',
         })
@@ -500,6 +570,11 @@ describe('API against disposable migrated PostgreSQL', () => {
         await prisma.inboxZeroItem.findMany({ where: { sessionId } }),
       ).toEqual(before);
       expect(gmail.sendMessage.mock.calls.length).toBe(sends);
+      expect(
+        await prisma.inboxReplyOperation.count({
+          where: { conversationId: sessionId },
+        }),
+      ).toBe(0);
       expect(gmail.modifyLabels.mock.calls.length).toBe(modifications);
       const audit = await prisma.inboxZeroAction.findFirstOrThrow({
         where: { sessionId },

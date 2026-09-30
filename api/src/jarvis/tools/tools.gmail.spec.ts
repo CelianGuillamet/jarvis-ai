@@ -125,7 +125,9 @@ function makeGmailMock(seed: GmailMessageDetail[]): GmailProvider {
 
       return Promise.resolve();
     },
-    async sendMessage() {},
+    sendMessage() {
+      return Promise.resolve({ messageId: 'sent-fixture', threadId: null });
+    },
   };
 }
 
@@ -522,7 +524,7 @@ describe('runTool gmail tools', () => {
       sendMessage(_sessionId, payload) {
         sent = payload;
 
-        return Promise.resolve();
+        return Promise.resolve({ messageId: 'sent-fixture', threadId: null });
       },
     };
 
