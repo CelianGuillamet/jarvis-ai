@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -145,7 +146,7 @@ export class JarvisSearchService {
       return results.sort((a, b) => b.score - a.score).slice(0, limit);
     } catch (error) {
       this.logger.error(`Search failed for ${sessionId}: ${error}`);
-      return [];
+      throw dataUnavailable();
     }
   }
 

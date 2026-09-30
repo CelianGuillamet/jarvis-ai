@@ -5,6 +5,11 @@ import { JarvisAuditService } from '../jarvis/services/jarvis-audit.service';
 import { JarvisMemoryService } from '../jarvis/services/jarvis-memory.service';
 import { JarvisMissionService } from '../jarvis/services/jarvis-mission.service';
 import { JarvisWorkflowService } from '../jarvis/services/jarvis-workflow.service';
+import { JarvisContactService } from '../jarvis/services/jarvis-contact.service';
+import { JarvisGoalService } from '../jarvis/services/jarvis-goal.service';
+import { JarvisSearchService } from '../jarvis/services/jarvis-search.service';
+import { JarvisKnowledgeBaseService } from '../jarvis/services/jarvis-knowledge-base.service';
+import { JarvisContextualHelpService } from '../jarvis/services/jarvis-contextual-help.service';
 
 describe('Unavailable reads are not empty success results', () => {
   const config = new ConfigService();
@@ -22,6 +27,11 @@ describe('Unavailable reads are not empty success results', () => {
       jarvisSessionSummary: { findUnique },
       jarvisMission: { findMany },
       jarvisWorkflowMemory: { findMany },
+      contact: { findMany },
+      jarvisGoal: { findMany },
+      jarvisKnowledgeEntry: { findMany },
+      jarvisContextualHelp: { findMany },
+      forConversation: jest.fn().mockResolvedValue({ todo: { findMany } }),
     } as unknown as PrismaService;
     const memory = new JarvisMemoryService(prisma, config);
     const reads = {
@@ -30,11 +40,34 @@ describe('Unavailable reads are not empty success results', () => {
       workflows: () => new JarvisWorkflowService(prisma, config).list('owned'),
       memory: () => memory.listFacts('owned'),
       search: () => memory.searchFacts('owned', 'query'),
+      contacts: () => new JarvisContactService(prisma).list('owned'),
+      contactSearch: () =>
+        new JarvisContactService(prisma).find('owned', 'query'),
+      goals: () => new JarvisGoalService(prisma).list('owned'),
+      hierarchy: () => new JarvisGoalService(prisma).getHierarchy('owned'),
+      knowledge: () => new JarvisKnowledgeBaseService(prisma).list('owned'),
+      knowledgeSearch: () =>
+        new JarvisKnowledgeBaseService(prisma).find('owned', {
+          query: 'query',
+        }),
+      help: () =>
+        new JarvisContextualHelpService(prisma).listByContext('owned'),
+      relevantHelp: () =>
+        new JarvisContextualHelpService(prisma).findRelevant('owned', 'query'),
+      globalSearch: () =>
+        new JarvisSearchService(prisma).query('owned', {
+          query: 'query',
+          types: ['todo'],
+        }),
     };
     return { findMany, findUnique, reads, memory };
   }
 
-  it.each(['audit', 'missions', 'workflows', 'memory', 'search'] as const)(
+  it.each(
+    Object.keys(fixture().reads) as Array<
+      keyof ReturnType<typeof fixture>['reads']
+    >,
+  )(
     '%s distinguishes an empty collection from a failed query',
     async (name) => {
       const { findMany, reads } = fixture();
@@ -54,6 +87,32 @@ describe('Unavailable reads are not empty success results', () => {
       }
     },
   );
+
+  it.each(['list', 'getHierarchy'] as const)(
+    'sanitizes %s failures while loading children',
+    async (method) => {
+      const findMany = jest
+        .fn()
+        .mockResolvedValueOnce([{ id: 'goal', sessionId: 'owned' }])
+        .mockRejectedValueOnce(new Error('private child query'));
+      const service = new JarvisGoalService({
+        jarvisGoal: { findMany },
+      } as unknown as PrismaService);
+      await expect(service[method]('owned')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    },
+  );
+
+  it('does not silently omit unavailable contextual help from a prompt', async () => {
+    const findMany = jest.fn().mockRejectedValue(new Error('offline'));
+    const service = new JarvisContextualHelpService({
+      jarvisContextualHelp: { findMany },
+    } as unknown as PrismaService);
+    await expect(
+      service.buildPromptContext('owned', 'query'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
 
   it('does not replace a failed summary read with an empty world model', async () => {
     const { memory, findUnique } = fixture();

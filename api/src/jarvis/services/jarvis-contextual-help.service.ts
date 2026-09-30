@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import type { JarvisContextualHelp } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -68,7 +69,7 @@ export class JarvisContextualHelpService {
       this.logger.error(
         `Failed to find relevant help for context "${context}": ${error}`,
       );
-      return [];
+      throw dataUnavailable();
     }
   }
 
@@ -126,7 +127,7 @@ export class JarvisContextualHelpService {
       return items.map((h) => this.mapHelpRecord(h));
     } catch (error) {
       this.logger.error(`Failed to list help for ${sessionId}: ${error}`);
-      return [];
+      throw dataUnavailable();
     }
   }
 
@@ -148,7 +149,7 @@ export class JarvisContextualHelpService {
       this.logger.error(
         `Failed to build prompt context for ${sessionId}: ${error}`,
       );
-      return '';
+      throw dataUnavailable();
     }
   }
 

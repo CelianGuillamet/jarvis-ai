@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { parseStoredTags } from '../lib/stored-json';
 import type { Contact } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
@@ -81,7 +82,7 @@ export class JarvisContactService {
       });
       return rows.map((r) => this.map(r));
     } catch {
-      return [];
+      throw dataUnavailable();
     }
   }
 
@@ -94,7 +95,7 @@ export class JarvisContactService {
       });
       return rows.map((r) => this.map(r));
     } catch {
-      return [];
+      throw dataUnavailable();
     }
   }
 

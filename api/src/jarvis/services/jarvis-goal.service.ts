@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import type { JarvisGoal } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -73,10 +74,12 @@ export class JarvisGoalService {
         orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
       });
 
-      return Promise.all(goals.map((g) => this.enrichGoalWithSubGoals(g)));
+      return await Promise.all(
+        goals.map((g) => this.enrichGoalWithSubGoals(g)),
+      );
     } catch (error) {
       this.logger.warn(`Failed to list goals for ${sessionId}: ${error}`);
-      return [];
+      throw dataUnavailable();
     }
   }
 
@@ -91,12 +94,14 @@ export class JarvisGoalService {
         orderBy: { priority: 'desc' },
       });
 
-      return Promise.all(rootGoals.map((g) => this.enrichGoalWithSubGoals(g)));
+      return await Promise.all(
+        rootGoals.map((g) => this.enrichGoalWithSubGoals(g)),
+      );
     } catch (error) {
       this.logger.warn(
         `Failed to get goal hierarchy for ${sessionId}: ${error}`,
       );
-      return [];
+      throw dataUnavailable();
     }
   }
 

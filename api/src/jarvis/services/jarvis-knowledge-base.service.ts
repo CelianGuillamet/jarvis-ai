@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { parseStoredTags } from '../lib/stored-json';
 import type { JarvisKnowledgeEntry } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
@@ -75,7 +76,7 @@ export class JarvisKnowledgeBaseService {
       return rows.map((r) => this.map(r));
     } catch (error) {
       this.logger.warn(`Failed to find knowledge for ${sessionId}: ${error}`);
-      return [];
+      throw dataUnavailable();
     }
   }
 
@@ -95,7 +96,7 @@ export class JarvisKnowledgeBaseService {
       return rows.map((r) => this.map(r));
     } catch (error) {
       this.logger.warn(`Failed to list knowledge for ${sessionId}: ${error}`);
-      return [];
+      throw dataUnavailable();
     }
   }
 
