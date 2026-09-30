@@ -153,13 +153,40 @@ describe('Durable pending confirmations', () => {
     expect(
       (await prisma.command.findUniqueOrThrow({ where: { id: old } })).state,
     ).toBe('cancelled');
-    const [claim] = await Promise.all([
+    const [claim, cancellation] = await Promise.all([
       pending.consume(id, session),
-      pending.cancelLatest(session),
+      pending.cancelLatest(session, id),
     ]);
     const row = await prisma.command.findUniqueOrThrow({ where: { id } });
     expect(row.state).toBe(claim ? 'executing' : 'cancelled');
+    expect(cancellation?.state).toBe(row.state);
+    expect(cancellation?.response?.meta.commandState).toBe(row.state);
     expect(await pending.consume(id, session)).toBeNull();
+  });
+
+  it('does not cancel a replacement when a stale proposal is refused', async () => {
+    const old = await pending.create(session, call, localTargets);
+    const current = await pending.create(session, call, localTargets);
+    expect((await pending.cancelLatest(session, old))?.state).toBe('cancelled');
+    expect(
+      (await prisma.command.findUniqueOrThrow({ where: { id: current } }))
+        .state,
+    ).toBe('waiting');
+    expect(await pending.cancelLatest(foreign, current)).toBeNull();
+    expect((await pending.consume(current, session))?.id).toBe(current);
+    expect((await pending.cancelLatest(session, current))?.state).toBe(
+      'executing',
+    );
+    await pending.complete(current, session, {
+      text: 'Action effectuée.',
+      meta: { sessionId: session },
+    });
+    expect(
+      (await pending.cancelLatest(session, current))?.response,
+    ).toMatchObject({
+      text: 'Action effectuée.',
+      meta: { commandState: 'completed' },
+    });
   });
 
   it('expires a proposal atomically without deleting its intent', async () => {

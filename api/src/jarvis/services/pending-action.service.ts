@@ -245,13 +245,43 @@ export class PendingActionsService {
     return item ? this.consume(item.id, sessionId) : null;
   }
 
-  async cancelLatest(sessionId: string) {
-    await this.prisma.$transaction(async (tx) => {
+  async cancelLatest(sessionId: string, expectedId?: string) {
+    return this.prisma.$transaction(async (tx) => {
       const ownerId = await this.lock(tx, sessionId);
-      await tx.command.updateMany({
-        where: { ownerId, conversationId: sessionId, state: 'waiting' },
-        data: { state: 'cancelled', revision: { increment: 1 } },
+      let row = await tx.command.findFirst({
+        where: {
+          ownerId,
+          conversationId: sessionId,
+          source: 'confirmation',
+          ...(expectedId ? { id: expectedId } : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
+      if (!row) return null;
+      if (row.state === 'waiting') {
+        row = await tx.command.update({
+          where: { id: row.id },
+          data: {
+            state:
+              row.expiresAt.getTime() <= Date.now() ? 'expired' : 'cancelled',
+            revision: { increment: 1 },
+          },
+        });
+      }
+      const response = this.replayRow(row);
+      return {
+        state: row.state,
+        response: response
+          ? {
+              ...response,
+              meta: {
+                ...response.meta,
+                commandId: row.id,
+                commandState: row.state,
+              },
+            }
+          : null,
+      };
     });
   }
 

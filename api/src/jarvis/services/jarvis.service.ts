@@ -3223,7 +3223,10 @@ export class JarvisService {
       const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
 
       // CONFIRMATION “HUMAINE” : si une action pending existe, on peut répondre "oui/non"
-      if (this.parseYesNo(userText) === 'yes') {
+      if (
+        this.parseYesNo(userText) === 'yes' ||
+        /^(non|no|annule|cancel|stop)[.!]?$/i.test(userText.trim())
+      ) {
         const replay = await this.pending.replayLatest(resolvedSessionId);
         if (replay) return replay;
       }
@@ -3358,9 +3361,22 @@ export class JarvisService {
         }
 
         if (yn === 'no') {
-          await this.pending.cancelLatest(resolvedSessionId);
+          const cancellation = await this.pending.cancelLatest(
+            resolvedSessionId,
+            pending.id,
+          );
+          if (cancellation?.state !== 'cancelled') {
+            return (
+              cancellation?.response ?? {
+                text: 'Cette action est indisponible ; son annulation ne peut pas être confirmée.',
+                meta: { sessionId: resolvedSessionId, commandId: pending.id },
+              }
+            );
+          }
           await this.auditStore.markSessionPendingAsCancelled(
             resolvedSessionId,
+            undefined,
+            pending.id,
           );
           const text = this.humanizeEnabled
             ? humanizeCancellation(profile)

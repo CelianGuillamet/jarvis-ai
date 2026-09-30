@@ -223,7 +223,9 @@ function makeService(options: ServiceOptions = {}) {
         : null,
     ),
     consumeLatest: jest.fn().mockResolvedValue(null),
-    cancelLatest: jest.fn().mockResolvedValue(undefined),
+    cancelLatest: jest
+      .fn()
+      .mockResolvedValue({ state: 'cancelled', response: null }),
     create: jest.fn().mockResolvedValue('pending-1'),
     consume: jest.fn().mockResolvedValue(null),
   };
@@ -399,6 +401,39 @@ function makeService(options: ServiceOptions = {}) {
 }
 
 describe('JarvisService', () => {
+  it('returns the execution state when cancellation loses the claim race', async () => {
+    const { service, pending, auditStore } = makeService({
+      pendingAction: {
+        id: 'racing-command',
+        call: { name: 'todo.delete', args: { query: 'fixture' } },
+      },
+    });
+    const response = {
+      text: 'Action déjà prise en charge.',
+      meta: { commandState: 'executing' },
+    };
+    pending.cancelLatest.mockResolvedValueOnce({
+      state: 'executing',
+      response,
+    });
+    expect(await service.chat('non', 'cancel-race')).toEqual(response);
+    expect(pending.cancelLatest).toHaveBeenCalledWith(
+      'cancel-race',
+      'racing-command',
+    );
+    expect(auditStore.markSessionPendingAsCancelled).not.toHaveBeenCalled();
+  });
+
+  it('replays a claimed action for a late bare cancellation', async () => {
+    const { service, pending, llmChat } = makeService();
+    const response = {
+      text: 'Résultat à vérifier.',
+      meta: { commandState: 'unknown' },
+    };
+    pending.replayLatest.mockResolvedValueOnce(response);
+    expect(await service.chat('annule', 'late-cancel')).toEqual(response);
+    expect(llmChat).not.toHaveBeenCalled();
+  });
   afterEach(() => {
     jest.useRealTimers();
   });
