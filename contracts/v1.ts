@@ -443,3 +443,51 @@ export type InboxZeroDraftReplyRequest = z.infer<
   typeof InboxZeroDraftReplyRequestSchema
 >;
 export type InboxZeroApplyRequest = z.infer<typeof InboxZeroApplyRequestSchema>;
+
+export const ApiErrorCodeSchema = z.enum([
+  'VALIDATION',
+  'UNAUTHENTICATED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'CONFLICT',
+  'REQUEST_TOO_LARGE',
+  'UNSUPPORTED_MEDIA_TYPE',
+  'RATE_LIMITED',
+  'UNAVAILABLE',
+  'INVALID_RESPONSE',
+  'INTERNAL_ERROR',
+]);
+export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
+export const ApiErrorResponseSchema = z.object({
+  code: ApiErrorCodeSchema,
+  message: text,
+});
+export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
+export function errorCodeForStatus(status: number): ApiErrorCode {
+  switch (status) {
+    case 400:
+    case 422:
+      return 'VALIDATION';
+    case 401:
+      return 'UNAUTHENTICATED';
+    case 403:
+      return 'FORBIDDEN';
+    case 404:
+      return 'NOT_FOUND';
+    case 409:
+      return 'CONFLICT';
+    case 413:
+    case 414:
+      return 'REQUEST_TOO_LARGE';
+    case 415:
+      return 'UNSUPPORTED_MEDIA_TYPE';
+    case 429:
+      return 'RATE_LIMITED';
+    case 502:
+    case 503:
+    case 504:
+      return 'UNAVAILABLE';
+    default:
+      return 'INTERNAL_ERROR';
+  }
+}

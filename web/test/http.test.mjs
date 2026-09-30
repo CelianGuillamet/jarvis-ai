@@ -37,3 +37,12 @@ test('preserves an abort during body reading as a timeout', async () => {
   globalThis.fetch = async () => ({ ok: true, text: async () => { throw new DOMException('Aborted', 'AbortError'); } });
   await assert.rejects(client.get('/api/test'), TimeoutError);
 });
+
+test('exposes stable error categories instead of relying on message text', async () => {
+  for (const [status, code] of [[400,'VALIDATION'],[404,'NOT_FOUND'],[503,'UNAVAILABLE']]) {
+    globalThis.fetch = async () => new Response(JSON.stringify({message:'Erreur'}), {status});
+    await assert.rejects(client.get('/api/test'), error => error instanceof HttpError && error.code === code);
+  }
+  globalThis.fetch = async () => new Response(JSON.stringify({code:'INVALID_RESPONSE',message:'Réponse invalide'}), {status:502});
+  await assert.rejects(client.get('/api/test'), error => error instanceof HttpError && error.code === 'INVALID_RESPONSE');
+});

@@ -1,3 +1,6 @@
+import { ApiErrorResponseSchema, errorCodeForStatus } from "../contracts/v1.ts";
+import type { ApiErrorCode } from "../contracts/v1.ts";
+
 export type HttpMethod = "GET" | "POST";
 
 export type HttpClientOptions = {
@@ -16,12 +19,15 @@ export type HttpRequestOptions = {
 export class HttpError extends Error {
   readonly name = "HttpError";
   readonly status: number;
+  readonly code: ApiErrorCode;
   readonly payload: unknown;
 
   constructor(input: { message: string; status: number; payload?: unknown }) {
     super(input.message);
     this.status = input.status;
     this.payload = input.payload;
+    const parsed = ApiErrorResponseSchema.safeParse(input.payload);
+    this.code = parsed.success ? parsed.data.code : errorCodeForStatus(input.status);
   }
 }
 
