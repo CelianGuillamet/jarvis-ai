@@ -48,3 +48,17 @@ test('inbox rejects missing or invented business outcomes', () => {
   assert.equal(InboxZeroApplyResponseSchema.safeParse({...scan,results:[{...result,outcome}]}).success,false);
  }
 });
+
+test('inbox outcomes reject contradictory success and execution evidence', async () => {
+ const { InboxZeroApplyResultSchema: schema } = await import('../src/core/contracts/v1.ts');
+ const partial = {messageId:'m',ok:false,outcome:'partial',operationId:'op',providerReference:{messageId:'sent',threadId:null},steps:{send:'completed',labels:'pending',local:'pending'}};
+ assert.equal(schema.safeParse(partial).success,true);
+ assert.equal(schema.safeParse({messageId:'m',ok:true,outcome:'simulated',simulated:true}).success,true);
+ for (const result of [
+  {...partial,ok:true}, {...partial,providerReference:null}, {...partial,steps:undefined},
+  {...partial,outcome:'completed',ok:true}, {...partial,outcome:'unknown'},
+  {...partial,steps:{send:'completed',labels:'pending',local:'completed'}},
+  {messageId:'m',ok:true,outcome:'simulated'},
+  {messageId:'m',ok:true,outcome:'completed',simulated:true},
+ ]) assert.equal(schema.safeParse(result).success,false);
+});

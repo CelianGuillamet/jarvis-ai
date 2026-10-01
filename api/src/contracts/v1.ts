@@ -291,28 +291,75 @@ export const InboxZeroScanResponseSchema = z.object({
   items: z.array(InboxZeroItemViewSchema),
   recentActions: z.array(InboxZeroActionViewSchema),
 });
+export const InboxZeroApplyResultSchema = z
+  .object({
+    messageId: text,
+    ok: z.boolean(),
+    outcome: z.enum(['completed', 'simulated', 'partial', 'unknown']),
+    simulated: z.boolean().optional(),
+    operationId: text.optional(),
+    steps: z
+      .object({
+        send: z.enum(['completed', 'unknown']),
+        labels: z.enum(['completed', 'pending']),
+        local: z.enum(['completed', 'pending']),
+      })
+      .optional(),
+    providerReference: z
+      .object({ messageId: text, threadId: nullableText })
+      .nullable()
+      .optional(),
+    error: text.optional(),
+  })
+  .superRefine((result, ctx) => {
+    const success =
+      result.outcome === 'completed' || result.outcome === 'simulated';
+    const invalid = (path: string, message: string) =>
+      ctx.addIssue({ code: 'custom', path: [path], message });
+    if (result.ok !== success)
+      invalid('ok', 'Success flag disagrees with outcome.');
+    if ((result.simulated === true) !== (result.outcome === 'simulated'))
+      invalid('simulated', 'Simulation flag disagrees with outcome.');
+    const steps = result.steps;
+    if (
+      result.outcome === 'simulated' &&
+      (steps || result.providerReference || result.operationId)
+    )
+      invalid('outcome', 'Simulation cannot claim executed steps.');
+    if (
+      result.outcome === 'partial' &&
+      (!steps ||
+        steps.send !== 'completed' ||
+        (steps.labels === 'completed' && steps.local === 'completed') ||
+        !result.providerReference ||
+        !result.operationId)
+    )
+      invalid(
+        'outcome',
+        'Partial send requires a receipt and unfinished follow-up.',
+      );
+    if (steps) {
+      if (
+        result.outcome === 'completed' &&
+        Object.values(steps).some((step) => step !== 'completed')
+      )
+        invalid('steps', 'Completed operations require completed steps.');
+      if (result.outcome === 'unknown' && steps.send !== 'unknown')
+        invalid('steps', 'Unknown send cannot claim a confirmed send.');
+      if (
+        (steps.labels === 'completed' && steps.send !== 'completed') ||
+        (steps.local === 'completed' && steps.labels !== 'completed')
+      )
+        invalid('steps', 'Follow-up steps require prior completion.');
+      if (steps.send === 'unknown' && result.providerReference)
+        invalid(
+          'providerReference',
+          'Unknown sends cannot claim a saved receipt.',
+        );
+    }
+  });
 export const InboxZeroApplyResponseSchema = InboxZeroScanResponseSchema.extend({
-  results: z.array(
-    z.object({
-      messageId: text,
-      ok: z.boolean(),
-      outcome: z.enum(['completed', 'simulated', 'partial', 'unknown']),
-      simulated: z.boolean().optional(),
-      operationId: text.optional(),
-      steps: z
-        .object({
-          send: z.enum(['completed', 'unknown']),
-          labels: z.enum(['completed', 'pending']),
-          local: z.enum(['completed', 'pending']),
-        })
-        .optional(),
-      providerReference: z
-        .object({ messageId: text, threadId: nullableText })
-        .nullable()
-        .optional(),
-      error: text.optional(),
-    }),
-  ),
+  results: z.array(InboxZeroApplyResultSchema),
 });
 export const GmailMessageDetailSchema = z.object({
   id: text,
