@@ -37,13 +37,20 @@ describe('Gmail send receipts', () => {
     );
   });
 
-  it.each([{}, { id: '' }, { id: '  ' }])(
+  it.each([
+    null,
+    {},
+    { id: '' },
+    { id: '  ' },
+    { id: 12 },
+    { id: 'sent', threadId: 12 },
+  ])(
     'treats a missing receipt as uncertain and never resends: %j',
     async (data) => {
       send.mockResolvedValueOnce({ data });
       await expect(
         provider.sendMessage('conversation', payload),
-      ).rejects.toThrow('Référence du message envoyé indisponible');
+      ).rejects.toThrow('La réponse de Gmail est invalide.');
       expect(send).toHaveBeenCalledTimes(1);
     },
   );

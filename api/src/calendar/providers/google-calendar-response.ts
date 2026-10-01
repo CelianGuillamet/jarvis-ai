@@ -11,6 +11,8 @@ const eventTime = z
   })
   .transform((value) => value.dateTime ?? value.date!);
 
+export const CalendarReceiptSchema = z.object({ id: identifier });
+
 export const CalendarListSchema = z.object({
   items: z
     .array(

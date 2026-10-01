@@ -1,5 +1,6 @@
 import {
   GmailListSchema,
+  GmailReceiptSchema,
   GmailMessageSchema,
   validateGmailResponse,
 } from './gmail-response';
@@ -324,13 +325,11 @@ export class GoogleGmailProvider implements GmailProvider {
           ? { raw, threadId: payload.threadId }
           : { raw },
       });
-      if (!response.data.id?.trim()) {
-        // The send may have happened: callers must retain an uncertain outcome.
-        throw new Error('Référence du message envoyé indisponible.');
-      }
+      // A malformed receipt does not prove that sending failed. Never retry here.
+      const receipt = validateGmailResponse(response.data, GmailReceiptSchema);
       return {
-        messageId: response.data.id,
-        threadId: response.data.threadId ?? null,
+        messageId: receipt.id,
+        threadId: receipt.threadId ?? null,
       };
     });
   }

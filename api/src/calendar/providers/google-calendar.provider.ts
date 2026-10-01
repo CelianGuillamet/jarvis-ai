@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import { google } from 'googleapis';
 import {
   CalendarListSchema,
+  CalendarReceiptSchema,
   CalendarEventsSchema,
   validateCalendarResponse,
 } from './google-calendar-response';
@@ -139,7 +140,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
         ? parsedEnd
         : start.plus({ minutes: 60 });
 
-    await calendar.events.insert({
+    const response = await calendar.events.insert({
       calendarId: 'primary',
       requestBody: {
         summary: title,
@@ -153,6 +154,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
         },
       },
     });
+    validateCalendarResponse(response.data, CalendarReceiptSchema);
   }
 
   async deleteEvent(
@@ -191,7 +193,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
         ? parsedEnd
         : start.plus({ minutes: 60 });
 
-    await calendar.events.patch({
+    const response = await calendar.events.patch({
       calendarId: calendarId ?? 'primary',
       eventId,
       requestBody: {
@@ -206,5 +208,6 @@ export class GoogleCalendarProvider implements CalendarProvider {
         },
       },
     });
+    validateCalendarResponse(response.data, CalendarReceiptSchema);
   }
 }

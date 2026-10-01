@@ -2,6 +2,11 @@ import { BadGatewayException } from '@nestjs/common';
 import { z } from 'zod';
 
 const identifier = z.string().refine((value) => value.trim().length > 0);
+export const GmailReceiptSchema = z.object({
+  id: identifier,
+  threadId: identifier.nullable().optional(),
+});
+
 export const GmailListSchema = z.object({
   messages: z.array(z.object({ id: identifier })).optional(),
 });
