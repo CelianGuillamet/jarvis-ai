@@ -1,3 +1,4 @@
+import { OllamaResponseSchema, readModelResponse } from './model-response';
 import { LLMMessage, LLMProvider } from './llm.provider';
 
 export class OllamaProvider implements LLMProvider {
@@ -19,25 +20,9 @@ export class OllamaProvider implements LLMProvider {
     });
 
     // si Ollama renvoie une erreur, on la remonte clairement
-    if (!res.ok)
-      throw new Error(`Ollama error: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw new Error(`Ollama error: ${res.status}`);
 
-    const data: unknown = await res.json();
-    if (typeof data !== 'object' || data === null || !('message' in data)) {
-      return '';
-    }
-    const message = data.message;
-    if (
-      typeof message !== 'object' ||
-      message === null ||
-      !('content' in message)
-    ) {
-      return '';
-    }
-    if (message.content == null) return '';
-    if (typeof message.content !== 'string') {
-      throw new Error('Ollama returned non-text message content');
-    }
-    return message.content;
+    const data = await readModelResponse(res, OllamaResponseSchema);
+    return data.message.content;
   }
 }

@@ -1,3 +1,4 @@
+import { InvalidModelResponseError } from '../providers/model-response';
 import {
   CommandCompensationService,
   supportsLocalCompensation,
@@ -400,11 +401,18 @@ function parseJarvisActionJson(jsonText: string): JarvisAction | null {
   if (!isRecord(x) || typeof x.type !== 'string') return null;
 
   if (x.type === 'ask') {
-    if (typeof x.text !== 'string') return null;
+    if (typeof x.text !== 'string' || !x.text.trim()) return null;
+    if (x.awaiting !== undefined && typeof x.awaiting !== 'string') return null;
     const choicesRaw = x.choices;
-    const choices = Array.isArray(choicesRaw)
-      ? choicesRaw.filter((c) => typeof c === 'string')
-      : undefined;
+    let choices: string[] | undefined;
+    if (choicesRaw !== undefined) {
+      if (
+        !Array.isArray(choicesRaw) ||
+        !choicesRaw.every((choice: unknown) => typeof choice === 'string')
+      )
+        return null;
+      choices = choicesRaw;
+    }
     const awaiting = typeof x.awaiting === 'string' ? x.awaiting : undefined;
     return { type: 'ask', text: x.text, choices, awaiting };
   }
@@ -3552,7 +3560,11 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
       if (!action) {
         const natural = this.cleanAssistantText(raw);
-        if (natural && !this.seemsActionable(userText)) {
+        const structured =
+          cleaned.trim().startsWith('{') ||
+          cleaned.trim().startsWith('[') ||
+          raw.trim().startsWith('```');
+        if (natural && !structured && !this.seemsActionable(userText)) {
           const text = this.humanizeAskOrFinalText(profile, natural, 'final');
           await this.logSafe({
             sessionId: resolvedSessionId,
@@ -3580,12 +3592,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
           simulation: this.simulation,
           result: 'PARSE_ERROR',
         });
-        return {
-          text: this.simulation
-            ? raw
-            : 'Je n’ai pas réussi à interpréter la réponse. Peux-tu reformuler ?',
-          meta: { simulation: this.simulation, sessionId: resolvedSessionId },
-        };
+        throw new InvalidModelResponseError();
       }
 
       // Anti "je vais..." + anti-final pour demandes actionnables

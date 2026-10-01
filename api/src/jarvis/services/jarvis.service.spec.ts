@@ -1,3 +1,4 @@
+import { InvalidModelResponseError } from '../providers/model-response';
 import { JarvisStatusSnapshotSchema } from '../../contracts/v1';
 import { runTool } from '../tools/tools';
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
@@ -1225,6 +1226,25 @@ describe('calendar routing safety', () => {
       expect(llmChat).toHaveBeenCalled();
       expect(pending.create).not.toHaveBeenCalled();
       expect(calendar.deleteEvent).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe('Invalid structured model decisions', () => {
+  it.each([
+    '{"type":',
+    '{"type":"ask","text":"Question","choices":[12]}',
+    '{"type":"final","text":"   "}',
+    '{"type":"invented"}',
+  ])(
+    'rejects malformed decisions instead of presenting raw JSON as an answer',
+    async (raw) => {
+      const { service, llmChat, pending } = makeService();
+      llmChat.mockResolvedValue(raw);
+      await expect(
+        service.chat('Explique la photosynthèse', 'model-invalid'),
+      ).rejects.toBeInstanceOf(InvalidModelResponseError);
+      expect(pending.create).not.toHaveBeenCalled();
     },
   );
 });
