@@ -210,6 +210,7 @@ function makeService(options: ServiceOptions = {}) {
 
   const pending = {
     replay: jest.fn().mockResolvedValue(null),
+    peek: jest.fn().mockResolvedValue(null),
     replayLatest: jest.fn().mockResolvedValue(null),
     complete: jest.fn().mockResolvedValue(undefined),
     markUnknown: jest.fn().mockResolvedValue(undefined),
@@ -432,6 +433,13 @@ describe('JarvisService', () => {
       'racing-command',
     );
     expect(auditStore.markSessionPendingAsCancelled).not.toHaveBeenCalled();
+  });
+
+  it('returns a not-found error when confirmation has no owned pending action', async () => {
+    const { service } = makeService();
+    await expect(service.confirm('missing', 'owned')).rejects.toMatchObject({
+      status: 404,
+    });
   });
 
   it('replays a claimed action for a late bare cancellation', async () => {

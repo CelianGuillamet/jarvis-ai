@@ -7,6 +7,7 @@ import {
 } from '../../commands/command-compensation.service';
 import {
   BadRequestException,
+  NotFoundException,
   HttpException,
   Injectable,
   Inject,
@@ -81,7 +82,6 @@ import {
   humanizeAskOrFinal,
   humanizeCancellation,
   humanizeError,
-  humanizeNoPending,
   humanizePendingPrompt,
   humanizePendingReminder,
   humanizeToolResult,
@@ -3990,17 +3990,8 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
     const replay = await this.pending.replay(actionId, expectedSessionId);
     if (replay) return replay;
-    const fallbackProfile = await this.getHumanProfile(
-      expectedSessionId ?? 'default',
-    );
     const peeked = await this.pending.peek(actionId, expectedSessionId);
-    if (!peeked)
-      return {
-        text: this.humanizeEnabled
-          ? humanizeNoPending(fallbackProfile)
-          : 'Action introuvable ou expirée.',
-        meta: { simulation: this.simulation },
-      };
+    if (!peeked) throw new NotFoundException('Action introuvable ou expirée.');
 
     const googleToken = await this.googleTokenForConversation(peeked.sessionId);
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
@@ -4039,15 +4030,14 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
     }
 
     const item = await this.pending.consume(actionId, expectedSessionId);
-    if (!item)
-      return (
-        (await this.pending.replay(actionId, expectedSessionId)) ?? {
-          text: this.humanizeEnabled
-            ? humanizeNoPending(fallbackProfile)
-            : 'Action introuvable ou expirée.',
-          meta: { simulation: this.simulation },
-        }
+    if (!item) {
+      const concurrentReplay = await this.pending.replay(
+        actionId,
+        expectedSessionId,
       );
+      if (concurrentReplay) return concurrentReplay;
+      throw new NotFoundException('Action introuvable ou expirée.');
+    }
 
     let auditContext: AuditExecutionContext | null = {
       sessionId: item.sessionId,
@@ -4102,7 +4092,12 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       const response = {
         text: humanText,
         choices: choices.length ? choices : undefined,
-        meta: { simulation: this.simulation, sessionId: item.sessionId },
+        meta: {
+          simulation: this.simulation,
+          sessionId: item.sessionId,
+          commandId: item.id,
+          commandState: 'completed' as const,
+        },
       };
       await this.pending.complete(item.id, item.sessionId, response);
       return response;
@@ -4144,7 +4139,12 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         (await this.pending.replay(item.id, item.sessionId)) ??
         recoverable ?? {
           text: 'Le résultat de cette action doit être vérifié. Elle ne sera pas relancée.',
-          meta: { simulation: this.simulation, sessionId: item.sessionId },
+          meta: {
+            simulation: this.simulation,
+            sessionId: item.sessionId,
+            commandId: item.id,
+            commandState: 'unknown' as const,
+          },
         }
       );
     }

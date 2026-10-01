@@ -1045,7 +1045,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Cookie', cookie)
       .set('Origin', 'http://localhost:5173')
       .send({ sessionId: second, actionId: pending.id })
-      .expect(201);
+      .expect(404);
     expect(
       await prisma.pendingAction.findUnique({ where: { id: pending.id } }),
     ).not.toBeNull();
