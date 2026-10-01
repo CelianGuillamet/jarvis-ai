@@ -929,6 +929,10 @@ describe('JarvisService', () => {
 
     const snapshot = await service.status('console-session');
 
+    expect(snapshot.availability).toEqual({
+      gmail: 'available',
+      calendar: 'available',
+    });
     expect(snapshot.sessionId).toBe('console-session');
     expect(snapshot.providers.llm).toBe('ollama');
     expect(snapshot.metrics.openTodos).toBe(1);

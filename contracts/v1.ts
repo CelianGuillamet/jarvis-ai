@@ -153,6 +153,13 @@ const activity = z.object({
   assistantText: text,
   toolName: nullableText,
 });
+export const ResourceAvailabilitySchema = z.enum([
+  'available',
+  'disconnected',
+  'permission_required',
+  'unavailable',
+  'invalid_response',
+]);
 export const JarvisStatusSnapshotSchema = z.object({
   sessionId: text,
   now: text,
@@ -161,6 +168,10 @@ export const JarvisStatusSnapshotSchema = z.object({
   providers: z.object({ llm: text, web: text, weather: text.optional() }),
   profile: HumanProfileSchema,
   pendingAction: PendingActionViewSchema.nullable(),
+  availability: z.object({
+    gmail: ResourceAvailabilitySchema,
+    calendar: ResourceAvailabilitySchema,
+  }),
   integrations: z.object({
     googleConnected: z.boolean(),
     calendarConnected: z.boolean(),

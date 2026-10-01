@@ -10,6 +10,14 @@ import HabitWidget from '@/features/dashboard/components/HabitWidget.vue';
 import { useChatStore } from '@/stores/chatStore';
 import { useStatusStore } from '@/stores/statusStore';
 
+const availabilityLabels = {
+  available: 'Disponible',
+  disconnected: 'Non connecté',
+  permission_required: 'Autorisation requise',
+  unavailable: 'Indisponible',
+  invalid_response: 'Réponse invalide',
+};
+
 const status = useStatusStore();
 const chat = useChatStore();
 const router = useRouter();
@@ -181,16 +189,16 @@ const metricConfigs: MetricConfig[] = [
               Google
             </BaseBadge>
             <BaseBadge
-              :tone="status.snapshot?.integrations.calendarConnected ? 'ok' : 'warn'"
+              :tone="status.snapshot?.availability.calendar === 'available' ? 'ok' : 'warn'"
               :dot="true"
             >
-              Calendar
+              Calendrier · {{ status.snapshot ? availabilityLabels[status.snapshot.availability.calendar] : 'Chargement' }}
             </BaseBadge>
             <BaseBadge
-              :tone="status.snapshot?.integrations.gmailConnected ? 'ok' : 'warn'"
+              :tone="status.snapshot?.availability.gmail === 'available' ? 'ok' : 'warn'"
               :dot="true"
             >
-              Gmail
+              Gmail · {{ status.snapshot ? availabilityLabels[status.snapshot.availability.gmail] : 'Chargement' }}
             </BaseBadge>
             <BaseBadge tone="muted" :dot="false">
               {{ status.snapshot?.providers.web || 'web —' }}

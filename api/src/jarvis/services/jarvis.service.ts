@@ -1,3 +1,4 @@
+import { readStatusResource } from './status-resource';
 import { InvalidModelResponseError } from '../providers/model-response';
 import {
   CommandCompensationService,
@@ -1874,32 +1875,25 @@ export class JarvisService {
     const now = DateTime.now().setZone(this.tz);
     const todayRange = resolveRange("aujourd'hui", this.tz);
 
-    let unreadEmails: Awaited<
-      ReturnType<GmailProvider['listMessages']>
-    > | null = null;
-    try {
-      unreadEmails = await this.gmail.listMessages(resolvedSessionId, {
-        q: 'is:unread',
-        maxResults: 5,
-      });
-    } catch {
-      unreadEmails = null;
-    }
-
-    let todayEvents: Awaited<
-      ReturnType<CalendarProvider['listEventsInterval']>
-    > | null = null;
-    try {
-      todayEvents = await this.calendar.listEventsInterval(
-        resolvedSessionId,
-        todayRange.startIso,
-        todayRange.endIso,
-        this.tz,
-        12,
-      );
-    } catch {
-      todayEvents = null;
-    }
+    const [gmailResource, calendarResource] = await Promise.all([
+      readStatusResource(() =>
+        this.gmail.listMessages(resolvedSessionId, {
+          q: 'is:unread',
+          maxResults: 5,
+        }),
+      ),
+      readStatusResource(() =>
+        this.calendar.listEventsInterval(
+          resolvedSessionId,
+          todayRange.startIso,
+          todayRange.endIso,
+          this.tz,
+          12,
+        ),
+      ),
+    ]);
+    const unreadEmails = gmailResource.data;
+    const todayEvents = calendarResource.data;
 
     const sortedEvents = [...(todayEvents ?? [])].sort(
       (a, b) => a.when.getTime() - b.when.getTime(),
@@ -2012,6 +2006,10 @@ export class JarvisService {
       },
       profile,
       pendingAction: pendingActionView,
+      availability: {
+        gmail: gmailResource.availability,
+        calendar: calendarResource.availability,
+      },
       integrations: {
         googleConnected: googleStatus.connected,
         calendarConnected: googleStatus.calendarConnected,
