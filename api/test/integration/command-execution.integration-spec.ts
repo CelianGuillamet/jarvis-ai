@@ -94,6 +94,35 @@ describe('Shared durable command execution', () => {
     },
   );
 
+  it.each(['partial', 'unknown'] as const)(
+    'persists the classified %s outcome instead of completed success',
+    async (outcome) => {
+      const input = {
+        ...(await fixture(`classified-${outcome}`)),
+        source: 'inbox' as const,
+      };
+      const result = { outcome, ok: false };
+      const mutate = jest.fn(() => Promise.resolve(result));
+      await expect(
+        executor.execute(
+          input,
+          mutate,
+          () => result,
+          (value) => value.outcome,
+        ),
+      ).resolves.toEqual(result);
+      const row = await prisma.command.findFirstOrThrow({
+        where: { conversationId: input.conversationId },
+      });
+      expect(row).toMatchObject({
+        state: outcome === 'unknown' ? 'unknown' : 'completed',
+        outcomeCode: outcome.toUpperCase(),
+        response: outcome === 'unknown' ? null : { result },
+      });
+      expect(mutate).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('records simulation without entering the mutation callback', async () => {
     const input = await fixture('simulation');
     input.policy.simulation = true;

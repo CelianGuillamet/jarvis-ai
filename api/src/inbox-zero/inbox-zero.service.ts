@@ -887,6 +887,7 @@ export class InboxZeroService {
             simulated: true,
             outcome: 'simulated' as const,
           }),
+          (result) => result.outcome,
         );
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

@@ -84,24 +84,7 @@ export type InboxZeroScanResponse = {
   recentActions: InboxZeroActionView[];
 };
 
-export type InboxZeroApplyResponse = {
-  session: InboxZeroSessionView;
-  items: InboxZeroItemView[];
-  recentActions: InboxZeroActionView[];
-  results: Array<{
-    messageId: string;
-    ok: boolean;
-    simulated?: boolean;
-    operationId?: string;
-    steps?: {
-      send: 'completed' | 'unknown';
-      labels: 'completed' | 'pending';
-      local: 'completed' | 'pending';
-    };
-    providerReference?: { messageId: string; threadId: string | null } | null;
-    error?: string;
-  }>;
-};
+export type { InboxZeroApplyResponse } from '../contracts/v1';
 
 export type InboxZeroDraftReplyResponse = {
   messageId: string;
