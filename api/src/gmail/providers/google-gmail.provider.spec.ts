@@ -56,3 +56,48 @@ describe('Gmail send receipts', () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Gmail read boundaries', () => {
+  const list = jest.fn();
+  const get = jest.fn();
+  const provider = new GoogleGmailProvider({
+    createAuthorizedClient: jest.fn().mockResolvedValue({}),
+  } as unknown as GoogleOAuthClientService);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(google.gmail).mockReturnValue({
+      users: { messages: { list, get } },
+    } as unknown as ReturnType<typeof google.gmail>);
+  });
+
+  it('fails invalid list entries before requesting metadata', async () => {
+    list.mockResolvedValueOnce({ data: { messages: [{}] } });
+    await expect(provider.listMessages('conversation')).rejects.toThrow(
+      'La réponse de Gmail est invalide.',
+    );
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('keeps legitimate empty results distinct from malformed responses', async () => {
+    list.mockResolvedValueOnce({ data: {} });
+    await expect(provider.listMessages('conversation')).resolves.toEqual([]);
+    list.mockResolvedValueOnce({ data: null });
+    await expect(provider.listMessages('conversation')).rejects.toThrow(
+      'La réponse de Gmail est invalide.',
+    );
+  });
+
+  it('uses the validated provider timestamp when the Date header is absent', async () => {
+    list.mockResolvedValueOnce({ data: { messages: [{ id: 'message' }] } });
+    get.mockResolvedValueOnce({
+      data: {
+        id: 'message',
+        threadId: 'thread',
+        internalDate: '1790812800000',
+      },
+    });
+    const messages = await provider.listMessages('conversation');
+    expect(messages[0].date.getTime()).toBe(1790812800000);
+  });
+});
