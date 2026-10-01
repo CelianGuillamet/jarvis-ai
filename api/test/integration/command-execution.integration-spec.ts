@@ -124,25 +124,31 @@ describe('Shared durable command execution', () => {
     },
   );
 
-  it('records an explicit pre-effect rejection as failed rather than unknown', async () => {
-    const input = await fixture('rejected-before-effect');
-    await expect(
-      executor.execute(
-        input,
-        () => Promise.reject(new CommandRejectedError('Date invalide.')),
-        () => '',
-      ),
-    ).rejects.toBeInstanceOf(CommandRejectedError);
-    expect(
-      await prisma.command.findFirstOrThrow({
-        where: { conversationId: input.conversationId },
-      }),
-    ).toMatchObject({
-      state: 'failed',
-      outcomeCode: 'VALIDATION',
-      response: null,
-    });
-  });
+  it.each(['VALIDATION', 'NOT_FOUND'] as const)(
+    'records an explicit pre-effect %s rejection as failed rather than unknown',
+    async (code) => {
+      const input = await fixture(`rejected-before-effect-${code}`);
+      await expect(
+        executor.execute(
+          input,
+          () =>
+            Promise.reject(
+              new CommandRejectedError('Rejet avant effet.', code),
+            ),
+          () => '',
+        ),
+      ).rejects.toBeInstanceOf(CommandRejectedError);
+      expect(
+        await prisma.command.findFirstOrThrow({
+          where: { conversationId: input.conversationId },
+        }),
+      ).toMatchObject({
+        state: 'failed',
+        outcomeCode: code,
+        response: null,
+      });
+    },
+  );
 
   it('records simulation without entering the mutation callback', async () => {
     const input = await fixture('simulation');

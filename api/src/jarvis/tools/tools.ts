@@ -3001,8 +3001,12 @@ export async function runTool(
 
         case 'todo.done': {
           const { row, error } = await resolveTodo(call.args.query, false);
-          if (error) return error;
-          if (!row) return `Aucun todo trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun todo trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.todo.findUnique({
             where: { id: row.id },
@@ -3030,7 +3034,7 @@ export async function runTool(
 
         case 'todo.reopen': {
           const { row, error } = await resolveTodo(call.args.query, true);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!row)
             return `Aucun todo terminé trouvé pour "${call.args.query}".`;
 
@@ -3087,11 +3091,18 @@ export async function runTool(
 
         case 'todo.update': {
           const nextText = call.args.text.trim();
-          if (!nextText) return 'Le nouveau texte du todo est vide.';
+          if (!nextText)
+            throw new CommandRejectedError(
+              'Le nouveau texte du todo est vide.',
+            );
 
           const { row, error } = await resolveTodo(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun todo trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun todo trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           await prisma.todo.update({
             where: { id: row.id },
@@ -3108,8 +3119,12 @@ export async function runTool(
 
         case 'todo.delete': {
           const { row, error } = await resolveTodo(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun todo trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun todo trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.todo.findUnique({
             where: { id: row.id },
@@ -3145,7 +3160,7 @@ export async function runTool(
 
         case 'todo.bulk_done': {
           const { rows, error } = resolveTodoRefs(call.args.refs, false);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun todo à marquer.';
 
           const ids = rows.map((r) => r.id);
@@ -3176,7 +3191,7 @@ export async function runTool(
 
         case 'todo.bulk_delete': {
           const { rows, error } = resolveTodoRefs(call.args.refs);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun todo à supprimer.';
 
           const ids = rows.map((r) => r.id);
@@ -3433,8 +3448,12 @@ export async function runTool(
 
         case 'calendar.delete': {
           const { target, error } = await resolveCalendarTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun rendez-vous ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError(
+              'Aucun rendez-vous ciblé.',
+              'NOT_FOUND',
+            );
 
           if (ctx.simulation) {
             ctx.recordUndo?.('suppression événement (simulation)', false);
@@ -3455,8 +3474,12 @@ export async function runTool(
 
         case 'calendar.update': {
           const { target, error } = await resolveCalendarTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun rendez-vous ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError(
+              'Aucun rendez-vous ciblé.',
+              'NOT_FOUND',
+            );
           const targetStart = DateTime.fromJSDate(target.when).setZone(tz);
           const targetEnd =
             target.end && target.end.getTime() > target.when.getTime()
@@ -3620,13 +3643,19 @@ export async function runTool(
 
         case 'note.update': {
           const { row, error } = await resolveNote(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucune note trouvée pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucune note trouvée pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const hasTitle = Object.hasOwn(call.args, 'title');
           const hasText = Object.hasOwn(call.args, 'text');
           if (!hasTitle && !hasText) {
-            return 'Rien à modifier: envoie au moins title ou text.';
+            throw new CommandRejectedError(
+              'Rien à modifier: envoie au moins title ou text.',
+            );
           }
 
           const data: { title?: string | null; text?: string } = {};
@@ -3639,7 +3668,10 @@ export async function runTool(
           }
           if (hasText) {
             const cleaned = (call.args.text ?? '').trim();
-            if (!cleaned) return 'Le texte de la note ne peut pas être vide.';
+            if (!cleaned)
+              throw new CommandRejectedError(
+                'Le texte de la note ne peut pas être vide.',
+              );
             data.text = cleaned;
           }
 
@@ -3662,8 +3694,12 @@ export async function runTool(
 
         case 'note.delete': {
           const { row, error } = await resolveNote(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucune note trouvée pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucune note trouvée pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.note.findUnique({
             where: { id: row.id },
@@ -3725,8 +3761,12 @@ export async function runTool(
 
         case 'shopping.bought': {
           const { row, error } = await resolveShopping(call.args.query, false);
-          if (error) return error;
-          if (!row) return `Aucun article trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun article trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.shoppingItem.findUnique({
             where: { id: row.id },
@@ -3754,7 +3794,7 @@ export async function runTool(
 
         case 'shopping.unbought': {
           const { row, error } = await resolveShopping(call.args.query, true);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!row) {
             return `Aucun article déjà acheté trouvé pour "${call.args.query}".`;
           }
@@ -3813,11 +3853,18 @@ export async function runTool(
 
         case 'shopping.update': {
           const nextText = call.args.text.trim();
-          if (!nextText) return "Le nouveau texte de l'article est vide.";
+          if (!nextText)
+            throw new CommandRejectedError(
+              "Le nouveau texte de l'article est vide.",
+            );
 
           const { row, error } = await resolveShopping(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun article trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun article trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           await prisma.shoppingItem.update({
             where: { id: row.id },
@@ -3838,8 +3885,12 @@ export async function runTool(
 
         case 'shopping.delete': {
           const { row, error } = await resolveShopping(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun article trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun article trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.shoppingItem.findUnique({
             where: { id: row.id },
@@ -3875,7 +3926,7 @@ export async function runTool(
 
         case 'shopping.bulk_bought': {
           const { rows, error } = resolveShoppingRefs(call.args.refs, false);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun article à marquer.';
 
           const ids = rows.map((r) => r.id);
@@ -3906,7 +3957,7 @@ export async function runTool(
 
         case 'shopping.bulk_delete': {
           const { rows, error } = resolveShoppingRefs(call.args.refs);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun article à supprimer.';
 
           const ids = rows.map((r) => r.id);
@@ -4348,8 +4399,9 @@ export async function runTool(
 
         case 'gmail.mark_read': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email marqué comme lu "${target.subject}".`;
@@ -4413,8 +4465,9 @@ export async function runTool(
 
         case 'gmail.mark_unread': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email marqué comme non lu "${target.subject}".`;
@@ -4432,8 +4485,9 @@ export async function runTool(
 
         case 'gmail.archive': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email archivé "${target.subject}".`;
@@ -4450,8 +4504,9 @@ export async function runTool(
 
         case 'gmail.unarchive': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email desarchivé "${target.subject}".`;
@@ -4468,8 +4523,9 @@ export async function runTool(
 
         case 'gmail.trash': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email déplacé à la corbeille "${target.subject}".`;
@@ -4482,8 +4538,9 @@ export async function runTool(
 
         case 'gmail.untrash': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email restauré depuis la corbeille "${target.subject}".`;
@@ -4502,8 +4559,9 @@ export async function runTool(
 
         case 'gmail.delete': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email supprimé définitivement "${target.subject}".`;

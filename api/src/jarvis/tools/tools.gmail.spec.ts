@@ -561,4 +561,16 @@ describe('runTool gmail tools', () => {
       expect(sendMessage).not.toHaveBeenCalled();
     },
   );
+  it('rejects an unresolved archive target without mutating Gmail', async () => {
+    const modifyLabels = jest.fn();
+    const gmail = { ...makeGmailMock([]), modifyLabels };
+    await expect(
+      runTool(makeCtx(gmail), {
+        type: 'tool',
+        name: 'gmail.archive',
+        args: { query: 'missing-message' },
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(modifyLabels).not.toHaveBeenCalled();
+  });
 });

@@ -131,7 +131,7 @@ export class CommandExecutionService {
             state: error instanceof CommandRejectedError ? 'failed' : 'unknown',
             outcomeCode:
               error instanceof CommandRejectedError
-                ? 'VALIDATION'
+                ? error.code
                 : 'EXECUTION_UNCERTAIN',
             revision: { increment: 1 },
           },
