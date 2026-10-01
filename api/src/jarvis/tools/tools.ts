@@ -3036,7 +3036,10 @@ export async function runTool(
           const { row, error } = await resolveTodo(call.args.query, true);
           if (error) throw new CommandRejectedError(error);
           if (!row)
-            return `Aucun todo terminé trouvé pour "${call.args.query}".`;
+            throw new CommandRejectedError(
+              `Aucun todo terminé trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.todo.findUnique({
             where: { id: row.id },
@@ -3536,7 +3539,9 @@ export async function runTool(
               parsedEnd = DateTime.fromISO(resolvedEnd.startIso, { zone: tz });
             }
             if (!parsedEnd.isValid) {
-              return `Heure de fin invalide: "${call.args.endWhen}".`;
+              throw new CommandRejectedError(
+                `Heure de fin invalide: "${call.args.endWhen}".`,
+              );
             }
             if (parsedEnd <= nextStart) parsedEnd = parsedEnd.plus({ days: 1 });
             nextEnd = parsedEnd;
@@ -3796,7 +3801,10 @@ export async function runTool(
           const { row, error } = await resolveShopping(call.args.query, true);
           if (error) throw new CommandRejectedError(error);
           if (!row) {
-            return `Aucun article déjà acheté trouvé pour "${call.args.query}".`;
+            throw new CommandRejectedError(
+              `Aucun article déjà acheté trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
           }
 
           const before = await prisma.shoppingItem.findUnique({
@@ -4815,9 +4823,15 @@ export async function runTool(
 
         case 'mission.close': {
           const { target, error } = await resolveMissionTarget(call.args);
-          if (!target) return error ?? 'Mission introuvable.';
+          if (!target)
+            throw new CommandRejectedError(
+              error ?? 'Mission introuvable.',
+              error ? 'VALIDATION' : 'NOT_FOUND',
+            );
           if (target.status !== 'active') {
-            return `La mission "${target.objective}" n’est plus active.`;
+            throw new CommandRejectedError(
+              `La mission "${target.objective}" n’est plus active.`,
+            );
           }
 
           if (ctx.simulation) {
@@ -4838,7 +4852,8 @@ export async function runTool(
 
         case 'mission.plan': {
           const objective = call.args.objective.trim();
-          if (!objective) return 'Objectif mission vide.';
+          if (!objective)
+            throw new CommandRejectedError('Objectif mission vide.');
 
           const now = DateTime.now().setZone(tz);
           let startIso =

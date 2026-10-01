@@ -32,6 +32,23 @@ describe('Durable pending confirmations', () => {
     await prisma.$disconnect();
   });
 
+  it('replays known failure as failed rather than expired or uncertain', async () => {
+    const id = await pending.create(session, call, localTargets);
+    await pending.consume(id, session);
+    await prisma.command.update({
+      where: { id },
+      data: {
+        state: 'failed',
+        outcomeCode: 'VALIDATION',
+        revision: { increment: 1 },
+      },
+    });
+    const result = await pending.replay(id, session);
+    expect(result?.meta.commandState).toBe('failed');
+    expect(result?.text).toContain('a échoué');
+    expect(await pending.consume(id, session)).toBeNull();
+  });
+
   it('claims once concurrently and replays the persisted response after restart', async () => {
     const id = await pending.create(session, call, localTargets);
     const claims = await Promise.all(

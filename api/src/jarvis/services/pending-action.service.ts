@@ -346,9 +346,11 @@ export class PendingActionsService {
     const text =
       row.state === 'executing' || row.state === 'unknown'
         ? 'Cette action a déjà été prise en charge. Son résultat doit être vérifié ; elle ne sera pas relancée.'
-        : row.state === 'cancelled'
-          ? 'Cette action a été annulée.'
-          : 'Cette action est expirée ou indisponible.';
+        : row.state === 'failed'
+          ? 'Cette action a échoué. Elle ne sera pas relancée automatiquement.'
+          : row.state === 'cancelled'
+            ? 'Cette action a été annulée.'
+            : 'Cette action est expirée ou indisponible.';
     return {
       text,
       meta: {
