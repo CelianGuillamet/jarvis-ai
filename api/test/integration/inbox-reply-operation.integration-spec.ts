@@ -52,6 +52,7 @@ describe('Durable Inbox reply steps', () => {
       steps[step].mockRejectedValueOnce(new Error('injected failure'));
       const first = await service.execute(input, steps);
       expect(first.ok).toBe(false);
+      expect(first.outcome).toBe('partial');
       expect(first.steps.send).toBe('completed');
       expect(first.providerReference?.messageId).toBe('sent-1');
       const second = await new InboxReplyOperationService(prisma).execute(
@@ -59,6 +60,7 @@ describe('Durable Inbox reply steps', () => {
         steps,
       );
       expect(second.ok).toBe(true);
+      expect(second.outcome).toBe('completed');
       expect(steps.send).toHaveBeenCalledTimes(1);
       expect(steps.labels).toHaveBeenCalledTimes(step === 'labels' ? 2 : 1);
       expect(steps.local).toHaveBeenCalledTimes(step === 'local' ? 2 : 1);
@@ -72,7 +74,10 @@ describe('Durable Inbox reply steps', () => {
     const input = await fixture('timeout');
     const steps = callbacks();
     steps.send.mockRejectedValueOnce(new Error('timeout'));
-    expect((await service.execute(input, steps)).steps.send).toBe('unknown');
+    expect(await service.execute(input, steps)).toMatchObject({
+      outcome: 'unknown',
+      steps: { send: 'unknown' },
+    });
     expect(
       (await new InboxReplyOperationService(prisma).execute(input, steps)).steps
         .send,
@@ -101,7 +106,10 @@ describe('Durable Inbox reply steps', () => {
     const first = service.execute(input, steps);
     await started;
     try {
-      expect((await service.execute(input, steps)).steps.send).toBe('unknown');
+      expect(await service.execute(input, steps)).toMatchObject({
+        outcome: 'unknown',
+        steps: { send: 'unknown' },
+      });
       expect(steps.send).toHaveBeenCalledTimes(1);
     } finally {
       release();
@@ -116,7 +124,10 @@ describe('Durable Inbox reply steps', () => {
       .spyOn(prisma.inboxReplyOperation, 'update')
       .mockRejectedValueOnce(new Error('Storage unavailable'));
     try {
-      expect((await service.execute(input, steps)).steps.send).toBe('unknown');
+      expect(await service.execute(input, steps)).toMatchObject({
+        outcome: 'unknown',
+        steps: { send: 'unknown' },
+      });
     } finally {
       write.mockRestore();
     }

@@ -599,7 +599,9 @@ export class InboxZeroService {
                 : effectiveAction === 'send_reply'
                   ? 'gmail.send'
                   : `inbox.${effectiveAction}`;
-        return await this.executor.execute(
+        return await this.executor.execute<
+          InboxZeroApplyResponse['results'][number]
+        >(
           {
             source: 'inbox',
             ownerId,
@@ -873,13 +875,27 @@ export class InboxZeroService {
                 }),
               );
 
-              return { messageId: row.messageId, ok: true };
+              return {
+                messageId: row.messageId,
+                ok: true,
+                outcome: 'completed' as const,
+              };
             }),
-          () => ({ messageId: row.messageId, ok: true, simulated: true }),
+          () => ({
+            messageId: row.messageId,
+            ok: true,
+            simulated: true,
+            outcome: 'simulated' as const,
+          }),
         );
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        return { messageId: row.messageId, ok: false, error: msg };
+        return {
+          messageId: row.messageId,
+          ok: false,
+          outcome: 'unknown' as const,
+          error: msg,
+        };
       }
     });
 

@@ -295,6 +295,7 @@ export const InboxZeroApplyResponseSchema = InboxZeroScanResponseSchema.extend({
     z.object({
       messageId: text,
       ok: z.boolean(),
+      outcome: z.enum(['completed', 'simulated', 'partial', 'unknown']),
       simulated: z.boolean().optional(),
       operationId: text.optional(),
       steps: z

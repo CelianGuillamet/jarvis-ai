@@ -289,18 +289,22 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
         await completeReplyRequest(conversationId, messageIds[0]!, requestId);
       applyScanResponse(res, cursorHintIndex !== undefined ? { cursorHintIndex } : undefined);
 
-      const failed = res.results?.filter((r) => !r.ok) ?? [];
-      if (failed.length) {
+      const uncertain = res.results.filter((r) => r.outcome === 'unknown').length;
+      const partial = res.results.filter((r) => r.outcome === 'partial').length;
+      const simulated = res.results.filter((r) => r.outcome === 'simulated').length;
+      if (uncertain || partial) {
         toast.push({
-          title: 'Actions partielles',
-          detail: `${failed.length} échec(s) sur ${res.results.length}. Ouvre l’historique pour détails.`,
+          title: uncertain ? 'Résultat incertain' : 'Actions partielles',
+          detail: uncertain
+            ? `${uncertain} résultat(s) incertain(s). Vérifie l’état avant toute nouvelle tentative.`
+            : `${partial} email(s) envoyé(s) avec des étapes restantes. Une reprise conserve l’envoi existant.`,
           tone: 'warning',
           ttlMs: 6_000,
         });
       } else {
         toast.push({
-          title: 'OK',
-          detail: `${res.results?.length ?? 0} email(s) traités.`,
+          title: simulated ? 'Simulation terminée' : 'Actions terminées',
+          detail: simulated ? `${simulated} action(s) simulée(s), sans modification.` : `${res.results.length} email(s) traités.`,
           tone: 'success',
         });
       }

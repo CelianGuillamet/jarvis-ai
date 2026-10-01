@@ -13,7 +13,7 @@ test('empty inbox is valid only with its complete session and counts', () => {
  assert.equal(InboxZeroScanResponseSchema.safeParse(broken).success,false);
 });
 test('nested operation steps must describe known states', () => {
- const payload={...scan,results:[{messageId:'m',ok:false,steps:{send:'unknown',labels:'pending',local:'pending'}}]};
+ const payload={...scan,results:[{messageId:'m',ok:false,outcome:'unknown',steps:{send:'unknown',labels:'pending',local:'pending'}}]};
  assert.equal(InboxZeroApplyResponseSchema.safeParse(payload).success,true);
  payload.results[0].steps.send='probably sent';
  assert.equal(InboxZeroApplyResponseSchema.safeParse(payload).success,false);
@@ -39,4 +39,12 @@ test('request contracts preserve send identity requirements and batch limits', a
  assert.equal(InboxZeroApplyRequestSchema.safeParse({action:'archive',messageIds:Array(21).fill('m')}).success,false);
  assert.equal(ChatRequestSchema.safeParse({text:'Bonjour',ownerId:'foreign'}).success,false);
  assert.equal(MessageQuerySchema.safeParse({messageId:['m','n']}).success,false);
+});
+
+test('inbox rejects missing or invented business outcomes', () => {
+ const result={messageId:'m',ok:false,outcome:'unknown'};
+ assert.equal(InboxZeroApplyResponseSchema.safeParse({...scan,results:[result]}).success,true);
+ for (const outcome of [undefined,'failed-ish']) {
+  assert.equal(InboxZeroApplyResponseSchema.safeParse({...scan,results:[{...result,outcome}]}).success,false);
+ }
 });

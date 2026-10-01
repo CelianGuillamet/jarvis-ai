@@ -564,7 +564,12 @@ describe('API against disposable migrated PostgreSQL', () => {
         })
         .expect(201);
       expect((response.body as { results: unknown[] }).results).toEqual([
-        { messageId: 'fixture-message', ok: true, simulated: true },
+        {
+          messageId: 'fixture-message',
+          ok: true,
+          simulated: true,
+          outcome: 'simulated',
+        },
       ]);
       expect(
         await prisma.inboxZeroItem.findMany({ where: { sessionId } }),
