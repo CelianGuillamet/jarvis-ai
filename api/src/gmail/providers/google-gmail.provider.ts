@@ -1,6 +1,7 @@
 import {
   GmailListSchema,
   GmailReceiptSchema,
+  validateGmailMutationReceipt,
   GmailMessageSchema,
   validateGmailResponse,
 } from './gmail-response';
@@ -256,7 +257,7 @@ export class GoogleGmailProvider implements GmailProvider {
   ) {
     await this.withScopeGuard(async () => {
       const gmail = await this.authedGmail(sessionId);
-      await gmail.users.messages.modify({
+      const response = await gmail.users.messages.modify({
         userId: 'me',
         id: messageId,
         requestBody: {
@@ -264,20 +265,29 @@ export class GoogleGmailProvider implements GmailProvider {
           removeLabelIds: removeLabelIds?.length ? removeLabelIds : undefined,
         },
       });
+      validateGmailMutationReceipt(response.data, messageId);
     });
   }
 
   async trashMessage(sessionId: string, messageId: string) {
     await this.withScopeGuard(async () => {
       const gmail = await this.authedGmail(sessionId);
-      await gmail.users.messages.trash({ userId: 'me', id: messageId });
+      const response = await gmail.users.messages.trash({
+        userId: 'me',
+        id: messageId,
+      });
+      validateGmailMutationReceipt(response.data, messageId);
     });
   }
 
   async untrashMessage(sessionId: string, messageId: string) {
     await this.withScopeGuard(async () => {
       const gmail = await this.authedGmail(sessionId);
-      await gmail.users.messages.untrash({ userId: 'me', id: messageId });
+      const response = await gmail.users.messages.untrash({
+        userId: 'me',
+        id: messageId,
+      });
+      validateGmailMutationReceipt(response.data, messageId);
     });
   }
 

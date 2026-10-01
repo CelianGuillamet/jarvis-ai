@@ -44,3 +44,16 @@ export function validateGmailResponse<T>(
     });
   return result.data;
 }
+
+// Existing-message mutations must acknowledge the requested target.
+export function validateGmailMutationReceipt(
+  payload: unknown,
+  messageId: string,
+) {
+  return validateGmailResponse(
+    payload,
+    GmailReceiptSchema.extend({
+      id: identifier.refine((id) => id === messageId),
+    }),
+  );
+}
