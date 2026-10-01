@@ -1,6 +1,10 @@
 import { DateTime } from 'luxon';
 import { google } from 'googleapis';
-import { randomUUID } from 'crypto';
+import {
+  CalendarListSchema,
+  CalendarEventsSchema,
+  validateCalendarResponse,
+} from './google-calendar-response';
 import type { CalendarProvider, CalendarEventItem } from './calendar.provider';
 import { GoogleOAuthClientService } from '../../google/google-oauth-client.service';
 
@@ -18,7 +22,8 @@ export class GoogleCalendarProvider implements CalendarProvider {
   private async getSelectedCalendarIds(sessionId: string) {
     const calendar = await this.authedCalendar(sessionId);
     const res = await calendar.calendarList.list({ minAccessRole: 'reader' });
-    const items = res.data.items ?? [];
+    const items =
+      validateCalendarResponse(res.data, CalendarListSchema).items ?? [];
 
     const isNoiseCalendar = (summary: string) => {
       const s = summary.toLowerCase();
@@ -37,8 +42,8 @@ export class GoogleCalendarProvider implements CalendarProvider {
     const selected = items
       .filter((c) => c.selected || c.primary)
       .map((c) => ({
-        id: c.id!,
-        summary: c.summary ?? c.id!,
+        id: c.id,
+        summary: c.summary ?? c.id,
         primary: !!c.primary,
       }))
       .filter((c) => !!c.id)
@@ -76,43 +81,38 @@ export class GoogleCalendarProvider implements CalendarProvider {
           timeZone: tz,
         });
 
-        const items = res.data.items ?? [];
-        return items
-          .map((it) => {
-            const baseTitle = it.summary ?? '(Sans titre)';
-            const title = cal.primary
-              ? baseTitle
-              : `[${cal.summary}] ${baseTitle}`;
+        const items =
+          validateCalendarResponse(res.data, CalendarEventsSchema).items ?? [];
+        return items.map((it) => {
+          const baseTitle = it.summary ?? '(Sans titre)';
+          const title = cal.primary
+            ? baseTitle
+            : `[${cal.summary}] ${baseTitle}`;
 
-            const startRaw = it.start?.dateTime || it.start?.date;
-            if (!startRaw) return null;
-            const endRaw = it.end?.dateTime || it.end?.date;
+          const startRaw = it.start;
+          const endRaw = it.end;
 
-            const when =
-              startRaw.length === 10
-                ? DateTime.fromISO(startRaw, { zone: tz })
-                    .startOf('day')
-                    .toJSDate()
-                : DateTime.fromISO(startRaw).toJSDate();
+          const when =
+            startRaw.length === 10
+              ? DateTime.fromISO(startRaw, { zone: tz })
+                  .startOf('day')
+                  .toJSDate()
+              : DateTime.fromISO(startRaw).toJSDate();
 
-            const end = endRaw
-              ? endRaw.length === 10
-                ? DateTime.fromISO(endRaw, { zone: tz })
-                    .startOf('day')
-                    .toJSDate()
-                : DateTime.fromISO(endRaw).toJSDate()
-              : DateTime.fromJSDate(when).plus({ minutes: 60 }).toJSDate();
+          const end =
+            endRaw.length === 10
+              ? DateTime.fromISO(endRaw, { zone: tz }).startOf('day').toJSDate()
+              : DateTime.fromISO(endRaw).toJSDate();
 
-            return {
-              provider: 'google' as const,
-              calendarId: cal.id,
-              eventId: it.id ?? randomUUID(),
-              title,
-              when,
-              end,
-            };
-          })
-          .filter(Boolean) as CalendarEventItem[];
+          return {
+            provider: 'google' as const,
+            calendarId: cal.id,
+            eventId: it.id,
+            title,
+            when,
+            end,
+          };
+        });
       }),
     );
 

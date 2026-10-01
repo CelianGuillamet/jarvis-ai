@@ -17,3 +17,5 @@ Model adapters validate their envelopes before returning text. Ollama requires `
 Malformed structured model decisions are not displayed as natural-language answers, even in simulation. Invalid ask choices and empty final responses are rejected. Legitimate non-structured conversational prose remains supported. Actionable malformed decisions may use the existing single repair attempt before failing; no tool execution occurs from an invalid decision.
 
 Protocol references: [Ollama API](https://github.com/ollama/ollama/blob/main/docs/api.md), [OpenAI Responses types](https://github.com/openai/openai-node/blob/main/src/resources/responses/responses.ts).
+
+Google Calendar read responses now validate calendar identifiers and event identifiers, start/end dates and optional field types before mapping. Malformed entries fail the read with INVALID_RESPONSE; missing identifiers no longer generate random event identities, and missing dates no longer silently drop events or fabricate a one-hour duration. Valid empty lists remain valid. Provider mutation receipts, Gmail validation and status degradation are still pending work.
