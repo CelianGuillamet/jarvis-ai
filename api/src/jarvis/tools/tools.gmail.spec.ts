@@ -544,4 +544,21 @@ describe('runTool gmail tools', () => {
       subject: 'Test Jarvis',
     });
   });
+  it.each(['to', 'subject', 'text'] as const)(
+    'rejects empty %s before sending',
+    async (field) => {
+      const sendMessage = jest.fn();
+      const gmail = { ...makeGmailMock([]), sendMessage };
+      const args = {
+        to: 'fixture@example.invalid',
+        subject: 'Fixture',
+        text: 'Bonjour',
+        [field]: ' ',
+      };
+      await expect(
+        runTool(makeCtx(gmail), { type: 'tool', name: 'gmail.send', args }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(sendMessage).not.toHaveBeenCalled();
+    },
+  );
 });

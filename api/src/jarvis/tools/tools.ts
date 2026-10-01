@@ -1,3 +1,4 @@
+import { CommandRejectedError } from '../../commands/command-rejected.error';
 import { DateTime } from 'luxon';
 import type { ToolOnly } from './tool-registry';
 import { TargetResolutionError } from '../../commands/calendar-target';
@@ -3391,11 +3392,14 @@ export async function runTool(
 
         case 'calendar.create': {
           const startIsoRaw = call.args.when.trim();
-          if (!startIsoRaw) return 'La date de début est vide.';
+          if (!startIsoRaw)
+            throw new CommandRejectedError('La date de début est vide.');
 
           const startParsed = DateTime.fromISO(startIsoRaw, { zone: tz });
           if (!startParsed.isValid)
-            return `Date de début invalide: "${call.args.when}".`;
+            throw new CommandRejectedError(
+              `Date de début invalide: "${call.args.when}".`,
+            );
 
           const endIsoRaw = call.args.endWhen?.trim();
           const endParsed = endIsoRaw
@@ -3405,7 +3409,9 @@ export async function runTool(
             ? endParsed
             : startParsed.plus({ minutes: 60 });
           if (effectiveEnd <= startParsed) {
-            return 'L’heure de fin doit être après l’heure de début.';
+            throw new CommandRejectedError(
+              'L’heure de fin doit être après l’heure de début.',
+            );
           }
 
           if (ctx.simulation) {
@@ -3514,7 +3520,9 @@ export async function runTool(
           }
 
           if (nextEnd <= nextStart) {
-            return 'L’heure de fin doit être après l’heure de début.';
+            throw new CommandRejectedError(
+              'L’heure de fin doit être après l’heure de début.',
+            );
           }
 
           const nextWhenIso = nextStart.toISO({ suppressMilliseconds: true })!;
@@ -4319,9 +4327,10 @@ export async function runTool(
           const cc = call.args.cc?.trim();
           const bcc = call.args.bcc?.trim();
 
-          if (!to) return 'Destinataire email manquant.';
-          if (!subject) return 'Sujet email manquant.';
-          if (!textBody) return 'Contenu email vide.';
+          if (!to)
+            throw new CommandRejectedError('Destinataire email manquant.');
+          if (!subject) throw new CommandRejectedError('Sujet email manquant.');
+          if (!textBody) throw new CommandRejectedError('Contenu email vide.');
 
           if (ctx.simulation) {
             return `SIMULATION: email envoyé à ${to} (sujet: "${subject}").`;

@@ -1,3 +1,4 @@
+import { CommandRejectedError } from '../../src/commands/command-rejected.error';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationService } from '../../src/auth/conversation.service';
@@ -122,6 +123,26 @@ describe('Shared durable command execution', () => {
       expect(mutate).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('records an explicit pre-effect rejection as failed rather than unknown', async () => {
+    const input = await fixture('rejected-before-effect');
+    await expect(
+      executor.execute(
+        input,
+        () => Promise.reject(new CommandRejectedError('Date invalide.')),
+        () => '',
+      ),
+    ).rejects.toBeInstanceOf(CommandRejectedError);
+    expect(
+      await prisma.command.findFirstOrThrow({
+        where: { conversationId: input.conversationId },
+      }),
+    ).toMatchObject({
+      state: 'failed',
+      outcomeCode: 'VALIDATION',
+      response: null,
+    });
+  });
 
   it('records simulation without entering the mutation callback', async () => {
     const input = await fixture('simulation');

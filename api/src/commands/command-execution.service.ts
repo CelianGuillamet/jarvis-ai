@@ -1,3 +1,4 @@
+import { CommandRejectedError } from './command-rejected.error';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
@@ -127,8 +128,11 @@ export class CommandExecutionService {
         .updateMany({
           where: { id, ownerId: input.ownerId, state: 'executing' },
           data: {
-            state: 'unknown',
-            outcomeCode: 'EXECUTION_UNCERTAIN',
+            state: error instanceof CommandRejectedError ? 'failed' : 'unknown',
+            outcomeCode:
+              error instanceof CommandRejectedError
+                ? 'VALIDATION'
+                : 'EXECUTION_UNCERTAIN',
             revision: { increment: 1 },
           },
         })
