@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { CommandRejectedError } from '../../commands/command-rejected.error';
 import { DateTime } from 'luxon';
 import type { ToolOnly } from './tool-registry';
@@ -5955,9 +5956,8 @@ export async function runTool(
 
         // ===== CONTACTS =====
         case 'contact.save': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const c = await ctx.contacts.save(sessionId, call.args);
-          if (!c) return 'Impossible de sauvegarder le contact.';
           const details = [c.email, c.company, c.role]
             .filter(Boolean)
             .join(' · ');
@@ -5965,7 +5965,7 @@ export async function runTool(
         }
 
         case 'contact.find': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
           if (!contacts.length)
             return `Aucun contact trouvé pour "${call.args.query}".`;
@@ -5980,7 +5980,7 @@ export async function runTool(
         }
 
         case 'contact.list': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.list(
             sessionId,
             call.args.limit ?? 20,
@@ -5998,29 +5998,44 @@ export async function runTool(
         }
 
         case 'contact.update': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
           if (!contacts.length)
-            return `Contact "${call.args.query}" introuvable.`;
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
           const target = contacts[0];
-          if (!target) return `Contact "${call.args.query}" introuvable.`;
+          if (!target)
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
           const updated = await ctx.contacts.update(
             sessionId,
             target.id,
             call.args.patch ?? {},
           );
-          if (!updated) return 'Impossible de mettre à jour le contact.';
+          if (!updated) throw dataUnavailable();
           return `OK. Contact mis à jour: ${updated.name}`;
         }
 
         case 'contact.delete': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
           if (!contacts.length)
-            return `Contact "${call.args.query}" introuvable.`;
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
           const target = contacts[0];
-          if (!target) return `Contact "${call.args.query}" introuvable.`;
-          await ctx.contacts.delete(sessionId, target.id);
+          if (!target)
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
+          const deleted = await ctx.contacts.delete(sessionId, target.id);
+          if (!deleted) throw dataUnavailable();
           return `OK. Contact supprimé: ${target.name}`;
         }
 

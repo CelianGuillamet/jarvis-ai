@@ -1,7 +1,7 @@
 import { dataUnavailable } from '../../http/data-unavailable';
 import { parseStoredTags } from '../lib/stored-json';
 import type { Contact } from '@prisma/client';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type ContactRecord = {
@@ -19,8 +19,6 @@ export type ContactRecord = {
 
 @Injectable()
 export class JarvisContactService {
-  private readonly logger = new Logger(JarvisContactService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async save(
@@ -34,7 +32,7 @@ export class JarvisContactService {
       notes?: string;
       tags?: string[];
     },
-  ): Promise<ContactRecord | null> {
+  ): Promise<ContactRecord> {
     try {
       const existing = await this.prisma.contact.findFirst({
         where: {
@@ -59,9 +57,8 @@ export class JarvisContactService {
         : await this.prisma.contact.create({ data: { sessionId, ...data } });
 
       return this.map(contact);
-    } catch (err) {
-      this.logger.error(`save contact failed: ${err}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -127,16 +124,18 @@ export class JarvisContactService {
         await this.prisma.contact.findUniqueOrThrow({ where: { id } }),
       );
     } catch {
-      return null;
+      throw dataUnavailable();
     }
   }
 
   async delete(sessionId: string, id: string): Promise<boolean> {
     try {
-      await this.prisma.contact.deleteMany({ where: { id, sessionId } });
-      return true;
+      const result = await this.prisma.contact.deleteMany({
+        where: { id, sessionId },
+      });
+      return result.count > 0;
     } catch {
-      return false;
+      throw dataUnavailable();
     }
   }
 
