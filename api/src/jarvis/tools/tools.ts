@@ -5425,7 +5425,7 @@ export async function runTool(
 
         // ===== GOALS =====
         case 'goal.create': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const goal = await ctx.goals.create(sessionId, {
             title: call.args.title,
             description: call.args.description,
@@ -5435,12 +5435,16 @@ export async function runTool(
               : undefined,
             parentGoalId: call.args.parentGoalId,
           });
-          if (!goal) return "Échec de la création de l'objectif.";
+          if (!goal)
+            throw new CommandRejectedError(
+              'Objectif parent introuvable.',
+              'NOT_FOUND',
+            );
           return `Objectif créé: "${goal.title}" [ID: ${goal.id}]${goal.priority ? ` [P${goal.priority}]` : ''}${goal.targetDate ? ` — échéance: ${goal.targetDate}` : ''}`;
         }
 
         case 'goal.list': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const goals = await ctx.goals.list(sessionId, {
             status: call.args.status ?? 'active',
           });
@@ -5454,7 +5458,7 @@ export async function runTool(
         }
 
         case 'goal.decompose': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const sub = await ctx.goals.decompose(
             sessionId,
             call.args.goalId,
@@ -5465,13 +5469,13 @@ export async function runTool(
         }
 
         case 'goal.done': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const goal = await ctx.goals.updateStatus(
             sessionId,
             call.args.goalId,
             'done',
           );
-          if (!goal) return 'Objectif introuvable.';
+          if (!goal) throw dataUnavailable();
           return `Objectif "${goal.title}" marqué comme terminé.`;
         }
 

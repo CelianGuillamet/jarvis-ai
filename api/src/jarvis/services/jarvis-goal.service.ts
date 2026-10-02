@@ -1,5 +1,5 @@
 import { dataUnavailable } from '../../http/data-unavailable';
-import type { JarvisGoal } from '@prisma/client';
+import { Prisma, type JarvisGoal } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -52,9 +52,8 @@ export class JarvisGoalService {
       });
 
       return this.mapGoalRecord(goal);
-    } catch (error) {
-      this.logger.error(`Failed to create goal for ${sessionId}: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -121,10 +120,10 @@ export class JarvisGoalService {
         ),
       );
 
+      if (created.some((goal) => goal === null)) throw dataUnavailable();
       return created.filter((g) => g !== null);
-    } catch (error) {
-      this.logger.error(`Failed to decompose goal ${parentGoalId}: ${error}`);
-      return [];
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -141,8 +140,12 @@ export class JarvisGoalService {
 
       return this.mapGoalRecord(goal);
     } catch (error) {
-      this.logger.error(`Failed to update goal status for ${goalId}: ${error}`);
-      return null;
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      )
+        return null;
+      throw dataUnavailable();
     }
   }
 
