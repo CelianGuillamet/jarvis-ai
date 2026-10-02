@@ -1,3 +1,4 @@
+import { CommandRejectedError } from '../../commands/command-rejected.error';
 import { dataUnavailable } from '../../http/data-unavailable';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -103,7 +104,7 @@ export class JarvisMissionService {
     planText: string,
   ) {
     const objective = input.objective.trim();
-    if (!objective) return null;
+    if (!objective) throw new CommandRejectedError('Objectif mission vide.');
 
     const objectiveKey = normalizeObjective(objective);
     const parsed = parseMissionPlan(planText, objective);
@@ -119,7 +120,7 @@ export class JarvisMissionService {
       });
 
       if (existing) {
-        return this.prisma.jarvisMission.update({
+        return await this.prisma.jarvisMission.update({
           where: { id: existing.id },
           data: {
             objective,
@@ -133,7 +134,7 @@ export class JarvisMissionService {
         });
       }
 
-      return this.prisma.jarvisMission.create({
+      return await this.prisma.jarvisMission.create({
         data: {
           sessionId,
           objective,
@@ -146,11 +147,8 @@ export class JarvisMissionService {
         },
         select: { id: true },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de persister la mission pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
