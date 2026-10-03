@@ -5758,16 +5758,14 @@ export async function runTool(
 
         // ===== TIME INSIGHTS =====
         case 'time.record': {
-          if (!ctx.timeInsights)
-            return 'Service insights temporels non disponible.';
+          if (!ctx.timeInsights) throw dataUnavailable();
           const row = await ctx.timeInsights.record(sessionId, call.args);
-          if (!row) return "Impossible d'enregistrer la métrique.";
+          if (!row) throw dataUnavailable();
           return `OK. Métrique enregistrée: ${row.metricName} = ${row.value} ${row.unit}`;
         }
 
         case 'time.summary': {
-          if (!ctx.timeInsights)
-            return 'Service insights temporels non disponible.';
+          if (!ctx.timeInsights) throw dataUnavailable();
           const summary = await ctx.timeInsights.summary(sessionId, call.args);
           const metricLines = Object.entries(summary.metrics).map(
             ([name, m]) =>
