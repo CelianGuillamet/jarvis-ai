@@ -1806,6 +1806,7 @@ export class JarvisService {
       },
       () =>
         `Simulation : l’action « ${call.name} » n’a effectué aucune modification.`,
+      () => 'completed',
     );
   }
 

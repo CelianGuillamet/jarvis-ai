@@ -437,7 +437,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       expect(command).toMatchObject({
         source,
         state: 'completed',
-        outcomeCode: source === 'inbox' ? 'COMPLETED' : 'TOOL_RETURNED',
+        outcomeCode: 'COMPLETED',
       });
       expect(command.targets).toEqual(
         expect.arrayContaining([

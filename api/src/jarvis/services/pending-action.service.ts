@@ -298,7 +298,7 @@ export class PendingActionsService {
       },
       data: {
         state: 'completed',
-        outcomeCode: 'TOOL_RETURNED',
+        outcomeCode: response.meta.simulation ? 'SIMULATED' : 'COMPLETED',
         response: persisted,
         revision: { increment: 1 },
       },

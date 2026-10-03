@@ -32,6 +32,17 @@ describe('Durable pending confirmations', () => {
     await prisma.$disconnect();
   });
 
+  it('records confirmed success explicitly', async () => {
+    const id = await pending.create(session, call, localTargets);
+    await pending.consume(id, session);
+    await pending.complete(id, session, {
+      text: 'Completed',
+      meta: { simulation: false, sessionId: session },
+    });
+    const row = await prisma.command.findUniqueOrThrow({ where: { id } });
+    expect(row).toMatchObject({ state: 'completed', outcomeCode: 'COMPLETED' });
+  });
+
   it('replays known failure as failed rather than expired or uncertain', async () => {
     const id = await pending.create(session, call, localTargets);
     await pending.consume(id, session);
@@ -75,6 +86,7 @@ describe('Durable pending confirmations', () => {
       include: { transitions: true },
     });
     expect(row.state).toBe('completed');
+    expect(row.outcomeCode).toBe('SIMULATED');
     expect(row.transitions).toHaveLength(5);
     await expect(
       pending.complete(id, session, { text: 'replacement', meta: {} }),
