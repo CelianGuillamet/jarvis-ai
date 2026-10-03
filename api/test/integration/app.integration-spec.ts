@@ -687,12 +687,14 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(routes.sort()).toEqual(
       [
         'GET /account/me',
+        'GET /account/preferences',
         'GET /auth/google',
         'GET /auth/google/callback',
         'GET /auth/google/status',
         'GET /inbox-zero/message',
         'GET /inbox-zero/session',
         'GET /jarvis/status',
+        'POST /account/preferences',
         'POST /auth/google/disconnect',
         'POST /inbox-zero/apply',
         'POST /inbox-zero/draft-reply',
@@ -707,6 +709,7 @@ describe('API against disposable migrated PostgreSQL', () => {
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
     for (const path of [
       '/account/me',
+      '/account/preferences',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
@@ -721,6 +724,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         .expect(401);
     }
     for (const path of [
+      '/account/preferences',
       '/auth/google/disconnect',
       '/jarvis/chat',
       '/jarvis/confirm',
@@ -735,6 +739,77 @@ describe('API against disposable migrated PostgreSQL', () => {
         .send({ sessionId: 'integration-session' })
         .expect(401);
     }
+  });
+
+  it('persists only authenticated account preferences and rejects identity overrides', async () => {
+    await prisma.betaInvite.create({
+      data: { email: 'preferences@example.invalid' },
+    });
+    await prisma.user.create({
+      data: {
+        id: 'preferences-user',
+        name: 'Preferences',
+        email: 'preferences@example.invalid',
+        emailVerified: true,
+      },
+    });
+    const token = 'preferences-session-token';
+    await prisma.session.create({
+      data: {
+        id: 'preferences-session',
+        token,
+        userId: 'preferences-user',
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const preferencesCookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const preferences = {
+      displayTimezone: 'America/Montreal',
+      theme: 'light',
+      onboardingCompleted: true,
+    };
+    await request(baseUrl)
+      .post('/account/preferences')
+      .set('Cookie', preferencesCookie)
+      .set('Origin', 'https://evil.invalid')
+      .send(preferences)
+      .expect(403);
+    await request(baseUrl)
+      .post('/account/preferences')
+      .set('Cookie', preferencesCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ ...preferences, ownerId: 'other-owner' })
+      .expect(400);
+    await request(baseUrl)
+      .post('/account/preferences')
+      .set('Cookie', preferencesCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ ...preferences, displayTimezone: 'Invalid/Zone' })
+      .expect(400);
+    await request(baseUrl)
+      .post('/account/preferences')
+      .set('Cookie', preferencesCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send(preferences)
+      .expect(201, preferences);
+    await request(baseUrl)
+      .get('/account/preferences')
+      .set('Cookie', preferencesCookie)
+      .query({ userId: 'other-owner' })
+      .expect(200, preferences);
+    expect(
+      await prisma.user.findUniqueOrThrow({
+        where: { id: 'preferences-user' },
+        select: {
+          displayTimezone: true,
+          theme: true,
+          onboardingCompleted: true,
+        },
+      }),
+    ).toEqual(preferences);
   });
 
   it('rejects cross-origin and originless mutations even with a valid cookie', async () => {

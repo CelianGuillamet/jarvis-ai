@@ -1,8 +1,23 @@
-import { Controller, Get, Req } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { PublicEndpoint } from './public-endpoint';
 import type { AuthenticatedRequest } from './session.guard';
+import {
+  AccountPreferencesSchema,
+  AccountProfileSchema,
+  SignInOptionsSchema,
+} from '../contracts/v1';
+import type { AccountPreferences } from '../contracts/v1';
+import { RequestContract } from '../http/request-contract';
+import { ResponseContract } from '../http/response-contract';
+import { dataUnavailable } from '../http/data-unavailable';
+
+const preferenceFields = {
+  displayTimezone: true,
+  theme: true,
+  onboardingCompleted: true,
+} as const;
 
 @Controller('account')
 export class AccountController {
@@ -13,15 +28,48 @@ export class AccountController {
 
   @PublicEndpoint()
   @Get('sign-in-options')
+  @ResponseContract(SignInOptionsSchema)
   signInOptions() {
     return { google: Boolean(this.auth.config.google) };
   }
 
   @Get('me')
+  @ResponseContract(AccountProfileSchema)
   me(@Req() request: AuthenticatedRequest) {
     return this.prisma.user.findUniqueOrThrow({
       where: { id: request.identity.userId },
       select: { id: true, name: true, email: true },
     });
+  }
+
+  @Get('preferences')
+  @ResponseContract(AccountPreferencesSchema)
+  async preferences(@Req() request: AuthenticatedRequest) {
+    try {
+      return await this.prisma.user.findUniqueOrThrow({
+        where: { id: request.identity.userId },
+        select: preferenceFields,
+      });
+    } catch {
+      throw dataUnavailable();
+    }
+  }
+
+  @Post('preferences')
+  @ResponseContract(AccountPreferencesSchema)
+  async savePreferences(
+    @Req() request: AuthenticatedRequest,
+    @Body(new RequestContract(AccountPreferencesSchema))
+    body: AccountPreferences,
+  ) {
+    try {
+      return await this.prisma.user.update({
+        where: { id: request.identity.userId },
+        data: body,
+        select: preferenceFields,
+      });
+    } catch {
+      throw dataUnavailable();
+    }
   }
 }
