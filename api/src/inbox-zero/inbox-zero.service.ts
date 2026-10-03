@@ -599,7 +599,9 @@ export class InboxZeroService {
                 : effectiveAction === 'send_reply'
                   ? 'gmail.send'
                   : `inbox.${effectiveAction}`;
-        return await this.executor.execute(
+        return await this.executor.execute<
+          InboxZeroApplyResponse['results'][number]
+        >(
           {
             source: 'inbox',
             ownerId,
@@ -759,6 +761,9 @@ export class InboxZeroService {
                 itemPatch.status = 'processed';
                 itemPatch.lastActionAt = now;
               } else if (effectiveAction === 'send_reply') {
+                const replyText = input.replyText?.trim();
+                if (!replyText)
+                  throw new BadRequestException('Réponse manquante.');
                 if (!input.requestId?.trim() || !googleAccount)
                   throw new BadRequestException(
                     'Identité de tentative manquante.',
@@ -772,7 +777,7 @@ export class InboxZeroService {
                     accountId: googleAccount.id,
                     accountSubject: googleAccount.providerSubject,
                     messageId: row.messageId,
-                    replyText: input.replyText.trim(),
+                    replyText,
                     archiveAfter,
                   },
                   {
@@ -793,7 +798,7 @@ export class InboxZeroService {
                         this.gmail.sendMessage(sessionId, {
                           to: extractEmailAddress(detail.from) || detail.from,
                           subject: buildReplySubject(detail.subject),
-                          text: input.replyText.trim(),
+                          text: replyText,
                           threadId: row.threadId,
                           inReplyTo,
                           references,
@@ -870,13 +875,28 @@ export class InboxZeroService {
                 }),
               );
 
-              return { messageId: row.messageId, ok: true };
+              return {
+                messageId: row.messageId,
+                ok: true,
+                outcome: 'completed' as const,
+              };
             }),
-          () => ({ messageId: row.messageId, ok: true, simulated: true }),
+          () => ({
+            messageId: row.messageId,
+            ok: true,
+            simulated: true,
+            outcome: 'simulated' as const,
+          }),
+          (result) => result.outcome,
         );
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        return { messageId: row.messageId, ok: false, error: msg };
+        return {
+          messageId: row.messageId,
+          ok: false,
+          outcome: 'unknown' as const,
+          error: msg,
+        };
       }
     });
 

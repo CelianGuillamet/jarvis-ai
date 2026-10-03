@@ -147,6 +147,11 @@ export class InboxReplyOperationService {
     return {
       operationId: row.id,
       ok: row.localComplete,
+      outcome: row.localComplete
+        ? ('completed' as const)
+        : row.sendState === 'sent'
+          ? ('partial' as const)
+          : ('unknown' as const),
       steps: {
         send:
           row.sendState === 'sent'

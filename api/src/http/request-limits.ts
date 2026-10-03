@@ -1,13 +1,4 @@
-export const REQUEST_LIMITS = {
-  bodyBytes: 64 * 1024,
-  urlBytes: 8192,
-  sessionChars: 128,
-  objectIdChars: 256,
-  queryChars: 500,
-  chatChars: 8000,
-  replyChars: 20000,
-  batchItems: 20,
-} as const;
+export { REQUEST_LIMITS } from '../contracts/v1';
 
 export const REQUEST_QUOTAS = {
   windowMs: 60_000,

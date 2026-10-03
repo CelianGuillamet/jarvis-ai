@@ -1,3 +1,4 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -312,7 +313,7 @@ export class JarvisAuditService {
       this.logger.warn(
         `Impossible de lire l'audit Jarvis pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return [];
+      throw dataUnavailable();
     }
   }
 }

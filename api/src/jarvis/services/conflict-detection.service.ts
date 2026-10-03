@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { dataUnavailable } from '../../http/data-unavailable';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JarvisMemoryService } from './jarvis-memory.service';
 
@@ -24,8 +25,6 @@ export type ConflictReport = {
 
 @Injectable()
 export class ConflictDetectionService {
-  private readonly logger = new Logger(ConflictDetectionService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly memory: JarvisMemoryService,
@@ -82,11 +81,8 @@ export class ConflictDetectionService {
         remediation: `Review ${conflicts.length} potential scheduling overlap(s). Consolidate or reschedule as needed.`,
         detectedAt: new Date(),
       };
-    } catch (error) {
-      this.logger.error(
-        `Failed to detect scheduling conflicts for ${sessionId}: ${error}`,
-      );
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -141,11 +137,8 @@ export class ConflictDetectionService {
         remediation: `Merge or delete ${conflicts.length} duplicate task(s) to reduce clutter.`,
         detectedAt: new Date(),
       };
-    } catch (error) {
-      this.logger.error(
-        `Failed to detect duplicates for ${sessionId}: ${error}`,
-      );
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -190,11 +183,8 @@ export class ConflictDetectionService {
         remediation: `Clarify ${conflicts.length} conflicting preference(s) with the user.`,
         detectedAt: new Date(),
       };
-    } catch (error) {
-      this.logger.error(
-        `Failed to detect contradictions for ${sessionId}: ${error}`,
-      );
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 

@@ -1,3 +1,7 @@
+import {
+  CommandStateSchema,
+  JarvisChatResponseSchema,
+} from '../../contracts/v1';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type Command } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -24,16 +28,10 @@ import {
   requiresGmailTargets,
 } from '../../commands/gmail-target';
 
-export type ConfirmationReplay = {
-  text: string;
-  meta: {
-    simulation?: boolean;
-    sessionId?: string;
-    commandId?: string;
-    commandState?: string;
+export type ConfirmationReplay =
+  import('../../contracts/v1').JarvisChatResponse & {
+    meta: NonNullable<import('../../contracts/v1').JarvisChatResponse['meta']>;
   };
-  choices?: string[];
-};
 
 @Injectable()
 export class PendingActionsService {
@@ -300,7 +298,7 @@ export class PendingActionsService {
       },
       data: {
         state: 'completed',
-        outcomeCode: 'TOOL_RETURNED',
+        outcomeCode: response.meta.simulation ? 'SIMULATED' : 'COMPLETED',
         response: persisted,
         revision: { increment: 1 },
       },
@@ -338,15 +336,28 @@ export class PendingActionsService {
       typeof row.response === 'object' &&
       !Array.isArray(row.response) &&
       typeof row.response.text === 'string'
-    )
-      return row.response as ConfirmationReplay;
+    ) {
+      const response = JarvisChatResponseSchema.parse(row.response);
+      return {
+        ...response,
+        meta: response.meta ?? { commandId: row.id, commandState: 'completed' },
+      };
+    }
     const text =
       row.state === 'executing' || row.state === 'unknown'
         ? 'Cette action a déjà été prise en charge. Son résultat doit être vérifié ; elle ne sera pas relancée.'
-        : row.state === 'cancelled'
-          ? 'Cette action a été annulée.'
-          : 'Cette action est expirée ou indisponible.';
-    return { text, meta: { commandId: row.id, commandState: row.state } };
+        : row.state === 'failed'
+          ? 'Cette action a échoué. Elle ne sera pas relancée automatiquement.'
+          : row.state === 'cancelled'
+            ? 'Cette action a été annulée.'
+            : 'Cette action est expirée ou indisponible.';
+    return {
+      text,
+      meta: {
+        commandId: row.id,
+        commandState: CommandStateSchema.parse(row.state),
+      },
+    };
   }
 
   async replay(id: string, sessionId?: string) {

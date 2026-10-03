@@ -1,3 +1,5 @@
+import { readStatusResource } from './status-resource';
+import { InvalidModelResponseError } from '../providers/model-response';
 import {
   CommandCompensationService,
   supportsLocalCompensation,
@@ -5,6 +7,7 @@ import {
 } from '../../commands/command-compensation.service';
 import {
   BadRequestException,
+  NotFoundException,
   HttpException,
   Injectable,
   Inject,
@@ -79,7 +82,6 @@ import {
   humanizeAskOrFinal,
   humanizeCancellation,
   humanizeError,
-  humanizeNoPending,
   humanizePendingPrompt,
   humanizePendingReminder,
   humanizeToolResult,
@@ -400,11 +402,18 @@ function parseJarvisActionJson(jsonText: string): JarvisAction | null {
   if (!isRecord(x) || typeof x.type !== 'string') return null;
 
   if (x.type === 'ask') {
-    if (typeof x.text !== 'string') return null;
+    if (typeof x.text !== 'string' || !x.text.trim()) return null;
+    if (x.awaiting !== undefined && typeof x.awaiting !== 'string') return null;
     const choicesRaw = x.choices;
-    const choices = Array.isArray(choicesRaw)
-      ? choicesRaw.filter((c) => typeof c === 'string')
-      : undefined;
+    let choices: string[] | undefined;
+    if (choicesRaw !== undefined) {
+      if (
+        !Array.isArray(choicesRaw) ||
+        !choicesRaw.every((choice: unknown) => typeof choice === 'string')
+      )
+        return null;
+      choices = choicesRaw;
+    }
     const awaiting = typeof x.awaiting === 'string' ? x.awaiting : undefined;
     return { type: 'ask', text: x.text, choices, awaiting };
   }
@@ -1797,6 +1806,7 @@ export class JarvisService {
       },
       () =>
         `Simulation : l’action « ${call.name} » n’a effectué aucune modification.`,
+      () => 'completed',
     );
   }
 
@@ -1866,32 +1876,25 @@ export class JarvisService {
     const now = DateTime.now().setZone(this.tz);
     const todayRange = resolveRange("aujourd'hui", this.tz);
 
-    let unreadEmails: Awaited<
-      ReturnType<GmailProvider['listMessages']>
-    > | null = null;
-    try {
-      unreadEmails = await this.gmail.listMessages(resolvedSessionId, {
-        q: 'is:unread',
-        maxResults: 5,
-      });
-    } catch {
-      unreadEmails = null;
-    }
-
-    let todayEvents: Awaited<
-      ReturnType<CalendarProvider['listEventsInterval']>
-    > | null = null;
-    try {
-      todayEvents = await this.calendar.listEventsInterval(
-        resolvedSessionId,
-        todayRange.startIso,
-        todayRange.endIso,
-        this.tz,
-        12,
-      );
-    } catch {
-      todayEvents = null;
-    }
+    const [gmailResource, calendarResource] = await Promise.all([
+      readStatusResource(() =>
+        this.gmail.listMessages(resolvedSessionId, {
+          q: 'is:unread',
+          maxResults: 5,
+        }),
+      ),
+      readStatusResource(() =>
+        this.calendar.listEventsInterval(
+          resolvedSessionId,
+          todayRange.startIso,
+          todayRange.endIso,
+          this.tz,
+          12,
+        ),
+      ),
+    ]);
+    const unreadEmails = gmailResource.data;
+    const todayEvents = calendarResource.data;
 
     const sortedEvents = [...(todayEvents ?? [])].sort(
       (a, b) => a.when.getTime() - b.when.getTime(),
@@ -2004,6 +2007,10 @@ export class JarvisService {
       },
       profile,
       pendingAction: pendingActionView,
+      availability: {
+        gmail: gmailResource.availability,
+        calendar: calendarResource.availability,
+      },
       integrations: {
         googleConnected: googleStatus.connected,
         calendarConnected: googleStatus.calendarConnected,
@@ -3552,7 +3559,11 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
       if (!action) {
         const natural = this.cleanAssistantText(raw);
-        if (natural && !this.seemsActionable(userText)) {
+        const structured =
+          cleaned.trim().startsWith('{') ||
+          cleaned.trim().startsWith('[') ||
+          raw.trim().startsWith('```');
+        if (natural && !structured && !this.seemsActionable(userText)) {
           const text = this.humanizeAskOrFinalText(profile, natural, 'final');
           await this.logSafe({
             sessionId: resolvedSessionId,
@@ -3580,12 +3591,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
           simulation: this.simulation,
           result: 'PARSE_ERROR',
         });
-        return {
-          text: this.simulation
-            ? raw
-            : 'Je n’ai pas réussi à interpréter la réponse. Peux-tu reformuler ?',
-          meta: { simulation: this.simulation, sessionId: resolvedSessionId },
-        };
+        throw new InvalidModelResponseError();
       }
 
       // Anti "je vais..." + anti-final pour demandes actionnables
@@ -3985,17 +3991,8 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
     const replay = await this.pending.replay(actionId, expectedSessionId);
     if (replay) return replay;
-    const fallbackProfile = await this.getHumanProfile(
-      expectedSessionId ?? 'default',
-    );
     const peeked = await this.pending.peek(actionId, expectedSessionId);
-    if (!peeked)
-      return {
-        text: this.humanizeEnabled
-          ? humanizeNoPending(fallbackProfile)
-          : 'Action introuvable ou expirée.',
-        meta: { simulation: this.simulation },
-      };
+    if (!peeked) throw new NotFoundException('Action introuvable ou expirée.');
 
     const googleToken = await this.googleTokenForConversation(peeked.sessionId);
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
@@ -4034,15 +4031,14 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
     }
 
     const item = await this.pending.consume(actionId, expectedSessionId);
-    if (!item)
-      return (
-        (await this.pending.replay(actionId, expectedSessionId)) ?? {
-          text: this.humanizeEnabled
-            ? humanizeNoPending(fallbackProfile)
-            : 'Action introuvable ou expirée.',
-          meta: { simulation: this.simulation },
-        }
+    if (!item) {
+      const concurrentReplay = await this.pending.replay(
+        actionId,
+        expectedSessionId,
       );
+      if (concurrentReplay) return concurrentReplay;
+      throw new NotFoundException('Action introuvable ou expirée.');
+    }
 
     let auditContext: AuditExecutionContext | null = {
       sessionId: item.sessionId,
@@ -4097,7 +4093,12 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       const response = {
         text: humanText,
         choices: choices.length ? choices : undefined,
-        meta: { simulation: this.simulation, sessionId: item.sessionId },
+        meta: {
+          simulation: this.simulation,
+          sessionId: item.sessionId,
+          commandId: item.id,
+          commandState: 'completed' as const,
+        },
       };
       await this.pending.complete(item.id, item.sessionId, response);
       return response;
@@ -4139,7 +4140,12 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         (await this.pending.replay(item.id, item.sessionId)) ??
         recoverable ?? {
           text: 'Le résultat de cette action doit être vérifié. Elle ne sera pas relancée.',
-          meta: { simulation: this.simulation, sessionId: item.sessionId },
+          meta: {
+            simulation: this.simulation,
+            sessionId: item.sessionId,
+            commandId: item.id,
+            commandState: 'unknown' as const,
+          },
         }
       );
     }

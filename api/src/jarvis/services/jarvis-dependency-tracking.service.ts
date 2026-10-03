@@ -1,5 +1,6 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import type { JarvisTaskDependency } from '@prisma/client';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type DependencyRecord = {
@@ -20,8 +21,6 @@ export type TaskDependencyGraph = {
 
 @Injectable()
 export class JarvisDependencyTrackingService {
-  private readonly logger = new Logger(JarvisDependencyTrackingService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async addDependency(
@@ -62,11 +61,8 @@ export class JarvisDependencyTrackingService {
       });
 
       return this.mapDependencyRecord(dep);
-    } catch (error) {
-      this.logger.error(
-        `Failed to add dependency from ${sourceTaskId} to ${targetTaskId}: ${error}`,
-      );
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -91,9 +87,8 @@ export class JarvisDependencyTrackingService {
         blockingTasks: blocking.map((d) => d.targetTaskId),
         blockedByTasks: blockedBy.map((d) => d.sourceTaskId),
       };
-    } catch (error) {
-      this.logger.warn(`Failed to get dependencies for ${taskId}: ${error}`);
-      return { taskId, blockingTasks: [], blockedByTasks: [] };
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -139,9 +134,8 @@ export class JarvisDependencyTrackingService {
       }
 
       return ordered.length === taskIds.length ? ordered : taskIds;
-    } catch (error) {
-      this.logger.error(`Failed to order tasks for ${sessionId}: ${error}`);
-      return taskIds;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -194,9 +188,8 @@ export class JarvisDependencyTrackingService {
       }
 
       return cycles;
-    } catch (error) {
-      this.logger.error(`Failed to detect cycles for ${sessionId}: ${error}`);
-      return [];
+    } catch {
+      throw dataUnavailable();
     }
   }
 

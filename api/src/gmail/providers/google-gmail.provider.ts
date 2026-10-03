@@ -1,3 +1,10 @@
+import {
+  GmailListSchema,
+  GmailReceiptSchema,
+  validateGmailMutationReceipt,
+  GmailMessageSchema,
+  validateGmailResponse,
+} from './gmail-response';
 import { google } from 'googleapis';
 
 import { GoogleOAuthClientService } from '../../google/google-oauth-client.service';
@@ -150,22 +157,20 @@ export class GoogleGmailProvider implements GmailProvider {
       format: 'metadata',
       metadataHeaders: ['Subject', 'From', 'To', 'Date'],
     });
-    const data = res.data;
-    const headers = (data.payload?.headers || []) as Header[];
+    const data = validateGmailResponse(res.data, GmailMessageSchema);
+    const headers = data.payload?.headers || [];
     const dateHeader = headerValue(headers, 'Date');
     const parsedDate = Date.parse(dateHeader);
-    const internalDate = Number(data.internalDate || 0);
+    const internalDate = Number(data.internalDate);
     const date =
       Number.isFinite(parsedDate) && parsedDate > 0
         ? new Date(parsedDate)
-        : internalDate > 0
-          ? new Date(internalDate)
-          : new Date();
+        : new Date(internalDate);
     const labels = data.labelIds || [];
 
     return {
-      id: data.id || messageId,
-      threadId: data.threadId || '',
+      id: data.id,
+      threadId: data.threadId,
       subject: headerValue(headers, 'Subject') || '(Sans objet)',
       from: headerValue(headers, 'From') || '(Expediteur inconnu)',
       to: headerValue(headers, 'To') || '',
@@ -195,11 +200,12 @@ export class GoogleGmailProvider implements GmailProvider {
             : undefined,
       });
 
-      const items = list.data.messages || [];
+      const items =
+        validateGmailResponse(list.data, GmailListSchema).messages ?? [];
       if (!items.length) return [];
 
       const details = await Promise.all(
-        items.map((item) => this.messageMetadata(sessionId, item.id || '')),
+        items.map((item) => this.messageMetadata(sessionId, item.id)),
       );
 
       return details.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -218,9 +224,9 @@ export class GoogleGmailProvider implements GmailProvider {
         format: 'full',
       });
 
-      const data = res.data;
-      const headers = (data.payload?.headers || []) as Header[];
-      const bodies = extractBodies(data.payload as MessagePart | undefined);
+      const data = validateGmailResponse(res.data, GmailMessageSchema);
+      const headers = data.payload?.headers || [];
+      const bodies = extractBodies(data.payload);
       const base = await this.messageMetadata(sessionId, messageId);
 
       const rawBody = bodies.text || base.snippet || '';
@@ -251,7 +257,7 @@ export class GoogleGmailProvider implements GmailProvider {
   ) {
     await this.withScopeGuard(async () => {
       const gmail = await this.authedGmail(sessionId);
-      await gmail.users.messages.modify({
+      const response = await gmail.users.messages.modify({
         userId: 'me',
         id: messageId,
         requestBody: {
@@ -259,20 +265,29 @@ export class GoogleGmailProvider implements GmailProvider {
           removeLabelIds: removeLabelIds?.length ? removeLabelIds : undefined,
         },
       });
+      validateGmailMutationReceipt(response.data, messageId);
     });
   }
 
   async trashMessage(sessionId: string, messageId: string) {
     await this.withScopeGuard(async () => {
       const gmail = await this.authedGmail(sessionId);
-      await gmail.users.messages.trash({ userId: 'me', id: messageId });
+      const response = await gmail.users.messages.trash({
+        userId: 'me',
+        id: messageId,
+      });
+      validateGmailMutationReceipt(response.data, messageId);
     });
   }
 
   async untrashMessage(sessionId: string, messageId: string) {
     await this.withScopeGuard(async () => {
       const gmail = await this.authedGmail(sessionId);
-      await gmail.users.messages.untrash({ userId: 'me', id: messageId });
+      const response = await gmail.users.messages.untrash({
+        userId: 'me',
+        id: messageId,
+      });
+      validateGmailMutationReceipt(response.data, messageId);
     });
   }
 
@@ -320,13 +335,11 @@ export class GoogleGmailProvider implements GmailProvider {
           ? { raw, threadId: payload.threadId }
           : { raw },
       });
-      if (!response.data.id?.trim()) {
-        // The send may have happened: callers must retain an uncertain outcome.
-        throw new Error('Référence du message envoyé indisponible.');
-      }
+      // A malformed receipt does not prove that sending failed. Never retry here.
+      const receipt = validateGmailResponse(response.data, GmailReceiptSchema);
       return {
-        messageId: response.data.id,
-        threadId: response.data.threadId ?? null,
+        messageId: receipt.id,
+        threadId: receipt.threadId ?? null,
       };
     });
   }

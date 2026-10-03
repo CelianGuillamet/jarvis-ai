@@ -1,3 +1,4 @@
+import { CommandRejectedError } from './command-rejected.error';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
@@ -7,6 +8,8 @@ import {
   executeWithPolicy,
   type MutationPolicyContext,
 } from './execution-policy';
+
+type BusinessOutcome = 'completed' | 'simulated' | 'partial' | 'unknown';
 
 export type CommandExecution = {
   ownerId: string;
@@ -29,6 +32,7 @@ export class CommandExecutionService {
     input: CommandExecution,
     mutate: (commandId: string) => Promise<T>,
     simulate: () => T | Promise<T>,
+    classify?: (result: T) => BusinessOutcome,
   ): Promise<T> {
     input = {
       ...input,
@@ -43,8 +47,8 @@ export class CommandExecutionService {
       throw new ConflictException('Propriétaire de commande invalide.');
     return executeWithPolicy(
       input.policy,
-      () => this.run(input, false, mutate),
-      () => this.run(input, true, simulate),
+      () => this.run(input, false, mutate, classify),
+      () => this.run(input, true, simulate, classify),
     );
   }
 
@@ -52,6 +56,7 @@ export class CommandExecutionService {
     input: CommandExecution,
     simulation: boolean,
     work: (commandId: string) => T | Promise<T>,
+    classify?: (result: T) => BusinessOutcome,
   ): Promise<T> {
     const id =
       input.source === 'confirmation'
@@ -89,6 +94,9 @@ export class CommandExecutionService {
     try {
       const result = await work(id);
       if (input.source !== 'confirmation') {
+        const outcome = simulation ? 'simulated' : classify?.(result);
+        const state = outcome === 'unknown' ? 'unknown' : 'completed';
+        const outcomeCode = outcome ? outcome.toUpperCase() : 'TOOL_RETURNED';
         const response = JSON.parse(
           JSON.stringify({
             text: typeof result === 'string' ? result : 'Action traitée.',
@@ -97,15 +105,16 @@ export class CommandExecutionService {
               simulation,
               sessionId: input.conversationId,
               commandId: id,
+              commandState: state,
             },
           }),
         ) as Prisma.InputJsonObject;
         const updated = await this.prisma.command.updateMany({
           where: { id, ownerId: input.ownerId, state: 'executing' },
           data: {
-            state: 'completed',
-            outcomeCode: simulation ? 'SIMULATED' : 'TOOL_RETURNED',
-            response,
+            state,
+            outcomeCode,
+            ...(state === 'completed' ? { response } : {}),
             revision: { increment: 1 },
           },
         });
@@ -119,8 +128,11 @@ export class CommandExecutionService {
         .updateMany({
           where: { id, ownerId: input.ownerId, state: 'executing' },
           data: {
-            state: 'unknown',
-            outcomeCode: 'EXECUTION_UNCERTAIN',
+            state: error instanceof CommandRejectedError ? 'failed' : 'unknown',
+            outcomeCode:
+              error instanceof CommandRejectedError
+                ? error.code
+                : 'EXECUTION_UNCERTAIN',
             revision: { increment: 1 },
           },
         })

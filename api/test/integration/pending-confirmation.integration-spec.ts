@@ -32,6 +32,34 @@ describe('Durable pending confirmations', () => {
     await prisma.$disconnect();
   });
 
+  it('records confirmed success explicitly', async () => {
+    const id = await pending.create(session, call, localTargets);
+    await pending.consume(id, session);
+    await pending.complete(id, session, {
+      text: 'Completed',
+      meta: { simulation: false, sessionId: session },
+    });
+    const row = await prisma.command.findUniqueOrThrow({ where: { id } });
+    expect(row).toMatchObject({ state: 'completed', outcomeCode: 'COMPLETED' });
+  });
+
+  it('replays known failure as failed rather than expired or uncertain', async () => {
+    const id = await pending.create(session, call, localTargets);
+    await pending.consume(id, session);
+    await prisma.command.update({
+      where: { id },
+      data: {
+        state: 'failed',
+        outcomeCode: 'VALIDATION',
+        revision: { increment: 1 },
+      },
+    });
+    const result = await pending.replay(id, session);
+    expect(result?.meta.commandState).toBe('failed');
+    expect(result?.text).toContain('a échoué');
+    expect(await pending.consume(id, session)).toBeNull();
+  });
+
   it('claims once concurrently and replays the persisted response after restart', async () => {
     const id = await pending.create(session, call, localTargets);
     const claims = await Promise.all(
@@ -58,6 +86,7 @@ describe('Durable pending confirmations', () => {
       include: { transitions: true },
     });
     expect(row.state).toBe('completed');
+    expect(row.outcomeCode).toBe('SIMULATED');
     expect(row.transitions).toHaveLength(5);
     await expect(
       pending.complete(id, session, { text: 'replacement', meta: {} }),

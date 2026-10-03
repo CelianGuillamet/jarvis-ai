@@ -10,6 +10,14 @@ import HabitWidget from '@/features/dashboard/components/HabitWidget.vue';
 import { useChatStore } from '@/stores/chatStore';
 import { useStatusStore } from '@/stores/statusStore';
 
+const availabilityLabels = {
+  available: 'Disponible',
+  disconnected: 'Non connecté',
+  permission_required: 'Autorisation requise',
+  unavailable: 'Indisponible',
+  invalid_response: 'Réponse invalide',
+};
+
 const status = useStatusStore();
 const chat = useChatStore();
 const router = useRouter();
@@ -181,16 +189,16 @@ const metricConfigs: MetricConfig[] = [
               Google
             </BaseBadge>
             <BaseBadge
-              :tone="status.snapshot?.integrations.calendarConnected ? 'ok' : 'warn'"
+              :tone="status.snapshot?.availability.calendar === 'available' ? 'ok' : 'warn'"
               :dot="true"
             >
-              Calendar
+              Calendrier · {{ status.snapshot ? availabilityLabels[status.snapshot.availability.calendar] : 'Chargement' }}
             </BaseBadge>
             <BaseBadge
-              :tone="status.snapshot?.integrations.gmailConnected ? 'ok' : 'warn'"
+              :tone="status.snapshot?.availability.gmail === 'available' ? 'ok' : 'warn'"
               :dot="true"
             >
-              Gmail
+              Gmail · {{ status.snapshot ? availabilityLabels[status.snapshot.availability.gmail] : 'Chargement' }}
             </BaseBadge>
             <BaseBadge tone="muted" :dot="false">
               {{ status.snapshot?.providers.web || 'web —' }}
@@ -210,10 +218,10 @@ const metricConfigs: MetricConfig[] = [
           <div v-else class="mt-3 space-y-1.5">
             <button
               v-for="qa in status.snapshot?.quickActions ?? []"
-              :key="qa.title"
+              :key="qa.label"
               type="button"
               class="flex w-full items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 text-left text-xs transition hover:bg-muted/50 disabled:opacity-50"
-              :disabled="!qa.enabled || (!qa.prompt && !qa.href)"
+              :disabled="!qa.prompt && !qa.href"
               @click="
                 qa.href
                   ? openHref(qa.href)
@@ -222,8 +230,7 @@ const metricConfigs: MetricConfig[] = [
                     : undefined
               "
             >
-              <span class="font-medium">{{ qa.title }}</span>
-              <span v-if="qa.badge" class="text-muted-foreground/60">{{ qa.badge }}</span>
+              <span class="font-medium">{{ qa.label }}</span>
             </button>
             <div
               v-if="!(status.snapshot?.quickActions?.length)"
@@ -257,7 +264,7 @@ const metricConfigs: MetricConfig[] = [
                   <p class="mt-0.5 text-xs text-muted-foreground">{{ s.detail }}</p>
                 </div>
                 <BaseBadge
-                  :tone="s.tone === 'critical' ? 'critical' : s.tone === 'warn' ? 'warn' : 'ok'"
+                  :tone="s.tone === 'neutral' ? 'default' : s.tone"
                 >
                   {{ s.tone }}
                 </BaseBadge>

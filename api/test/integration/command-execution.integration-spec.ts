@@ -1,3 +1,4 @@
+import { CommandRejectedError } from '../../src/commands/command-rejected.error';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationService } from '../../src/auth/conversation.service';
@@ -91,6 +92,61 @@ describe('Shared durable command execution', () => {
           data: { source: 'confirmation', revision: { increment: 1 } },
         }),
       ).rejects.toThrow();
+    },
+  );
+
+  it.each(['partial', 'unknown'] as const)(
+    'persists the classified %s outcome instead of completed success',
+    async (outcome) => {
+      const input = {
+        ...(await fixture(`classified-${outcome}`)),
+        source: 'inbox' as const,
+      };
+      const result = { outcome, ok: false };
+      const mutate = jest.fn(() => Promise.resolve(result));
+      await expect(
+        executor.execute(
+          input,
+          mutate,
+          () => result,
+          (value) => value.outcome,
+        ),
+      ).resolves.toEqual(result);
+      const row = await prisma.command.findFirstOrThrow({
+        where: { conversationId: input.conversationId },
+      });
+      expect(row).toMatchObject({
+        state: outcome === 'unknown' ? 'unknown' : 'completed',
+        outcomeCode: outcome.toUpperCase(),
+        response: outcome === 'unknown' ? null : { result },
+      });
+      expect(mutate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['VALIDATION', 'NOT_FOUND'] as const)(
+    'records an explicit pre-effect %s rejection as failed rather than unknown',
+    async (code) => {
+      const input = await fixture(`rejected-before-effect-${code}`);
+      await expect(
+        executor.execute(
+          input,
+          () =>
+            Promise.reject(
+              new CommandRejectedError('Rejet avant effet.', code),
+            ),
+          () => '',
+        ),
+      ).rejects.toBeInstanceOf(CommandRejectedError);
+      expect(
+        await prisma.command.findFirstOrThrow({
+          where: { conversationId: input.conversationId },
+        }),
+      ).toMatchObject({
+        state: 'failed',
+        outcomeCode: code,
+        response: null,
+      });
     },
   );
 

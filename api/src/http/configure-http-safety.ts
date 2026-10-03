@@ -1,3 +1,5 @@
+import { ApiExceptionFilter } from './api-exception.filter';
+import { errorCodeForStatus } from '../contracts/v1';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { REQUEST_LIMITS, REQUEST_QUOTAS } from './request-limits';
@@ -5,6 +7,7 @@ import { RequestQuotaService } from './request-quota.service';
 
 /** Register before authentication: its node adapter accepts the bounded parsed body. */
 export function configureHttpSafety(app: NestExpressApplication): void {
+  app.useGlobalFilters(new ApiExceptionFilter());
   const quota = app.get(RequestQuotaService);
   app.disable('x-powered-by');
   app.set('trust proxy', false);
@@ -24,11 +27,17 @@ export function configureHttpSafety(app: NestExpressApplication): void {
       res.set('Strict-Transport-Security', 'max-age=31536000');
     }
     if (Buffer.byteLength(req.originalUrl) > REQUEST_LIMITS.urlBytes) {
-      res.status(414).json({ message: 'Adresse de requête trop longue.' });
+      res.status(414).json({
+        code: 'REQUEST_TOO_LARGE',
+        message: 'Adresse de requête trop longue.',
+      });
       return;
     }
     if (Number(req.headers['content-length']) > REQUEST_LIMITS.bodyBytes) {
-      res.status(413).json({ message: 'Requête trop volumineuse.' });
+      res.status(413).json({
+        code: 'REQUEST_TOO_LARGE',
+        message: 'Requête trop volumineuse.',
+      });
       return;
     }
     const hasBody =
@@ -38,9 +47,10 @@ export function configureHttpSafety(app: NestExpressApplication): void {
       hasBody &&
       !req.is(['application/json', 'application/x-www-form-urlencoded'])
     ) {
-      res
-        .status(415)
-        .json({ message: 'Format de requête non pris en charge.' });
+      res.status(415).json({
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+        message: 'Format de requête non pris en charge.',
+      });
       return;
     }
     const path = req.path.toLowerCase();
@@ -50,10 +60,10 @@ export function configureHttpSafety(app: NestExpressApplication): void {
         REQUEST_QUOTAS.authAddress,
       );
       if (retry !== null) {
-        res
-          .set('Retry-After', String(retry))
-          .status(429)
-          .json({ message: 'Trop de requêtes. Réessayez plus tard.' });
+        res.set('Retry-After', String(retry)).status(429).json({
+          code: 'RATE_LIMITED',
+          message: 'Trop de requêtes. Réessayez plus tard.',
+        });
         return;
       }
     }
@@ -86,6 +96,7 @@ export function configureHttpSafety(app: NestExpressApplication): void {
             ? 415
             : 400;
       res.status(status).json({
+        code: errorCodeForStatus(status),
         message:
           status === 413 ? 'Requête trop volumineuse.' : 'Requête invalide.',
       });

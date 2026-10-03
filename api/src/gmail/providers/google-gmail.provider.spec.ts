@@ -37,13 +37,20 @@ describe('Gmail send receipts', () => {
     );
   });
 
-  it.each([{}, { id: '' }, { id: '  ' }])(
+  it.each([
+    null,
+    {},
+    { id: '' },
+    { id: '  ' },
+    { id: 12 },
+    { id: 'sent', threadId: 12 },
+  ])(
     'treats a missing receipt as uncertain and never resends: %j',
     async (data) => {
       send.mockResolvedValueOnce({ data });
       await expect(
         provider.sendMessage('conversation', payload),
-      ).rejects.toThrow('Référence du message envoyé indisponible');
+      ).rejects.toThrow('La réponse de Gmail est invalide.');
       expect(send).toHaveBeenCalledTimes(1);
     },
   );
@@ -55,4 +62,85 @@ describe('Gmail send receipts', () => {
     );
     expect(send).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('Gmail read boundaries', () => {
+  const list = jest.fn();
+  const get = jest.fn();
+  const provider = new GoogleGmailProvider({
+    createAuthorizedClient: jest.fn().mockResolvedValue({}),
+  } as unknown as GoogleOAuthClientService);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(google.gmail).mockReturnValue({
+      users: { messages: { list, get } },
+    } as unknown as ReturnType<typeof google.gmail>);
+  });
+
+  it('fails invalid list entries before requesting metadata', async () => {
+    list.mockResolvedValueOnce({ data: { messages: [{}] } });
+    await expect(provider.listMessages('conversation')).rejects.toThrow(
+      'La réponse de Gmail est invalide.',
+    );
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('keeps legitimate empty results distinct from malformed responses', async () => {
+    list.mockResolvedValueOnce({ data: {} });
+    await expect(provider.listMessages('conversation')).resolves.toEqual([]);
+    list.mockResolvedValueOnce({ data: null });
+    await expect(provider.listMessages('conversation')).rejects.toThrow(
+      'La réponse de Gmail est invalide.',
+    );
+  });
+
+  it('uses the validated provider timestamp when the Date header is absent', async () => {
+    list.mockResolvedValueOnce({ data: { messages: [{ id: 'message' }] } });
+    get.mockResolvedValueOnce({
+      data: {
+        id: 'message',
+        threadId: 'thread',
+        internalDate: '1790812800000',
+      },
+    });
+    const messages = await provider.listMessages('conversation');
+    expect(messages[0].date.getTime()).toBe(1790812800000);
+  });
+});
+
+describe('Gmail existing-message mutation receipts', () => {
+  const mutate = jest.fn();
+  const provider = new GoogleGmailProvider({
+    createAuthorizedClient: jest.fn().mockResolvedValue({}),
+  } as unknown as GoogleOAuthClientService);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(google.gmail).mockReturnValue({
+      users: { messages: { modify: mutate, trash: mutate, untrash: mutate } },
+    } as unknown as ReturnType<typeof google.gmail>);
+  });
+  it.each(['modifyLabels', 'trashMessage', 'untrashMessage'] as const)(
+    '%s rejects malformed or wrong-target receipts without retrying',
+    async (method) => {
+      for (const data of [null, {}, { id: 'other' }, { id: 12 }]) {
+        mutate.mockClear();
+        mutate.mockResolvedValueOnce({ data });
+        await expect(
+          provider[method]('conversation', 'message'),
+        ).rejects.toThrow('La réponse de Gmail est invalide.');
+        expect(mutate).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+  it.each(['modifyLabels', 'trashMessage', 'untrashMessage'] as const)(
+    '%s accepts the expected message receipt',
+    async (method) => {
+      mutate.mockResolvedValueOnce({ data: { id: 'message' } });
+      await expect(
+        provider[method]('conversation', 'message'),
+      ).resolves.toBeUndefined();
+      expect(mutate).toHaveBeenCalledTimes(1);
+    },
+  );
 });

@@ -437,7 +437,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       expect(command).toMatchObject({
         source,
         state: 'completed',
-        outcomeCode: 'TOOL_RETURNED',
+        outcomeCode: 'COMPLETED',
       });
       expect(command.targets).toEqual(
         expect.arrayContaining([
@@ -564,7 +564,12 @@ describe('API against disposable migrated PostgreSQL', () => {
         })
         .expect(201);
       expect((response.body as { results: unknown[] }).results).toEqual([
-        { messageId: 'fixture-message', ok: true, simulated: true },
+        {
+          messageId: 'fixture-message',
+          ok: true,
+          simulated: true,
+          outcome: 'simulated',
+        },
       ]);
       expect(
         await prisma.inboxZeroItem.findMany({ where: { sessionId } }),
@@ -1040,7 +1045,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Cookie', cookie)
       .set('Origin', 'http://localhost:5173')
       .send({ sessionId: second, actionId: pending.id })
-      .expect(201);
+      .expect(404);
     expect(
       await prisma.pendingAction.findUnique({ where: { id: pending.id } }),
     ).not.toBeNull();

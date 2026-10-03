@@ -1,4 +1,20 @@
 import {
+  ConversationQuerySchema,
+  MessageQuerySchema,
+  InboxZeroApplyRequestSchema,
+  InboxZeroScanRequestSchema,
+  InboxZeroStepRequestSchema,
+  InboxZeroDraftReplyRequestSchema,
+} from '../contracts/v1';
+import { RequestContract } from '../http/request-contract';
+import { ResponseContract } from '../http/response-contract';
+import {
+  InboxZeroApplyResponseSchema,
+  InboxZeroDraftReplyResponseSchema,
+  InboxZeroMessageResponseSchema,
+  InboxZeroScanResponseSchema,
+} from '../contracts/v1';
+import {
   BadRequestException,
   Body,
   Controller,
@@ -10,12 +26,12 @@ import {
 import { ConversationService } from '../auth/conversation.service';
 import type { AuthenticatedRequest } from '../auth/session.guard';
 
-import { InboxZeroApplyDto } from './dto/inbox-zero-apply.dto';
-import { InboxZeroDraftReplyDto } from './dto/inbox-zero-draft-reply.dto';
-import { InboxZeroScanDto } from './dto/inbox-zero-scan.dto';
-import { InboxZeroStepDto } from './dto/inbox-zero-step.dto';
+import type { InboxZeroApplyDto } from './dto/inbox-zero-apply.dto';
+import type { InboxZeroDraftReplyDto } from './dto/inbox-zero-draft-reply.dto';
+import type { InboxZeroScanDto } from './dto/inbox-zero-scan.dto';
+import type { InboxZeroStepDto } from './dto/inbox-zero-step.dto';
 import { InboxZeroService } from './inbox-zero.service';
-import { ConversationQueryDto, MessageQueryDto } from '../http/query.dto';
+import type { ConversationQueryDto, MessageQueryDto } from '../http/query.dto';
 
 @Controller('inbox-zero')
 export class InboxZeroController {
@@ -25,8 +41,10 @@ export class InboxZeroController {
   ) {}
 
   @Post('scan')
+  @ResponseContract(InboxZeroScanResponseSchema)
   async scan(
-    @Body() body: InboxZeroScanDto,
+    @Body(new RequestContract(InboxZeroScanRequestSchema))
+    body: InboxZeroScanDto,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.inboxZero.scan({
@@ -39,9 +57,11 @@ export class InboxZeroController {
   }
 
   @Get('session')
+  @ResponseContract(InboxZeroScanResponseSchema)
   async session(
     @Req() request: AuthenticatedRequest,
-    @Query() query: ConversationQueryDto,
+    @Query(new RequestContract(ConversationQuerySchema))
+    query: ConversationQueryDto,
   ) {
     return this.inboxZero.getSession(
       await this.conversations.resolve(
@@ -52,8 +72,10 @@ export class InboxZeroController {
   }
 
   @Post('step')
+  @ResponseContract(InboxZeroScanResponseSchema)
   async step(
-    @Body() body: InboxZeroStepDto,
+    @Body(new RequestContract(InboxZeroStepRequestSchema))
+    body: InboxZeroStepDto,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.inboxZero.setStep(
@@ -63,8 +85,10 @@ export class InboxZeroController {
   }
 
   @Post('apply')
+  @ResponseContract(InboxZeroApplyResponseSchema)
   async apply(
-    @Body() body: InboxZeroApplyDto,
+    @Body(new RequestContract(InboxZeroApplyRequestSchema))
+    body: InboxZeroApplyDto,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.inboxZero.apply({
@@ -77,9 +101,10 @@ export class InboxZeroController {
   }
 
   @Get('message')
+  @ResponseContract(InboxZeroMessageResponseSchema)
   async message(
     @Req() request: AuthenticatedRequest,
-    @Query() query: MessageQueryDto,
+    @Query(new RequestContract(MessageQuerySchema)) query: MessageQueryDto,
   ) {
     const { sessionId, messageId } = query;
     if (!messageId?.trim()) throw new BadRequestException('messageId manquant');
@@ -90,8 +115,10 @@ export class InboxZeroController {
   }
 
   @Post('draft-reply')
+  @ResponseContract(InboxZeroDraftReplyResponseSchema)
   async draftReply(
-    @Body() body: InboxZeroDraftReplyDto,
+    @Body(new RequestContract(InboxZeroDraftReplyRequestSchema))
+    body: InboxZeroDraftReplyDto,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.inboxZero.draftReply(

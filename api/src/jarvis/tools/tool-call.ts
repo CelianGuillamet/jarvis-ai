@@ -56,7 +56,7 @@ export function parseToolCall(jsonText: string): ToolCall | null {
   if (!isRecord(x) || typeof x.type !== 'string') return null;
 
   if (x.type === 'final') {
-    if (typeof x.text !== 'string') return null;
+    if (typeof x.text !== 'string' || !x.text.trim()) return null;
     return { type: 'final', text: x.text };
   }
 

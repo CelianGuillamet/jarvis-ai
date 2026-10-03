@@ -1,5 +1,6 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import type { JarvisContextualHelp } from '@prisma/client';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type ContextualHelpRecord = {
@@ -17,8 +18,6 @@ export type ContextualHelpRecord = {
 
 @Injectable()
 export class JarvisContextualHelpService {
-  private readonly logger = new Logger(JarvisContextualHelpService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async createHelp(
@@ -42,9 +41,8 @@ export class JarvisContextualHelpService {
       });
 
       return this.mapHelpRecord(help);
-    } catch (error) {
-      this.logger.error(`Failed to create contextual help: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -64,11 +62,8 @@ export class JarvisContextualHelpService {
       });
 
       return items.map((h) => this.mapHelpRecord(h));
-    } catch (error) {
-      this.logger.error(
-        `Failed to find relevant help for context "${context}": ${error}`,
-      );
-      return [];
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -83,9 +78,8 @@ export class JarvisContextualHelpService {
       });
 
       return this.mapHelpRecord(help);
-    } catch (error) {
-      this.logger.error(`Failed to mark help ${helpId} as viewed: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -104,9 +98,8 @@ export class JarvisContextualHelpService {
       });
 
       return this.mapHelpRecord(help);
-    } catch (error) {
-      this.logger.error(`Failed to mark helpfulness for ${helpId}: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -124,9 +117,8 @@ export class JarvisContextualHelpService {
       });
 
       return items.map((h) => this.mapHelpRecord(h));
-    } catch (error) {
-      this.logger.error(`Failed to list help for ${sessionId}: ${error}`);
-      return [];
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -144,11 +136,8 @@ export class JarvisContextualHelpService {
       }
 
       return lines.join('\n');
-    } catch (error) {
-      this.logger.error(
-        `Failed to build prompt context for ${sessionId}: ${error}`,
-      );
-      return '';
+    } catch {
+      throw dataUnavailable();
     }
   }
 

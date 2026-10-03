@@ -1,3 +1,6 @@
+import { asGoogleIntegrationError } from '../../google/google-integration.error';
+import { dataUnavailable } from '../../http/data-unavailable';
+import { CommandRejectedError } from '../../commands/command-rejected.error';
 import { DateTime } from 'luxon';
 import type { ToolOnly } from './tool-registry';
 import { TargetResolutionError } from '../../commands/calendar-target';
@@ -3000,8 +3003,12 @@ export async function runTool(
 
         case 'todo.done': {
           const { row, error } = await resolveTodo(call.args.query, false);
-          if (error) return error;
-          if (!row) return `Aucun todo trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun todo trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.todo.findUnique({
             where: { id: row.id },
@@ -3029,9 +3036,12 @@ export async function runTool(
 
         case 'todo.reopen': {
           const { row, error } = await resolveTodo(call.args.query, true);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!row)
-            return `Aucun todo terminé trouvé pour "${call.args.query}".`;
+            throw new CommandRejectedError(
+              `Aucun todo terminé trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.todo.findUnique({
             where: { id: row.id },
@@ -3086,11 +3096,18 @@ export async function runTool(
 
         case 'todo.update': {
           const nextText = call.args.text.trim();
-          if (!nextText) return 'Le nouveau texte du todo est vide.';
+          if (!nextText)
+            throw new CommandRejectedError(
+              'Le nouveau texte du todo est vide.',
+            );
 
           const { row, error } = await resolveTodo(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun todo trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun todo trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           await prisma.todo.update({
             where: { id: row.id },
@@ -3107,8 +3124,12 @@ export async function runTool(
 
         case 'todo.delete': {
           const { row, error } = await resolveTodo(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun todo trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun todo trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.todo.findUnique({
             where: { id: row.id },
@@ -3144,7 +3165,7 @@ export async function runTool(
 
         case 'todo.bulk_done': {
           const { rows, error } = resolveTodoRefs(call.args.refs, false);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun todo à marquer.';
 
           const ids = rows.map((r) => r.id);
@@ -3175,7 +3196,7 @@ export async function runTool(
 
         case 'todo.bulk_delete': {
           const { rows, error } = resolveTodoRefs(call.args.refs);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun todo à supprimer.';
 
           const ids = rows.map((r) => r.id);
@@ -3391,11 +3412,14 @@ export async function runTool(
 
         case 'calendar.create': {
           const startIsoRaw = call.args.when.trim();
-          if (!startIsoRaw) return 'La date de début est vide.';
+          if (!startIsoRaw)
+            throw new CommandRejectedError('La date de début est vide.');
 
           const startParsed = DateTime.fromISO(startIsoRaw, { zone: tz });
           if (!startParsed.isValid)
-            return `Date de début invalide: "${call.args.when}".`;
+            throw new CommandRejectedError(
+              `Date de début invalide: "${call.args.when}".`,
+            );
 
           const endIsoRaw = call.args.endWhen?.trim();
           const endParsed = endIsoRaw
@@ -3405,7 +3429,9 @@ export async function runTool(
             ? endParsed
             : startParsed.plus({ minutes: 60 });
           if (effectiveEnd <= startParsed) {
-            return 'L’heure de fin doit être après l’heure de début.';
+            throw new CommandRejectedError(
+              'L’heure de fin doit être après l’heure de début.',
+            );
           }
 
           if (ctx.simulation) {
@@ -3427,8 +3453,12 @@ export async function runTool(
 
         case 'calendar.delete': {
           const { target, error } = await resolveCalendarTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun rendez-vous ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError(
+              'Aucun rendez-vous ciblé.',
+              'NOT_FOUND',
+            );
 
           if (ctx.simulation) {
             ctx.recordUndo?.('suppression événement (simulation)', false);
@@ -3449,8 +3479,12 @@ export async function runTool(
 
         case 'calendar.update': {
           const { target, error } = await resolveCalendarTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun rendez-vous ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError(
+              'Aucun rendez-vous ciblé.',
+              'NOT_FOUND',
+            );
           const targetStart = DateTime.fromJSDate(target.when).setZone(tz);
           const targetEnd =
             target.end && target.end.getTime() > target.when.getTime()
@@ -3507,14 +3541,18 @@ export async function runTool(
               parsedEnd = DateTime.fromISO(resolvedEnd.startIso, { zone: tz });
             }
             if (!parsedEnd.isValid) {
-              return `Heure de fin invalide: "${call.args.endWhen}".`;
+              throw new CommandRejectedError(
+                `Heure de fin invalide: "${call.args.endWhen}".`,
+              );
             }
             if (parsedEnd <= nextStart) parsedEnd = parsedEnd.plus({ days: 1 });
             nextEnd = parsedEnd;
           }
 
           if (nextEnd <= nextStart) {
-            return 'L’heure de fin doit être après l’heure de début.';
+            throw new CommandRejectedError(
+              'L’heure de fin doit être après l’heure de début.',
+            );
           }
 
           const nextWhenIso = nextStart.toISO({ suppressMilliseconds: true })!;
@@ -3612,13 +3650,19 @@ export async function runTool(
 
         case 'note.update': {
           const { row, error } = await resolveNote(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucune note trouvée pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucune note trouvée pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const hasTitle = Object.hasOwn(call.args, 'title');
           const hasText = Object.hasOwn(call.args, 'text');
           if (!hasTitle && !hasText) {
-            return 'Rien à modifier: envoie au moins title ou text.';
+            throw new CommandRejectedError(
+              'Rien à modifier: envoie au moins title ou text.',
+            );
           }
 
           const data: { title?: string | null; text?: string } = {};
@@ -3631,7 +3675,10 @@ export async function runTool(
           }
           if (hasText) {
             const cleaned = (call.args.text ?? '').trim();
-            if (!cleaned) return 'Le texte de la note ne peut pas être vide.';
+            if (!cleaned)
+              throw new CommandRejectedError(
+                'Le texte de la note ne peut pas être vide.',
+              );
             data.text = cleaned;
           }
 
@@ -3654,8 +3701,12 @@ export async function runTool(
 
         case 'note.delete': {
           const { row, error } = await resolveNote(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucune note trouvée pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucune note trouvée pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.note.findUnique({
             where: { id: row.id },
@@ -3717,8 +3768,12 @@ export async function runTool(
 
         case 'shopping.bought': {
           const { row, error } = await resolveShopping(call.args.query, false);
-          if (error) return error;
-          if (!row) return `Aucun article trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun article trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.shoppingItem.findUnique({
             where: { id: row.id },
@@ -3746,9 +3801,12 @@ export async function runTool(
 
         case 'shopping.unbought': {
           const { row, error } = await resolveShopping(call.args.query, true);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!row) {
-            return `Aucun article déjà acheté trouvé pour "${call.args.query}".`;
+            throw new CommandRejectedError(
+              `Aucun article déjà acheté trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
           }
 
           const before = await prisma.shoppingItem.findUnique({
@@ -3805,11 +3863,18 @@ export async function runTool(
 
         case 'shopping.update': {
           const nextText = call.args.text.trim();
-          if (!nextText) return "Le nouveau texte de l'article est vide.";
+          if (!nextText)
+            throw new CommandRejectedError(
+              "Le nouveau texte de l'article est vide.",
+            );
 
           const { row, error } = await resolveShopping(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun article trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun article trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           await prisma.shoppingItem.update({
             where: { id: row.id },
@@ -3830,8 +3895,12 @@ export async function runTool(
 
         case 'shopping.delete': {
           const { row, error } = await resolveShopping(call.args.query);
-          if (error) return error;
-          if (!row) return `Aucun article trouvé pour "${call.args.query}".`;
+          if (error) throw new CommandRejectedError(error);
+          if (!row)
+            throw new CommandRejectedError(
+              `Aucun article trouvé pour "${call.args.query}".`,
+              'NOT_FOUND',
+            );
 
           const before = await prisma.shoppingItem.findUnique({
             where: { id: row.id },
@@ -3867,7 +3936,7 @@ export async function runTool(
 
         case 'shopping.bulk_bought': {
           const { rows, error } = resolveShoppingRefs(call.args.refs, false);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun article à marquer.';
 
           const ids = rows.map((r) => r.id);
@@ -3898,7 +3967,7 @@ export async function runTool(
 
         case 'shopping.bulk_delete': {
           const { rows, error } = resolveShoppingRefs(call.args.refs);
-          if (error) return error;
+          if (error) throw new CommandRejectedError(error);
           if (!rows.length) return 'Aucun article à supprimer.';
 
           const ids = rows.map((r) => r.id);
@@ -4319,9 +4388,10 @@ export async function runTool(
           const cc = call.args.cc?.trim();
           const bcc = call.args.bcc?.trim();
 
-          if (!to) return 'Destinataire email manquant.';
-          if (!subject) return 'Sujet email manquant.';
-          if (!textBody) return 'Contenu email vide.';
+          if (!to)
+            throw new CommandRejectedError('Destinataire email manquant.');
+          if (!subject) throw new CommandRejectedError('Sujet email manquant.');
+          if (!textBody) throw new CommandRejectedError('Contenu email vide.');
 
           if (ctx.simulation) {
             return `SIMULATION: email envoyé à ${to} (sujet: "${subject}").`;
@@ -4339,8 +4409,9 @@ export async function runTool(
 
         case 'gmail.mark_read': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email marqué comme lu "${target.subject}".`;
@@ -4404,8 +4475,9 @@ export async function runTool(
 
         case 'gmail.mark_unread': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email marqué comme non lu "${target.subject}".`;
@@ -4423,8 +4495,9 @@ export async function runTool(
 
         case 'gmail.archive': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email archivé "${target.subject}".`;
@@ -4441,8 +4514,9 @@ export async function runTool(
 
         case 'gmail.unarchive': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email desarchivé "${target.subject}".`;
@@ -4459,8 +4533,9 @@ export async function runTool(
 
         case 'gmail.trash': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email déplacé à la corbeille "${target.subject}".`;
@@ -4473,8 +4548,9 @@ export async function runTool(
 
         case 'gmail.untrash': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email restauré depuis la corbeille "${target.subject}".`;
@@ -4493,8 +4569,9 @@ export async function runTool(
 
         case 'gmail.delete': {
           const { target, error } = await resolveGmailTarget(call.args);
-          if (error) return error;
-          if (!target) return 'Aucun email ciblé.';
+          if (error) throw new CommandRejectedError(error);
+          if (!target)
+            throw new CommandRejectedError('Aucun email ciblé.', 'NOT_FOUND');
 
           if (ctx.simulation) {
             return `SIMULATION: email supprimé définitivement "${target.subject}".`;
@@ -4621,13 +4698,17 @@ export async function runTool(
         case 'memory.set': {
           const layer = call.args.layer;
           if (!isMemoryLayer(layer)) {
-            return `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`;
+            throw new CommandRejectedError(
+              `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`,
+            );
           }
           const key = (call.args.key ?? '').trim();
           const label = (call.args.label ?? '').trim();
           const value = (call.args.value ?? '').trim();
           if (!key || !label || !value) {
-            return `Champs manquants. Requis: layer, key, label, value.`;
+            throw new CommandRejectedError(
+              `Champs manquants. Requis: layer, key, label, value.`,
+            );
           }
 
           const fact = await ctx.memory.upsertFact(sessionId, {
@@ -4640,7 +4721,9 @@ export async function runTool(
           });
 
           if (!fact)
-            return `Impossible de mettre à jour la mémoire pour "${layer}:${key}".`;
+            throw new CommandRejectedError(
+              `Clé ou valeur mémoire invalide pour "${layer}:${key}".`,
+            );
 
           return `OK. Mémoire mise à jour: [${fact.layer}:${fact.key}] ${fact.label} = ${fact.value}.`;
         }
@@ -4654,11 +4737,15 @@ export async function runTool(
           if (ref !== null) {
             const list = getLastMemoryList(sessionId);
             if (!list.length) {
-              return `Je n’ai pas de liste récente de mémoire. Dis-moi "montre ma mémoire" puis utilise #N.`;
+              throw new CommandRejectedError(
+                `Je n’ai pas de liste récente de mémoire. Dis-moi "montre ma mémoire" puis utilise #N.`,
+              );
             }
             const idx = ref - 1;
             if (idx < 0 || idx >= list.length) {
-              return `Numéro invalide (#${ref}). Donne-moi un numéro entre 1 et ${list.length}.`;
+              throw new CommandRejectedError(
+                `Numéro invalide (#${ref}). Donne-moi un numéro entre 1 et ${list.length}.`,
+              );
             }
             const target = list[idx];
             const ok = await ctx.memory.forgetFact(sessionId, {
@@ -4674,10 +4761,13 @@ export async function runTool(
           if (call.args.layer && call.args.key) {
             const layer = call.args.layer;
             if (!isMemoryLayer(layer)) {
-              return `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`;
+              throw new CommandRejectedError(
+                `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`,
+              );
             }
             const key = (call.args.key ?? '').trim();
-            if (!key) return `Clé mémoire manquante (key).`;
+            if (!key)
+              throw new CommandRejectedError(`Clé mémoire manquante (key).`);
             const ok = await ctx.memory.forgetFact(sessionId, { layer, key });
             LAST_MEMORY_LIST.delete(sessionId);
             return ok
@@ -4691,9 +4781,13 @@ export async function runTool(
               limit: 6,
             });
             if (!matches.length)
-              return `Aucune mémoire ne correspond à "${compactText(query, 80)}".`;
+              throw new CommandRejectedError(
+                `Aucune mémoire ne correspond à "${compactText(query, 80)}".`,
+              );
             if (matches.length > 1) {
-              return `Plusieurs entrées correspondent à "${compactText(query, 80)}". Utilise "memory.list" puis "memory.forget" avec ref (#N).`;
+              throw new CommandRejectedError(
+                `Plusieurs entrées correspondent à "${compactText(query, 80)}". Utilise "memory.list" puis "memory.forget" avec ref (#N).`,
+              );
             }
             const target = matches[0];
             const ok = await ctx.memory.forgetFact(sessionId, {
@@ -4706,7 +4800,9 @@ export async function runTool(
               : `Aucune mémoire trouvée pour [${target.layer}:${target.key}].`;
           }
 
-          return `Précise ref (#N), ou layer+key, ou query.`;
+          throw new CommandRejectedError(
+            `Précise ref (#N), ou layer+key, ou query.`,
+          );
         }
 
         case 'mission.list': {
@@ -4748,9 +4844,15 @@ export async function runTool(
 
         case 'mission.close': {
           const { target, error } = await resolveMissionTarget(call.args);
-          if (!target) return error ?? 'Mission introuvable.';
+          if (!target)
+            throw new CommandRejectedError(
+              error ?? 'Mission introuvable.',
+              error ? 'VALIDATION' : 'NOT_FOUND',
+            );
           if (target.status !== 'active') {
-            return `La mission "${target.objective}" n’est plus active.`;
+            throw new CommandRejectedError(
+              `La mission "${target.objective}" n’est plus active.`,
+            );
           }
 
           if (ctx.simulation) {
@@ -4771,7 +4873,8 @@ export async function runTool(
 
         case 'mission.plan': {
           const objective = call.args.objective.trim();
-          if (!objective) return 'Objectif mission vide.';
+          if (!objective)
+            throw new CommandRejectedError('Objectif mission vide.');
 
           const now = DateTime.now().setZone(tz);
           let startIso =
@@ -4831,7 +4934,13 @@ export async function runTool(
               q: 'is:unread',
               maxResults: 8,
             });
-          } catch {
+          } catch (error) {
+            const code = asGoogleIntegrationError(error)?.code;
+            if (
+              code !== 'GMAIL_NOT_CONNECTED' &&
+              code !== 'GOOGLE_NOT_CONNECTED'
+            )
+              throw error;
             unreadMails = null;
           }
 
@@ -5136,7 +5245,13 @@ export async function runTool(
               q: 'is:unread',
               maxResults: 5,
             });
-          } catch {
+          } catch (error) {
+            const code = asGoogleIntegrationError(error)?.code;
+            if (
+              code !== 'GMAIL_NOT_CONNECTED' &&
+              code !== 'GOOGLE_NOT_CONNECTED'
+            )
+              throw error;
             unreadMails = null;
           }
 
@@ -5342,7 +5457,7 @@ export async function runTool(
 
         // ===== GOALS =====
         case 'goal.create': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const goal = await ctx.goals.create(sessionId, {
             title: call.args.title,
             description: call.args.description,
@@ -5352,12 +5467,16 @@ export async function runTool(
               : undefined,
             parentGoalId: call.args.parentGoalId,
           });
-          if (!goal) return "Échec de la création de l'objectif.";
+          if (!goal)
+            throw new CommandRejectedError(
+              'Objectif parent introuvable.',
+              'NOT_FOUND',
+            );
           return `Objectif créé: "${goal.title}" [ID: ${goal.id}]${goal.priority ? ` [P${goal.priority}]` : ''}${goal.targetDate ? ` — échéance: ${goal.targetDate}` : ''}`;
         }
 
         case 'goal.list': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const goals = await ctx.goals.list(sessionId, {
             status: call.args.status ?? 'active',
           });
@@ -5371,7 +5490,7 @@ export async function runTool(
         }
 
         case 'goal.decompose': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const sub = await ctx.goals.decompose(
             sessionId,
             call.args.goalId,
@@ -5382,19 +5501,19 @@ export async function runTool(
         }
 
         case 'goal.done': {
-          if (!ctx.goals) return 'Service objectifs non disponible.';
+          if (!ctx.goals) throw dataUnavailable();
           const goal = await ctx.goals.updateStatus(
             sessionId,
             call.args.goalId,
             'done',
           );
-          if (!goal) return 'Objectif introuvable.';
+          if (!goal) throw dataUnavailable();
           return `Objectif "${goal.title}" marqué comme terminé.`;
         }
 
         // ===== CONFLICTS =====
         case 'conflict.detect': {
-          if (!ctx.conflicts) return 'Service conflits non disponible.';
+          if (!ctx.conflicts) throw dataUnavailable();
           const reports = await ctx.conflicts.detectAllConflicts(sessionId);
           if (!reports.length) return 'Aucun conflit détecté.';
           return reports
@@ -5407,7 +5526,7 @@ export async function runTool(
 
         // ===== DEPENDENCIES =====
         case 'dependency.add': {
-          if (!ctx.dependencies) return 'Service dépendances non disponible.';
+          if (!ctx.dependencies) throw dataUnavailable();
           const dep = await ctx.dependencies.addDependency(
             sessionId,
             call.args.sourceTaskId,
@@ -5417,12 +5536,15 @@ export async function runTool(
               estimatedDays: call.args.estimatedDays,
             },
           );
-          if (!dep) return "Échec de l'ajout de la dépendance.";
+          if (!dep)
+            throw new CommandRejectedError(
+              'Dépendance invalide ou tâches introuvables.',
+            );
           return `Dépendance ajoutée: ${dep.sourceTaskId.slice(0, 8)} → ${dep.targetTaskId.slice(0, 8)} (${dep.dependencyType})`;
         }
 
         case 'dependency.list': {
-          if (!ctx.dependencies) return 'Service dépendances non disponible.';
+          if (!ctx.dependencies) throw dataUnavailable();
           const graph = await ctx.dependencies.getDependencies(
             sessionId,
             call.args.taskId,
@@ -5444,7 +5566,7 @@ export async function runTool(
         }
 
         case 'dependency.order': {
-          if (!ctx.dependencies) return 'Service dépendances non disponible.';
+          if (!ctx.dependencies) throw dataUnavailable();
           const ordered = await ctx.dependencies.orderTasks(
             sessionId,
             call.args.taskIds,
@@ -5526,14 +5648,14 @@ export async function runTool(
 
         // ===== SCHEDULING =====
         case 'schedule.suggest': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const suggestion = await ctx.scheduling.suggestSchedule(sessionId, {
             taskId: call.args.taskId,
             suggestedTime: new Date(call.args.suggestedTime),
             rationale: call.args.rationale,
             priority: call.args.priority,
           });
-          if (!suggestion) return 'Échec de la suggestion de planification.';
+          if (!suggestion) throw dataUnavailable();
           const time = new Date(suggestion.suggestedTime).toLocaleString(
             'fr-FR',
             { dateStyle: 'short', timeStyle: 'short' },
@@ -5542,7 +5664,7 @@ export async function runTool(
         }
 
         case 'schedule.list': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const suggestions = await ctx.scheduling.listSuggestions(sessionId, {
             applied: call.args.applied,
           });
@@ -5559,12 +5681,12 @@ export async function runTool(
         }
 
         case 'schedule.apply': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const applied = await ctx.scheduling.applySuggestion(
             sessionId,
             call.args.suggestionId,
           );
-          if (!applied) return 'Suggestion introuvable.';
+          if (!applied) throw dataUnavailable();
           const time = new Date(applied.suggestedTime).toLocaleString('fr-FR', {
             dateStyle: 'short',
             timeStyle: 'short',
@@ -5573,7 +5695,7 @@ export async function runTool(
         }
 
         case 'schedule.next_slot': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const after = call.args.afterDate
             ? new Date(call.args.afterDate)
             : new Date();
@@ -5593,19 +5715,19 @@ export async function runTool(
 
         // ===== CONTEXTUAL HELP =====
         case 'help.create': {
-          if (!ctx.help) return 'Service aide non disponible.';
+          if (!ctx.help) throw dataUnavailable();
           const help = await ctx.help.createHelp(sessionId, {
             context: call.args.context,
             contentType: call.args.contentType,
             content: call.args.content,
             relevanceScore: call.args.relevanceScore,
           });
-          if (!help) return "Échec de la création de l'aide.";
+          if (!help) throw dataUnavailable();
           return `Aide créée [${help.id.slice(0, 8)}] pour contexte "${help.context}": ${help.contentType}`;
         }
 
         case 'help.find': {
-          if (!ctx.help) return 'Service aide non disponible.';
+          if (!ctx.help) throw dataUnavailable();
           const items = await ctx.help.findRelevant(
             sessionId,
             call.args.context,
@@ -5617,7 +5739,7 @@ export async function runTool(
 
         // ===== SEARCH =====
         case 'search.query': {
-          if (!ctx.search) return 'Service recherche non disponible.';
+          if (!ctx.search) throw dataUnavailable();
           const results = await ctx.search.query(sessionId, call.args);
           if (!results.length)
             return `Aucun résultat pour "${call.args.query}".`;
@@ -5626,16 +5748,14 @@ export async function runTool(
 
         // ===== KNOWLEDGE BASE =====
         case 'knowledge.save': {
-          if (!ctx.knowledge)
-            return 'Service base de connaissances non disponible.';
+          if (!ctx.knowledge) throw dataUnavailable();
           const entry = await ctx.knowledge.save(sessionId, call.args);
-          if (!entry) return 'Impossible de sauvegarder la connaissance.';
+          if (!entry) throw dataUnavailable();
           return `OK. Connaissance sauvegardée: "${entry.title}" [${entry.category}]`;
         }
 
         case 'knowledge.find': {
-          if (!ctx.knowledge)
-            return 'Service base de connaissances non disponible.';
+          if (!ctx.knowledge) throw dataUnavailable();
           const entries = await ctx.knowledge.find(sessionId, call.args);
           if (!entries.length)
             return `Aucune connaissance trouvée pour "${call.args.query}".`;
@@ -5643,8 +5763,7 @@ export async function runTool(
         }
 
         case 'knowledge.list': {
-          if (!ctx.knowledge)
-            return 'Service base de connaissances non disponible.';
+          if (!ctx.knowledge) throw dataUnavailable();
           const entries = await ctx.knowledge.list(sessionId, call.args);
           if (!entries.length) return 'Base de connaissances vide.';
           return `${entries.length} entrée(s):\n${entries.map((e) => `- [${e.category}] ${e.title} (utilisée ${e.useCount}x)`).join('\n')}`;
@@ -5652,16 +5771,14 @@ export async function runTool(
 
         // ===== TIME INSIGHTS =====
         case 'time.record': {
-          if (!ctx.timeInsights)
-            return 'Service insights temporels non disponible.';
+          if (!ctx.timeInsights) throw dataUnavailable();
           const row = await ctx.timeInsights.record(sessionId, call.args);
-          if (!row) return "Impossible d'enregistrer la métrique.";
+          if (!row) throw dataUnavailable();
           return `OK. Métrique enregistrée: ${row.metricName} = ${row.value} ${row.unit}`;
         }
 
         case 'time.summary': {
-          if (!ctx.timeInsights)
-            return 'Service insights temporels non disponible.';
+          if (!ctx.timeInsights) throw dataUnavailable();
           const summary = await ctx.timeInsights.summary(sessionId, call.args);
           const metricLines = Object.entries(summary.metrics).map(
             ([name, m]) =>
@@ -5873,9 +5990,8 @@ export async function runTool(
 
         // ===== CONTACTS =====
         case 'contact.save': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const c = await ctx.contacts.save(sessionId, call.args);
-          if (!c) return 'Impossible de sauvegarder le contact.';
           const details = [c.email, c.company, c.role]
             .filter(Boolean)
             .join(' · ');
@@ -5883,7 +5999,7 @@ export async function runTool(
         }
 
         case 'contact.find': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
           if (!contacts.length)
             return `Aucun contact trouvé pour "${call.args.query}".`;
@@ -5898,7 +6014,7 @@ export async function runTool(
         }
 
         case 'contact.list': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.list(
             sessionId,
             call.args.limit ?? 20,
@@ -5916,29 +6032,44 @@ export async function runTool(
         }
 
         case 'contact.update': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
           if (!contacts.length)
-            return `Contact "${call.args.query}" introuvable.`;
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
           const target = contacts[0];
-          if (!target) return `Contact "${call.args.query}" introuvable.`;
+          if (!target)
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
           const updated = await ctx.contacts.update(
             sessionId,
             target.id,
             call.args.patch ?? {},
           );
-          if (!updated) return 'Impossible de mettre à jour le contact.';
+          if (!updated) throw dataUnavailable();
           return `OK. Contact mis à jour: ${updated.name}`;
         }
 
         case 'contact.delete': {
-          if (!ctx.contacts) return 'Service contacts non disponible.';
+          if (!ctx.contacts) throw dataUnavailable();
           const contacts = await ctx.contacts.find(sessionId, call.args.query);
           if (!contacts.length)
-            return `Contact "${call.args.query}" introuvable.`;
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
           const target = contacts[0];
-          if (!target) return `Contact "${call.args.query}" introuvable.`;
-          await ctx.contacts.delete(sessionId, target.id);
+          if (!target)
+            throw new CommandRejectedError(
+              `Contact "${call.args.query}" introuvable.`,
+              'NOT_FOUND',
+            );
+          const deleted = await ctx.contacts.delete(sessionId, target.id);
+          if (!deleted) throw dataUnavailable();
           return `OK. Contact supprimé: ${target.name}`;
         }
 

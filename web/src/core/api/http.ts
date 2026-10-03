@@ -1,3 +1,6 @@
+import { ApiErrorResponseSchema, errorCodeForStatus } from "../contracts/v1.ts";
+import type { ApiErrorCode } from "../contracts/v1.ts";
+
 export type HttpMethod = "GET" | "POST";
 
 export type HttpClientOptions = {
@@ -16,12 +19,15 @@ export type HttpRequestOptions = {
 export class HttpError extends Error {
   readonly name = "HttpError";
   readonly status: number;
+  readonly code: ApiErrorCode;
   readonly payload: unknown;
 
   constructor(input: { message: string; status: number; payload?: unknown }) {
     super(input.message);
     this.status = input.status;
     this.payload = input.payload;
+    const parsed = ApiErrorResponseSchema.safeParse(input.payload);
+    this.code = parsed.success ? parsed.data.code : errorCodeForStatus(input.status);
   }
 }
 
@@ -29,6 +35,15 @@ export class TimeoutError extends Error {
   readonly name = "TimeoutError";
   constructor(message = "La requête a expiré.") {
     super(message);
+  }
+}
+
+export class InvalidResponseError extends Error {
+  readonly name = "InvalidResponseError";
+  readonly code = "INVALID_RESPONSE";
+
+  constructor() {
+    super("La réponse du serveur est invalide. Son résultat ne peut pas être confirmé.");
   }
 }
 
@@ -63,11 +78,18 @@ function combineSignals(signals: AbortSignal[]) {
 }
 
 async function safeJson(response: Response) {
-  const text = await response.text().catch(() => "");
-  if (!text) return null;
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (response.ok) throw new InvalidResponseError();
+    return null;
+  }
   try {
     return JSON.parse(text) as unknown;
   } catch {
+    if (response.ok) throw new InvalidResponseError();
     return text;
   }
 }

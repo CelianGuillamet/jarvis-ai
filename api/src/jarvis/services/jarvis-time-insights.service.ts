@@ -1,5 +1,6 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import type { JarvisTimeInsight } from '@prisma/client';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type TimeInsightRecord = {
@@ -24,8 +25,6 @@ export type TimeSummary = {
 
 @Injectable()
 export class JarvisTimeInsightsService {
-  private readonly logger = new Logger(JarvisTimeInsightsService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async record(
@@ -58,11 +57,8 @@ export class JarvisTimeInsightsService {
       });
 
       return this.map(row);
-    } catch (error) {
-      this.logger.error(
-        `Failed to record time insight for ${sessionId}: ${error}`,
-      );
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -108,13 +104,8 @@ export class JarvisTimeInsightsService {
       const productivityScore = this.computeProductivityScore(metrics);
 
       return { period, metrics, productivityScore };
-    } catch (error) {
-      this.logger.warn(`Failed to get time summary for ${sessionId}: ${error}`);
-      return {
-        period: options?.period ?? 'week',
-        metrics: {},
-        productivityScore: 0,
-      };
+    } catch {
+      throw dataUnavailable();
     }
   }
 

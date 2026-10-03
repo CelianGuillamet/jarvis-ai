@@ -1,3 +1,5 @@
+import { InvalidModelResponseError } from '../providers/model-response';
+import { JarvisStatusSnapshotSchema } from '../../contracts/v1';
 import { runTool } from '../tools/tools';
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
 import type { CommandExecution } from '../../commands/command-execution.service';
@@ -208,6 +210,7 @@ function makeService(options: ServiceOptions = {}) {
 
   const pending = {
     replay: jest.fn().mockResolvedValue(null),
+    peek: jest.fn().mockResolvedValue(null),
     replayLatest: jest.fn().mockResolvedValue(null),
     complete: jest.fn().mockResolvedValue(undefined),
     markUnknown: jest.fn().mockResolvedValue(undefined),
@@ -430,6 +433,13 @@ describe('JarvisService', () => {
       'racing-command',
     );
     expect(auditStore.markSessionPendingAsCancelled).not.toHaveBeenCalled();
+  });
+
+  it('returns a not-found error when confirmation has no owned pending action', async () => {
+    const { service } = makeService();
+    await expect(service.confirm('missing', 'owned')).rejects.toMatchObject({
+      status: 404,
+    });
   });
 
   it('replays a claimed action for a late bare cancellation', async () => {
@@ -927,6 +937,10 @@ describe('JarvisService', () => {
 
     const snapshot = await service.status('console-session');
 
+    expect(snapshot.availability).toEqual({
+      gmail: 'available',
+      calendar: 'available',
+    });
     expect(snapshot.sessionId).toBe('console-session');
     expect(snapshot.providers.llm).toBe('ollama');
     expect(snapshot.metrics.openTodos).toBe(1);
@@ -974,6 +988,9 @@ describe('JarvisService', () => {
       ),
     ).toBe(true);
     expect(snapshot.recentActivity[0].toolName).toBe('todo.list');
+    expect(() =>
+      JarvisStatusSnapshotSchema.parse(JSON.parse(JSON.stringify(snapshot))),
+    ).not.toThrow();
   });
 
   it('prioritizes primary emails over promotions in the status focus', async () => {
@@ -1221,6 +1238,25 @@ describe('calendar routing safety', () => {
       expect(llmChat).toHaveBeenCalled();
       expect(pending.create).not.toHaveBeenCalled();
       expect(calendar.deleteEvent).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe('Invalid structured model decisions', () => {
+  it.each([
+    '{"type":',
+    '{"type":"ask","text":"Question","choices":[12]}',
+    '{"type":"final","text":"   "}',
+    '{"type":"invented"}',
+  ])(
+    'rejects malformed decisions instead of presenting raw JSON as an answer',
+    async (raw) => {
+      const { service, llmChat, pending } = makeService();
+      llmChat.mockResolvedValue(raw);
+      await expect(
+        service.chat('Explique la photosynthèse', 'model-invalid'),
+      ).rejects.toBeInstanceOf(InvalidModelResponseError);
+      expect(pending.create).not.toHaveBeenCalled();
     },
   );
 });
