@@ -76,6 +76,8 @@ export const JarvisChatMetaSchema = z.object({
   confidence: text.optional(),
   commandId: text.optional(),
   commandState: CommandStateSchema.optional(),
+  historyTurnId: text.optional(),
+  historySaved: z.boolean().optional(),
 });
 export const JarvisChatResponseSchema = z.object({
   text,
@@ -83,6 +85,50 @@ export const JarvisChatResponseSchema = z.object({
   pending_action: PendingActionViewSchema.optional(),
   meta: JarvisChatMetaSchema.optional(),
 });
+export const ConversationHistoryQuerySchema = z
+  .object({
+    sessionId: z.string().trim().min(1).max(128).optional(),
+    cursor: z.string().min(1).max(128).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+  })
+  .strict();
+export type ConversationHistoryQuery = z.infer<
+  typeof ConversationHistoryQuerySchema
+>;
+export const ConversationHistoryTurnSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(['chat', 'confirm']),
+    inputText: text,
+    state: z.enum(['started', 'completed', 'failed']),
+    response: JarvisChatResponseSchema.nullable(),
+    command: z.object({ id: text, state: CommandStateSchema }).nullable(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .superRefine((turn, context) => {
+    if ((turn.state === 'completed') !== (turn.response !== null))
+      context.addIssue({
+        code: 'custom',
+        message: 'History completion and response disagree.',
+      });
+  });
+export const ConversationHistoryResponseSchema = z.object({
+  conversationId: text,
+  fetchedAt: z.iso.datetime(),
+  nextCursor: text.nullable(),
+  turns: z.array(ConversationHistoryTurnSchema).max(50),
+  pendingCommand: z
+    .object({
+      id: text,
+      state: z.literal('waiting'),
+      expiresAt: z.iso.datetime(),
+    })
+    .nullable(),
+});
+export type ConversationHistoryResponse = z.infer<
+  typeof ConversationHistoryResponseSchema
+>;
 export const JarvisSuggestionSchema = z.object({
   title: text,
   detail: text,

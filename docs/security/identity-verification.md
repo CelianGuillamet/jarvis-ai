@@ -10,7 +10,7 @@ The local gate uses the real Nest guards, Better Auth signed cookies and disposa
 | --- | --- |
 | GET `/account/preferences`, POST `/account/preferences` | Signed-in owner only; rejects anonymous requests, identity overrides, invalid timezones and untrusted mutation origins. |
 | GET `/account/me` | Spoofed owner query/header still returns only the signed-in account. |
-| GET `/jarvis/status`, `/inbox-zero/session`, `/inbox-zero/message`, `/auth/google/status`, `/auth/google` | A known foreign canonical conversation returns 404 before accessing its data or authorization flow. |
+| GET `/jarvis/history`, `/jarvis/status`, `/inbox-zero/session`, `/inbox-zero/message`, `/auth/google/status`, `/auth/google` | A known foreign canonical conversation returns 404 before accessing its data or authorization flow. |
 | POST `/jarvis/chat`, `/jarvis/confirm` | Foreign conversation refused; a real foreign pending-action ID paired with the attacker's own conversation is not consumed. |
 | POST `/inbox-zero/scan`, `/inbox-zero/step`, `/inbox-zero/apply`, `/inbox-zero/draft-reply` | Valid DTOs with a foreign conversation and known message ID return 404. |
 | GET `/auth/google/callback` | A state belonging to another account is rejected and remains claimable by its owner. |

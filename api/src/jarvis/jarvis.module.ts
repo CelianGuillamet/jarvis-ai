@@ -1,3 +1,4 @@
+import { ConversationHistoryService } from './services/conversation-history.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { CommandJournalModule } from '../commands/command-journal.module';
@@ -28,6 +29,7 @@ import { JarvisFinanceService } from './services/jarvis-finance.service';
 @Module({
   imports: [AuthModule, CommandJournalModule],
   providers: [
+    ConversationHistoryService,
     JarvisService,
     PendingActionsService,
     HumanProfileService,

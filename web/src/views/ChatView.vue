@@ -39,7 +39,8 @@ watch(
 );
 
 onMounted(async () => {
-  await status.refresh();
+  await Promise.all([chat.loadHistory(), status.refresh()]);
+  chat.restorePendingFromStatus(status.snapshot?.pendingAction ?? null);
 });
 
 const examplePrompts = [
@@ -84,6 +85,17 @@ const examplePrompts = [
           class="flex-1 overflow-y-auto px-5 py-4"
           @scroll="onScroll"
         >
+          <div v-if="chat.historyError" class="mb-4 rounded-xl border border-border p-3 text-sm" role="alert">
+            <p>Impossible de charger l’historique : {{ chat.historyError }}</p>
+            <button type="button" class="mt-2 underline" :disabled="chat.historyBusy" @click="chat.loadHistory(chat.historyLoaded)">Réessayer</button>
+          </div>
+          <p v-if="chat.historyBusy" class="mb-4 text-sm text-muted-foreground" role="status">Chargement de l’historique…</p>
+          <p v-else-if="chat.historyFetchedAt" class="mb-4 text-xs text-muted-foreground">
+            Historique chargé à {{ new Date(chat.historyFetchedAt).toLocaleTimeString('fr-FR') }}
+          </p>
+          <button v-if="chat.historyCursor" type="button" class="mb-4 text-sm underline" :disabled="chat.historyBusy || chat.busy" @click="stickToBottom = false; chat.loadHistory(true)">
+            Charger les échanges précédents
+          </button>
           <!-- Empty state -->
           <div
             v-if="!chat.messages.length"
@@ -104,6 +116,7 @@ const examplePrompts = [
                   v-for="prompt in examplePrompts"
                   :key="prompt"
                   type="button"
+                  :disabled="chat.busy || chat.historyBusy || !chat.historyLoaded"
                   class="rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-xs font-medium text-foreground/80 transition hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
                   @click="chat.send(prompt)"
                 >
@@ -161,13 +174,13 @@ const examplePrompts = [
             :pending-action="chat.pendingAction"
             :awaiting="chat.lastMeta?.awaiting ?? null"
             :gated-tool="chat.lastMeta?.gatedTool ?? null"
-            :busy="chat.busy"
+            :busy="chat.busy || chat.historyBusy || !chat.historyLoaded"
             @confirm="chat.confirmPending"
             @cancel="chat.cancelPending"
             @connect-google="chat.openGoogleConnect"
           />
           <ChatComposer
-            :busy="chat.busy"
+            :busy="chat.busy || chat.historyBusy || !chat.historyLoaded"
             :choices="chat.choices"
             @send="chat.send"
             @abort="chat.abort"
@@ -193,7 +206,7 @@ const examplePrompts = [
               :key="qa.label"
               type="button"
               class="flex w-full items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-left text-xs transition hover:bg-muted/50 hover:border-border/70 disabled:opacity-50"
-              :disabled="!qa.prompt && !qa.href"
+              :disabled="(!qa.prompt && !qa.href) || chat.busy || chat.historyBusy || !chat.historyLoaded"
               @click="
                 qa.href
                   ? openHref(qa.href)
@@ -223,6 +236,7 @@ const examplePrompts = [
               v-for="prompt in examplePrompts"
               :key="prompt"
               type="button"
+              :disabled="chat.busy || chat.historyBusy || !chat.historyLoaded"
               class="rounded-full border border-border/50 bg-muted/20 px-2.5 py-1 text-xs text-foreground/70 transition hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
               @click="chat.send(prompt)"
             >

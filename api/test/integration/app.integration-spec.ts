@@ -29,6 +29,7 @@ import { OllamaProvider } from '../../src/jarvis/providers/ollama.provider';
 import { OpenAIProvider } from '../../src/jarvis/providers/openai.provider';
 import { fakeCalendar, fakeGmail } from '../fixtures/providers';
 import { allowedPorts } from '../fixtures/integration-safety';
+import { JarvisChatResponseSchema } from '../../src/contracts/v1';
 
 const scopes =
   'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
@@ -272,14 +273,36 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Origin', 'http://localhost:5173')
       .send({ actionId: pending.id, sessionId })
       .expect(201);
-    expect(replay.body).toEqual(saved.response);
+    const replayResponse = JarvisChatResponseSchema.parse(replay.body);
+    const originalResponse = JarvisChatResponseSchema.parse(saved.response);
+    expect(replayResponse.meta?.historyTurnId).toEqual(expect.any(String));
+    expect(replayResponse).toEqual({
+      ...originalResponse,
+      meta: {
+        ...originalResponse.meta,
+        historyTurnId: replayResponse.meta?.historyTurnId,
+        historySaved: true,
+      },
+    });
     const textReplay = await request(baseUrl)
       .post('/jarvis/chat')
       .set('Cookie', sessionCookie)
       .set('Origin', 'http://localhost:5173')
       .send({ text: 'oui', sessionId })
       .expect(201);
-    expect(textReplay.body).toEqual(saved.response);
+    const textReplayResponse = JarvisChatResponseSchema.parse(textReplay.body);
+    expect(textReplayResponse.meta?.historyTurnId).toEqual(expect.any(String));
+    expect(textReplayResponse).toEqual({
+      ...originalResponse,
+      meta: {
+        ...originalResponse.meta,
+        historyTurnId: textReplayResponse.meta?.historyTurnId,
+        historySaved: true,
+      },
+    });
+    expect(textReplayResponse.meta?.historyTurnId).not.toBe(
+      replayResponse.meta?.historyTurnId,
+    );
     expect(calendar.createEvent).toHaveBeenCalledTimes(1);
     expect(calendar.createEvent.mock.calls[0][0]).toBe(sessionId);
     expect(await prisma.pendingAction.count({ where: { sessionId } })).toBe(0);
@@ -693,6 +716,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         'GET /auth/google/status',
         'GET /inbox-zero/message',
         'GET /inbox-zero/session',
+        'GET /jarvis/history',
         'GET /jarvis/status',
         'POST /account/preferences',
         'POST /auth/google/disconnect',
@@ -710,6 +734,7 @@ describe('API against disposable migrated PostgreSQL', () => {
     for (const path of [
       '/account/me',
       '/account/preferences',
+      '/jarvis/history',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
@@ -1063,6 +1088,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       (status.body as { metrics: { openTodos: number } }).metrics.openTodos,
     ).toBe(1);
     for (const path of [
+      '/jarvis/history',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
