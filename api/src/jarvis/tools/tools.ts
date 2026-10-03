@@ -1,3 +1,4 @@
+import { asGoogleIntegrationError } from '../../google/google-integration.error';
 import { dataUnavailable } from '../../http/data-unavailable';
 import { CommandRejectedError } from '../../commands/command-rejected.error';
 import { DateTime } from 'luxon';
@@ -4933,7 +4934,13 @@ export async function runTool(
               q: 'is:unread',
               maxResults: 8,
             });
-          } catch {
+          } catch (error) {
+            const code = asGoogleIntegrationError(error)?.code;
+            if (
+              code !== 'GMAIL_NOT_CONNECTED' &&
+              code !== 'GOOGLE_NOT_CONNECTED'
+            )
+              throw error;
             unreadMails = null;
           }
 
@@ -5238,7 +5245,13 @@ export async function runTool(
               q: 'is:unread',
               maxResults: 5,
             });
-          } catch {
+          } catch (error) {
+            const code = asGoogleIntegrationError(error)?.code;
+            if (
+              code !== 'GMAIL_NOT_CONNECTED' &&
+              code !== 'GOOGLE_NOT_CONNECTED'
+            )
+              throw error;
             unreadMails = null;
           }
 

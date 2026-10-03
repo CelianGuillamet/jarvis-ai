@@ -7,9 +7,23 @@ import type {
   GmailProvider,
 } from '../../gmail/providers/gmail.provider';
 import type { WebProvider } from '../providers/web.provider';
-import { runTool, type ToolContext } from './tools';
+import { runTool, type ToolContext, type ToolCall } from './tools';
 
 describe('runTool mission planner', () => {
+  it.each(['mission.plan', 'daily.briefing'] as const)(
+    'does not disguise a Gmail failure as disconnection in %s',
+    async (name) => {
+      const ctx = makeCtx({});
+      const error = new Error('provider unavailable');
+      jest.spyOn(ctx.gmail, 'listMessages').mockRejectedValueOnce(error);
+      const call: ToolCall =
+        name === 'mission.plan'
+          ? { type: 'tool' as const, name, args: { objective: 'Prepare demo' } }
+          : { type: 'tool' as const, name, args: {} };
+      await expect(runTool(ctx, call)).rejects.toBe(error);
+    },
+  );
+
   afterEach(() => {
     jest.useRealTimers();
   });
