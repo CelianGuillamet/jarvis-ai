@@ -4697,13 +4697,17 @@ export async function runTool(
         case 'memory.set': {
           const layer = call.args.layer;
           if (!isMemoryLayer(layer)) {
-            return `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`;
+            throw new CommandRejectedError(
+              `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`,
+            );
           }
           const key = (call.args.key ?? '').trim();
           const label = (call.args.label ?? '').trim();
           const value = (call.args.value ?? '').trim();
           if (!key || !label || !value) {
-            return `Champs manquants. Requis: layer, key, label, value.`;
+            throw new CommandRejectedError(
+              `Champs manquants. Requis: layer, key, label, value.`,
+            );
           }
 
           const fact = await ctx.memory.upsertFact(sessionId, {
@@ -4716,7 +4720,9 @@ export async function runTool(
           });
 
           if (!fact)
-            return `Impossible de mettre à jour la mémoire pour "${layer}:${key}".`;
+            throw new CommandRejectedError(
+              `Clé ou valeur mémoire invalide pour "${layer}:${key}".`,
+            );
 
           return `OK. Mémoire mise à jour: [${fact.layer}:${fact.key}] ${fact.label} = ${fact.value}.`;
         }
@@ -4730,11 +4736,15 @@ export async function runTool(
           if (ref !== null) {
             const list = getLastMemoryList(sessionId);
             if (!list.length) {
-              return `Je n’ai pas de liste récente de mémoire. Dis-moi "montre ma mémoire" puis utilise #N.`;
+              throw new CommandRejectedError(
+                `Je n’ai pas de liste récente de mémoire. Dis-moi "montre ma mémoire" puis utilise #N.`,
+              );
             }
             const idx = ref - 1;
             if (idx < 0 || idx >= list.length) {
-              return `Numéro invalide (#${ref}). Donne-moi un numéro entre 1 et ${list.length}.`;
+              throw new CommandRejectedError(
+                `Numéro invalide (#${ref}). Donne-moi un numéro entre 1 et ${list.length}.`,
+              );
             }
             const target = list[idx];
             const ok = await ctx.memory.forgetFact(sessionId, {
@@ -4750,10 +4760,13 @@ export async function runTool(
           if (call.args.layer && call.args.key) {
             const layer = call.args.layer;
             if (!isMemoryLayer(layer)) {
-              return `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`;
+              throw new CommandRejectedError(
+                `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`,
+              );
             }
             const key = (call.args.key ?? '').trim();
-            if (!key) return `Clé mémoire manquante (key).`;
+            if (!key)
+              throw new CommandRejectedError(`Clé mémoire manquante (key).`);
             const ok = await ctx.memory.forgetFact(sessionId, { layer, key });
             LAST_MEMORY_LIST.delete(sessionId);
             return ok
@@ -4767,9 +4780,13 @@ export async function runTool(
               limit: 6,
             });
             if (!matches.length)
-              return `Aucune mémoire ne correspond à "${compactText(query, 80)}".`;
+              throw new CommandRejectedError(
+                `Aucune mémoire ne correspond à "${compactText(query, 80)}".`,
+              );
             if (matches.length > 1) {
-              return `Plusieurs entrées correspondent à "${compactText(query, 80)}". Utilise "memory.list" puis "memory.forget" avec ref (#N).`;
+              throw new CommandRejectedError(
+                `Plusieurs entrées correspondent à "${compactText(query, 80)}". Utilise "memory.list" puis "memory.forget" avec ref (#N).`,
+              );
             }
             const target = matches[0];
             const ok = await ctx.memory.forgetFact(sessionId, {
@@ -4782,7 +4799,9 @@ export async function runTool(
               : `Aucune mémoire trouvée pour [${target.layer}:${target.key}].`;
           }
 
-          return `Précise ref (#N), ou layer+key, ou query.`;
+          throw new CommandRejectedError(
+            `Précise ref (#N), ou layer+key, ou query.`,
+          );
         }
 
         case 'mission.list': {

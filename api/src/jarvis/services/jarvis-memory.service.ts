@@ -588,11 +588,8 @@ export class JarvisMemoryService {
         source: row.source,
         updatedAt: row.updatedAt.toISOString(),
       };
-    } catch (error) {
-      this.logger.warn(
-        `Impossible d'upsert un fait mémoire pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -614,11 +611,8 @@ export class JarvisMemoryService {
         },
       });
       return deleted.count > 0;
-    } catch (error) {
-      this.logger.warn(
-        `Impossible d'oublier un fait mémoire pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return false;
+    } catch {
+      throw dataUnavailable();
     }
   }
 

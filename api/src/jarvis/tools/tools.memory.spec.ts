@@ -205,7 +205,7 @@ describe('runTool memory tools', () => {
     );
   });
 
-  it('returns a disambiguation message when memory.forget query matches multiple facts', async () => {
+  it('rejects ambiguous memory.forget queries before deletion', async () => {
     const ctx = makeCtx({
       searchResults: [
         {
@@ -223,13 +223,13 @@ describe('runTool memory tools', () => {
       ],
     });
 
-    const out = await runTool(ctx, {
-      type: 'tool',
-      name: 'memory.forget',
-      args: { query: 'stark' },
-    });
-
-    expect(out).toContain('Plusieurs entrées correspondent');
+    await expect(
+      runTool(ctx, {
+        type: 'tool',
+        name: 'memory.forget',
+        args: { query: 'stark' },
+      }),
+    ).rejects.toThrow('Plusieurs entrées correspondent');
     expect(ctx.memoryMock.forgetFact).not.toHaveBeenCalled();
   });
 });
