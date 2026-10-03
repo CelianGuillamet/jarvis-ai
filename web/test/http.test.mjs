@@ -1,6 +1,6 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHttpClient, HttpError, InvalidResponseError, TimeoutError } from '../src/core/api/http.ts';
+import { joinUrl, createHttpClient, HttpError, InvalidResponseError, TimeoutError } from '../src/core/api/http.ts';
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -45,4 +45,17 @@ test('exposes stable error categories instead of relying on message text', async
   }
   globalThis.fetch = async () => new Response(JSON.stringify({code:'INVALID_RESPONSE',message:'Réponse invalide'}), {status:502});
   await assert.rejects(client.get('/api/test'), error => error instanceof HttpError && error.code === 'INVALID_RESPONSE');
+});
+
+test('API navigation and transport share the configured base, including path prefixes', () => {
+  assert.equal(joinUrl('', '/auth/google'), '/auth/google');
+  assert.equal(joinUrl('https://api.example.test/', '/auth/google'), 'https://api.example.test/auth/google');
+  assert.equal(joinUrl('https://api.example.test/jarvis/', '/account/me'), 'https://api.example.test/jarvis/account/me');
+});
+
+test('configured API requests include account cookies across origins', async () => {
+  let observed;
+  globalThis.fetch = async (url, init) => { observed = { url, credentials: init.credentials }; return new Response('{}'); };
+  await createHttpClient({ baseUrl: 'https://api.example.test' }).get('/account/me');
+  assert.deepEqual(observed, { url: 'https://api.example.test/account/me', credentials: 'include' });
 });

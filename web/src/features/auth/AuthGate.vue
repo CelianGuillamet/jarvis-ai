@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { env } from "@/core/config/env";
+import { joinUrl } from "@/core/api/http";
+import { AccountProfileSchema } from "@/core/api/account";
+
+const apiUrl = (path: string) => joinUrl(env.apiBaseUrl, path);
 
 const state = ref<"loading" | "signed-out" | "signed-in" | "error">("loading");
 const error = ref("");
@@ -10,13 +15,14 @@ async function refresh() {
   state.value = "loading";
   error.value = "";
   try {
-    const response = await fetch("/account/me", { credentials: "same-origin" });
+    const response = await fetch(apiUrl("/account/me"), { credentials: "include" });
     if (response.ok) {
+      AccountProfileSchema.parse(await response.json());
       state.value = "signed-in";
       return;
     }
     if (response.status !== 401) throw new Error();
-    const options = await fetch("/account/sign-in-options");
+    const options = await fetch(apiUrl("/account/sign-in-options"), { credentials: "include" });
     if (!options.ok) throw new Error();
     const data: unknown = await options.json();
     googleAvailable.value =
@@ -40,9 +46,9 @@ async function signIn() {
   busy.value = true;
   error.value = "";
   try {
-    const response = await fetch("/api/auth/sign-in/social", {
+    const response = await fetch(apiUrl("/api/auth/sign-in/social"), {
       method: "POST",
-      credentials: "same-origin",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         provider: "google",
@@ -72,9 +78,9 @@ async function signOut() {
   busy.value = true;
   error.value = "";
   try {
-    const response = await fetch("/api/auth/sign-out", {
+    const response = await fetch(apiUrl("/api/auth/sign-out"), {
       method: "POST",
-      credentials: "same-origin",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });

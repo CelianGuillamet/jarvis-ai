@@ -1,40 +1,47 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import BaseBadge from "@/shared/ui/BaseBadge.vue";
 import BaseButton from "@/shared/ui/BaseButton.vue";
 import BaseCard from "@/shared/ui/BaseCard.vue";
-import BaseInput from "@/shared/ui/BaseInput.vue";
+import type { AccountProfile } from "@/core/api/account";
 import { useAppStore } from "@/stores/appStore";
 import { useStatusStore } from "@/stores/statusStore";
 
 const app = useAppStore();
 const status = useStatusStore();
 
+const account = ref<AccountProfile | null>(null);
+const accountError = ref("");
+const disconnectBusy = ref(false);
+const notice = ref("");
+
 onMounted(async () => {
-  await status.refresh();
+  await Promise.all([status.refresh(), loadAccount()]);
 });
+
+async function loadAccount() {
+  accountError.value = "";
+  try { account.value = await app.jarvis.account(); }
+  catch { accountError.value = "Impossible de charger votre compte. Réessayez."; }
+}
+
+async function disconnectGoogle() {
+  disconnectBusy.value = true;
+  notice.value = "";
+  try {
+    const result = await app.jarvis.disconnectGoogle();
+    notice.value = result.revocationPending
+      ? "L’accès de Jarvis est retiré. Terminez la révocation dans les autorisations de votre compte Google."
+      : "Google est déconnecté. Votre compte Jarvis reste accessible.";
+    await status.refresh();
+  } catch { notice.value = "La déconnexion ne peut pas être confirmée. Vérifiez l’état avant de réessayer."; }
+  finally { disconnectBusy.value = false; }
+}
 
 const googleConnected = computed(
   () => status.snapshot?.integrations.googleConnected ?? false,
 );
-
-const timeoutMsText = computed({
-  get: () => String(app.timeoutMs),
-  set: (value: string) => {
-    const next = Number(value);
-    if (!Number.isFinite(next) || next < 1_000) return;
-    app.timeoutMs = Math.floor(next);
-  },
-});
-
-const timeoutError = computed(() => {
-  const n = Number(timeoutMsText.value);
-  if (!Number.isFinite(n)) return "Valeur invalide.";
-  if (n < 1_000) return "Minimum 1 000 ms.";
-  if (n > 300_000) return "Maximum conseillé : 300 000 ms.";
-  return "";
-});
 
 const connectGoogle = () => {
   const url = app.jarvis.googleAuthUrl(app.sessionId);
@@ -53,9 +60,9 @@ const toggleTheme = () => {
       class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/50 bg-card/60 glass px-5 py-4 shadow-soft"
     >
       <div>
-        <h1 class="text-base font-semibold tracking-tight">Settings</h1>
+        <h1 class="text-base font-semibold tracking-tight">Réglages</h1>
         <p class="mt-0.5 text-sm text-muted-foreground">
-          Session, API, intégrations Google, et préférences.
+          Votre compte, vos services connectés et vos préférences.
         </p>
       </div>
       <BaseButton variant="ghost" size="sm" @click="toggleTheme">
@@ -88,54 +95,17 @@ const toggleTheme = () => {
       </BaseButton>
     </header>
 
-    <div class="grid gap-4 lg:grid-cols-2">
-      <!-- Session -->
-      <BaseCard class="p-5">
-        <p
-          class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50"
-        >
-          Session
-        </p>
-        <p class="mt-1 text-xs text-muted-foreground/60">
-          Une session par humain ou usage. Isole les mémoires et le contexte.
-        </p>
-        <div class="mt-4">
-          <BaseInput
-            v-model="app.sessionId"
-            label="Session ID"
-            placeholder="default"
-            hint="Ex : alice, demo, prod-user-42"
-          />
-        </div>
-      </BaseCard>
-
-      <!-- Réseau -->
-      <BaseCard class="p-5">
-        <p
-          class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50"
-        >
-          Réseau & Auth
-        </p>
-        <p class="mt-1 text-xs text-muted-foreground/60">
-          Vide = même origin. Configure pour pointer vers une instance distante.
-        </p>
-        <div class="mt-4 space-y-3">
-          <BaseInput
-            v-model="app.apiBaseUrl"
-            label="API base URL"
-            placeholder="http://localhost:3000"
-            hint="Optionnel — vide = même origin."
-          />
-          <BaseInput
-            v-model="timeoutMsText"
-            label="Timeout (ms)"
-            type="number"
-            :error="timeoutError"
-            hint="Augmente pour les requêtes LLM longues (ex : 60 000)."
-          />
-        </div>
-      </BaseCard>
-    </div>
+    <BaseCard class="p-5">
+      <h2 class="font-semibold">Votre compte</h2>
+      <template v-if="account">
+        <p class="mt-2">{{ account.name || "Compte invité" }}</p>
+        <p class="text-sm text-muted-foreground">{{ account.email }}</p>
+        <p class="mt-3 text-sm text-muted-foreground">Votre invitation donne accès à la bêta privée. La connexion à Jarvis est distincte de l’autorisation d’accéder à Gmail et à Google Agenda.</p>
+      </template>
+      <p v-else-if="accountError" role="alert">{{ accountError }}</p>
+      <p v-else role="status">Chargement du compte…</p>
+      <BaseButton v-if="accountError" variant="secondary" @click="loadAccount">Réessayer</BaseButton>
+    </BaseCard>
 
     <!-- Google integration -->
     <BaseCard class="p-5">
@@ -147,14 +117,8 @@ const toggleTheme = () => {
             Intégration Google
           </p>
           <p class="mt-1 text-xs text-muted-foreground/60">
-            Requis pour exécuter
-            <code class="rounded bg-muted/60 px-1 py-0.5 font-mono text-[11px]"
-              >calendar.*</code
-            >
-            et
-            <code class="rounded bg-muted/60 px-1 py-0.5 font-mono text-[11px]"
-              >gmail.*</code
-            >
+            Autorisez séparément Gmail et Google Agenda pour utiliser ces services.
+            Vous pouvez retirer cet accès à tout moment ; vos tâches locales restent disponibles.
           </p>
           <div class="mt-3 flex flex-wrap gap-2">
             <BaseBadge :tone="googleConnected ? 'ok' : 'warn'" :dot="true">
@@ -166,7 +130,7 @@ const toggleTheme = () => {
               "
               :dot="true"
             >
-              Calendar
+              Google Agenda
             </BaseBadge>
             <BaseBadge
               :tone="
@@ -188,10 +152,13 @@ const toggleTheme = () => {
             Rafraîchir
           </BaseButton>
           <BaseButton variant="primary" size="sm" @click="connectGoogle">
-            Connecter Google
+            {{ googleConnected ? "Reconnecter Google" : "Connecter Google" }}
           </BaseButton>
+          <BaseButton v-if="googleConnected" variant="danger" size="sm" :loading="disconnectBusy" @click="disconnectGoogle">Déconnecter Google</BaseButton>
         </div>
       </div>
+      <p v-if="notice" class="mt-3 text-sm" role="status">{{ notice }}</p>
+      <a v-if="notice" href="https://myaccount.google.com/connections" target="_blank" rel="noopener noreferrer" class="underline">Gérer les autorisations Google</a>
     </BaseCard>
   </section>
 </template>

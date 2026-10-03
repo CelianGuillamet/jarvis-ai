@@ -16,8 +16,9 @@ import type {
   InboxZeroApplyRequest,
   InboxZeroDraftReplyRequest,
 } from "../contracts/v1";
-import { createHttpClient, InvalidResponseError } from "./http";
+import { createHttpClient, InvalidResponseError, joinUrl } from "./http";
 import { z } from "zod";
+import { AccountProfileSchema } from "./account";
 import {
   JarvisChatResponseSchema,
   JarvisStatusSnapshotSchema,
@@ -63,6 +64,11 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
   const http = createHttpClient(options);
 
   return {
+    account: () => validated(http.get<unknown>("/account/me"), AccountProfileSchema),
+    disconnectGoogle: () => validated(
+      http.post<unknown>("/auth/google/disconnect", {}),
+      z.object({ connected: z.literal(false), revocationPending: z.boolean() }).strict(),
+    ),
     chat: (input: ChatRequest) =>
       validated(
         http.post<unknown>("/jarvis/chat", checked(input, ChatRequestSchema)),
@@ -85,7 +91,8 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
         JarvisStatusSnapshotSchema,
       ),
     googleAuthUrl: (sessionId: string) =>
-      "/auth/google" + queryString({ sessionId }, ConversationQuerySchema),
+      joinUrl(options.baseUrl || "", "/auth/google") +
+      queryString({ sessionId }, ConversationQuerySchema),
 
     // Inbox Zero
     inboxZeroScan: (input: InboxZeroScanRequest) =>

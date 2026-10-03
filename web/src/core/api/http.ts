@@ -47,7 +47,7 @@ export class InvalidResponseError extends Error {
   }
 }
 
-function joinUrl(base: string, path: string) {
+export function joinUrl(base: string, path: string) {
   const b = base.trim().replace(/\/+$/g, "");
   const p = path.trim();
   if (!b) return p.startsWith("/") ? p : `/${p}`;
@@ -124,6 +124,7 @@ export function createHttpClient(options: HttpClientOptions = {}) {
     try {
       const res = await fetch(url, {
         method: input.method,
+        credentials: "include",
         headers,
         body: body ?? null,
         signal: combined ?? null,
