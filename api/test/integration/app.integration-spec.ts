@@ -29,6 +29,10 @@ import { OllamaProvider } from '../../src/jarvis/providers/ollama.provider';
 import { OpenAIProvider } from '../../src/jarvis/providers/openai.provider';
 import { fakeCalendar, fakeGmail } from '../fixtures/providers';
 import { allowedPorts } from '../fixtures/integration-safety';
+import {
+  JarvisChatResponseSchema,
+  JarvisStatusSnapshotSchema,
+} from '../../src/contracts/v1';
 
 const scopes =
   'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
@@ -272,14 +276,36 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Origin', 'http://localhost:5173')
       .send({ actionId: pending.id, sessionId })
       .expect(201);
-    expect(replay.body).toEqual(saved.response);
+    const replayResponse = JarvisChatResponseSchema.parse(replay.body);
+    const originalResponse = JarvisChatResponseSchema.parse(saved.response);
+    expect(replayResponse.meta?.historyTurnId).toEqual(expect.any(String));
+    expect(replayResponse).toEqual({
+      ...originalResponse,
+      meta: {
+        ...originalResponse.meta,
+        historyTurnId: replayResponse.meta?.historyTurnId,
+        historySaved: true,
+      },
+    });
     const textReplay = await request(baseUrl)
       .post('/jarvis/chat')
       .set('Cookie', sessionCookie)
       .set('Origin', 'http://localhost:5173')
       .send({ text: 'oui', sessionId })
       .expect(201);
-    expect(textReplay.body).toEqual(saved.response);
+    const textReplayResponse = JarvisChatResponseSchema.parse(textReplay.body);
+    expect(textReplayResponse.meta?.historyTurnId).toEqual(expect.any(String));
+    expect(textReplayResponse).toEqual({
+      ...originalResponse,
+      meta: {
+        ...originalResponse.meta,
+        historyTurnId: textReplayResponse.meta?.historyTurnId,
+        historySaved: true,
+      },
+    });
+    expect(textReplayResponse.meta?.historyTurnId).not.toBe(
+      replayResponse.meta?.historyTurnId,
+    );
     expect(calendar.createEvent).toHaveBeenCalledTimes(1);
     expect(calendar.createEvent.mock.calls[0][0]).toBe(sessionId);
     expect(await prisma.pendingAction.count({ where: { sessionId } })).toBe(0);
@@ -693,6 +719,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         'GET /auth/google/status',
         'GET /inbox-zero/message',
         'GET /inbox-zero/session',
+        'GET /jarvis/history',
         'GET /jarvis/status',
         'POST /account/preferences',
         'POST /auth/google/disconnect',
@@ -702,14 +729,65 @@ describe('API against disposable migrated PostgreSQL', () => {
         'POST /inbox-zero/step',
         'POST /jarvis/chat',
         'POST /jarvis/confirm',
+        'POST /jarvis/status/refresh',
       ].sort(),
     );
+  });
+
+  it('separates passive status from an explicit authenticated provider refresh without invoking a model', async () => {
+    const sessionId = 'status-cache-http';
+    const mailCalls = gmail.listMessages.mock.calls.length;
+    const calendarCalls = calendar.listEventsInterval.mock.calls.length;
+    const model = jest.spyOn(OllamaProvider.prototype, 'chat');
+    const modelCalls = model.mock.calls.length;
+    const passive = await request(baseUrl)
+      .get('/jarvis/status')
+      .set('Cookie', sessionCookie)
+      .query({ sessionId })
+      .expect(200);
+    const first = JarvisStatusSnapshotSchema.parse(passive.body);
+    expect(first.availability.gmail).toBe('not_refreshed');
+    expect(first.freshness.gmail.fetchedAt).toBeNull();
+    expect(gmail.listMessages.mock.calls.length).toBe(mailCalls);
+    expect(calendar.listEventsInterval.mock.calls.length).toBe(calendarCalls);
+    const refreshed = await request(baseUrl)
+      .post('/jarvis/status/refresh')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId })
+      .expect(201);
+    const next = JarvisStatusSnapshotSchema.parse(refreshed.body);
+    expect(next.availability.gmail).toBe('available');
+    expect(next.freshness.gmail.fetchedAt).not.toBeNull();
+    expect(gmail.listMessages.mock.calls.length).toBe(mailCalls + 1);
+    expect(calendar.listEventsInterval.mock.calls.length).toBe(
+      calendarCalls + 1,
+    );
+    const cached = await request(baseUrl)
+      .get('/jarvis/status')
+      .set('Cookie', sessionCookie)
+      .query({ sessionId })
+      .expect(200);
+    expect(JarvisStatusSnapshotSchema.parse(cached.body).freshness).toEqual(
+      next.freshness,
+    );
+    expect(gmail.listMessages.mock.calls.length).toBe(mailCalls + 1);
+    expect(calendar.listEventsInterval.mock.calls.length).toBe(
+      calendarCalls + 1,
+    );
+    expect(model.mock.calls.length).toBe(modelCalls);
+    await request(baseUrl)
+      .post('/jarvis/status/refresh')
+      .set('Cookie', sessionCookie)
+      .send({ sessionId })
+      .expect(403);
   });
 
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
     for (const path of [
       '/account/me',
       '/account/preferences',
+      '/jarvis/history',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
@@ -728,6 +806,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/auth/google/disconnect',
       '/jarvis/chat',
       '/jarvis/confirm',
+      '/jarvis/status/refresh',
       '/inbox-zero/scan',
       '/inbox-zero/step',
       '/inbox-zero/apply',
@@ -1063,6 +1142,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       (status.body as { metrics: { openTodos: number } }).metrics.openTodos,
     ).toBe(1);
     for (const path of [
+      '/jarvis/history',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
@@ -1079,6 +1159,12 @@ describe('API against disposable migrated PostgreSQL', () => {
         .set('Cookie', cookie)
         .expect(404);
     }
+    await request(baseUrl)
+      .post('/jarvis/status/refresh')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId: first })
+      .expect(404);
     await request(baseUrl)
       .post('/jarvis/confirm')
       .set('Cookie', cookie)

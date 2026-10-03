@@ -1,5 +1,5 @@
 import { dataUnavailable } from '../../http/data-unavailable';
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type SearchResultItem = {
@@ -21,8 +21,14 @@ export class JarvisSearchService {
     sessionId: string,
     input: { query: string; types?: string[]; limit?: number },
   ): Promise<SearchResultItem[]> {
-    const q = input.query.trim().toLowerCase();
-    const limit = input.limit ?? 20;
+    const query = input.query.trim();
+    if (query.length > 500)
+      throw new BadRequestException('La recherche est trop longue.');
+    const q = query.toLowerCase();
+    const requestedLimit = input.limit ?? 20;
+    if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1)
+      throw new BadRequestException('Limite de recherche invalide.');
+    const limit = Math.min(requestedLimit, 50);
     const types = input.types ?? [
       'todo',
       'note',
@@ -37,7 +43,7 @@ export class JarvisSearchService {
     try {
       if (types.includes('todo')) {
         const rows = await prisma.todo.findMany({
-          where: { text: { contains: input.query, mode: 'insensitive' } },
+          where: { text: { contains: query, mode: 'insensitive' } },
           orderBy: { createdAt: 'desc' },
           take: limit,
         });
@@ -57,8 +63,8 @@ export class JarvisSearchService {
         const rows = await prisma.note.findMany({
           where: {
             OR: [
-              { text: { contains: input.query, mode: 'insensitive' } },
-              { title: { contains: input.query, mode: 'insensitive' } },
+              { text: { contains: query, mode: 'insensitive' } },
+              { title: { contains: query, mode: 'insensitive' } },
             ],
           },
           orderBy: { createdAt: 'desc' },
@@ -79,7 +85,7 @@ export class JarvisSearchService {
 
       if (types.includes('shopping')) {
         const rows = await prisma.shoppingItem.findMany({
-          where: { text: { contains: input.query, mode: 'insensitive' } },
+          where: { text: { contains: query, mode: 'insensitive' } },
           orderBy: { createdAt: 'desc' },
           take: limit,
         });
@@ -100,8 +106,8 @@ export class JarvisSearchService {
           where: {
             sessionId,
             OR: [
-              { title: { contains: input.query, mode: 'insensitive' } },
-              { description: { contains: input.query, mode: 'insensitive' } },
+              { title: { contains: query, mode: 'insensitive' } },
+              { description: { contains: query, mode: 'insensitive' } },
             ],
           },
           orderBy: { createdAt: 'desc' },
@@ -124,8 +130,8 @@ export class JarvisSearchService {
           where: {
             sessionId,
             OR: [
-              { title: { contains: input.query, mode: 'insensitive' } },
-              { content: { contains: input.query, mode: 'insensitive' } },
+              { title: { contains: query, mode: 'insensitive' } },
+              { content: { contains: query, mode: 'insensitive' } },
             ],
           },
           orderBy: { updatedAt: 'desc' },
@@ -144,8 +150,8 @@ export class JarvisSearchService {
       }
 
       return results.sort((a, b) => b.score - a.score).slice(0, limit);
-    } catch (error) {
-      this.logger.error(`Search failed for ${sessionId}: ${error}`);
+    } catch {
+      this.logger.error('Search storage unavailable.');
       throw dataUnavailable();
     }
   }
@@ -159,7 +165,16 @@ export class JarvisSearchService {
       if (idx === -1) continue;
       score += 1;
       if (idx === 0) score += 0.5;
-      const count = (t.match(new RegExp(word, 'g')) ?? []).length;
+      // Only four non-overlapping literal occurrences affect the score.
+      // User punctuation must never become executable regular-expression syntax.
+      let count = 1;
+      let offset = idx + word.length;
+      while (count < 4) {
+        const next = t.indexOf(word, offset);
+        if (next === -1) break;
+        count++;
+        offset = next + word.length;
+      }
       score += Math.min(count - 1, 3) * 0.2;
     }
     return score / Math.max(words.length, 1);

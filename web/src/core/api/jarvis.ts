@@ -9,6 +9,8 @@ import {
   InboxZeroDraftReplyRequestSchema,
   ConversationQuerySchema,
   MessageQuerySchema,
+  ConversationHistoryQuerySchema,
+  ConversationHistoryResponseSchema,
 } from "../contracts/v1";
 import type {
   AccountPreferences,
@@ -18,6 +20,7 @@ import type {
   InboxZeroStepRequest,
   InboxZeroApplyRequest,
   InboxZeroDraftReplyRequest,
+  ConversationHistoryQuery,
 } from "../contracts/v1";
 import { createHttpClient, InvalidResponseError, joinUrl } from "./http";
 import { z } from "zod";
@@ -100,12 +103,28 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
         ),
         JarvisChatResponseSchema,
       ),
+    history: (input: ConversationHistoryQuery) => {
+      const query = checked(input, ConversationHistoryQuerySchema);
+      const params = new URLSearchParams();
+      if (query.sessionId) params.set("sessionId", query.sessionId);
+      if (query.cursor) params.set("cursor", query.cursor);
+      params.set("limit", String(query.limit));
+      return validated(
+        http.get<unknown>(`/jarvis/history?${params}`),
+        ConversationHistoryResponseSchema,
+      );
+    },
     status: (sessionId?: string) =>
       validated(
         http.get<unknown>(
           "/jarvis/status" +
             queryString({ sessionId }, ConversationQuerySchema),
         ),
+        JarvisStatusSnapshotSchema,
+      ),
+    refreshStatus: (sessionId?: string) =>
+      validated(
+        http.post<unknown>("/jarvis/status/refresh", checked({ sessionId }, ConversationQuerySchema)),
         JarvisStatusSnapshotSchema,
       ),
     googleAuthUrl: (sessionId: string) =>

@@ -1,4 +1,8 @@
+import { ConversationHistoryService } from './services/conversation-history.service';
+import type { ConversationHistoryQuery } from '../contracts/v1';
 import {
+  ConversationHistoryQuerySchema,
+  ConversationHistoryResponseSchema,
   ChatRequestSchema,
   ConfirmRequestSchema,
   ConversationQuerySchema,
@@ -22,6 +26,7 @@ export class JarvisController {
   constructor(
     private readonly jarvis: JarvisService,
     private readonly conversations: ConversationService,
+    private readonly history: ConversationHistoryService,
   ) {}
 
   @Post('chat')
@@ -30,9 +35,16 @@ export class JarvisController {
     @Body(new RequestContract(ChatRequestSchema)) body: ChatDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.jarvis.chat(
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      body.sessionId,
+    );
+    return this.history.capture(
+      request.identity.userId,
+      conversationId,
+      'chat',
       body.text,
-      await this.conversations.resolve(request.identity.userId, body.sessionId),
+      () => this.jarvis.chat(body.text, conversationId),
     );
   }
 
@@ -42,10 +54,31 @@ export class JarvisController {
     @Body(new RequestContract(ConfirmRequestSchema)) body: ConfirmDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.jarvis.confirm(
-      body.actionId,
-      await this.conversations.resolve(request.identity.userId, body.sessionId),
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      body.sessionId,
     );
+    return this.history.capture(
+      request.identity.userId,
+      conversationId,
+      'confirm',
+      body.actionId,
+      () => this.jarvis.confirm(body.actionId, conversationId),
+    );
+  }
+
+  @Get('history')
+  @ResponseContract(ConversationHistoryResponseSchema)
+  async conversationHistory(
+    @Req() request: AuthenticatedRequest,
+    @Query(new RequestContract(ConversationHistoryQuerySchema))
+    query: ConversationHistoryQuery,
+  ) {
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      query.sessionId,
+    );
+    return this.history.list(request.identity.userId, conversationId, query);
   }
 
   @Get('status')
@@ -61,5 +94,19 @@ export class JarvisController {
         query.sessionId,
       ),
     );
+  }
+
+  @Post('status/refresh')
+  @ResponseContract(JarvisStatusSnapshotSchema)
+  async refreshStatus(
+    @Req() request: AuthenticatedRequest,
+    @Body(new RequestContract(ConversationQuerySchema))
+    query: ConversationQueryDto,
+  ) {
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      query.sessionId,
+    );
+    return this.jarvis.status(conversationId, true);
   }
 }

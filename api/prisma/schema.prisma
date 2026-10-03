@@ -504,6 +504,7 @@ model Conversation {
   createdAt DateTime @default(now())
   commands Command[]
   inboxReplies InboxReplyOperation[]
+  turns ConversationTurn[]
 
   @@index([ownerId, createdAt])
   @@unique([ownerId, clientKey])
@@ -553,10 +554,31 @@ model Command {
   updatedAt DateTime @default(now())
   transitions CommandTransition[]
   compensation CommandCompensation?
+  turns ConversationTurn[]
 
   @@unique([ownerId, requestId])
+  @@unique([id, ownerId, conversationId])
   @@index([ownerId, createdAt])
   @@index([state, expiresAt])
+}
+
+// Durable user-visible exchanges, separate from working memory and diagnostic logs.
+model ConversationTurn {
+  id String @id @default(uuid())
+  ownerId String
+  conversationId String
+  conversation Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  kind String
+  inputText String
+  state String @default("started")
+  response Json?
+  commandId String?
+  command Command? @relation(fields: [commandId, ownerId, conversationId], references: [id, ownerId, conversationId], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId, conversationId, createdAt, id])
+  @@index([ownerId, conversationId, commandId, createdAt, id], map: "ConversationTurn_command_history_idx")
 }
 
 model CommandTransition {
