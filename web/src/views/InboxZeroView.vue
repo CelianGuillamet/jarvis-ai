@@ -7,6 +7,7 @@ import BaseCard from '@/shared/ui/BaseCard.vue';
 import BaseInput from '@/shared/ui/BaseInput.vue';
 import BaseSkeleton from '@/shared/ui/BaseSkeleton.vue';
 import BaseTextarea from '@/shared/ui/BaseTextarea.vue';
+import { usePreferencesStore } from '@/stores/preferencesStore';
 import { useAppStore } from '@/stores/appStore';
 import { useInboxZeroStore } from '@/stores/inboxZeroStore';
 import { useStatusStore } from '@/stores/statusStore';
@@ -14,6 +15,7 @@ import { useStatusStore } from '@/stores/statusStore';
 import type { InboxZeroStep } from '@/core/types/inbox-zero';
 
 const app = useAppStore();
+const preferences = usePreferencesStore();
 const inbox = useInboxZeroStore();
 const status = useStatusStore();
 
@@ -154,7 +156,7 @@ onBeforeUnmount(() => {
               tone="muted"
               :dot="true"
             >
-              Scanné {{ new Date(inbox.session.scannedAt).toLocaleString() }}
+              Scanné {{ preferences.formatDate(inbox.session.scannedAt) }}
             </BaseBadge>
           </div>
         </div>
@@ -371,7 +373,7 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                   <div class="shrink-0 text-[11px] text-muted-foreground/60">
-                    {{ new Date(item.date).toLocaleString() }}
+                    {{ preferences.formatDate(item.date) }}
                   </div>
                 </div>
                 <div class="mt-2 truncate text-xs text-muted-foreground/60">
@@ -414,7 +416,7 @@ onBeforeUnmount(() => {
               <div class="flex items-center justify-between gap-2">
                 <span class="font-medium">{{ a.actionType }}</span>
                 <span class="text-[11px] text-muted-foreground/60">
-                  {{ new Date(a.createdAt).toLocaleTimeString() }}
+                  {{ preferences.formatDate(a.createdAt, true) }}
                 </span>
               </div>
               <div v-if="a.errorMessage" class="mt-1 text-red-300/80">
@@ -447,7 +449,7 @@ onBeforeUnmount(() => {
 	            <div class="mt-1 text-xs text-muted-foreground/70">
 	              <span class="font-medium">{{ inbox.messagePanel.message.from }}</span>
 	              <span class="mx-2 text-muted-foreground/40">·</span>
-	              {{ new Date(inbox.messagePanel.message.date).toLocaleString() }}
+	              {{ preferences.formatDate(inbox.messagePanel.message.date) }}
 	            </div>
 	          </div>
 	          <div class="flex shrink-0 flex-wrap items-center gap-2">

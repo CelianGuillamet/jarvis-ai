@@ -1,4 +1,6 @@
 import {
+  AccountPreferencesSchema,
+  GoogleDisconnectResponseSchema,
   ChatRequestSchema,
   ConfirmRequestSchema,
   InboxZeroScanRequestSchema,
@@ -9,6 +11,7 @@ import {
   MessageQuerySchema,
 } from "../contracts/v1";
 import type {
+  AccountPreferences,
   ChatRequest,
   ConfirmRequest,
   InboxZeroScanRequest,
@@ -64,11 +67,26 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
   const http = createHttpClient(options);
 
   return {
-    account: () => validated(http.get<unknown>("/account/me"), AccountProfileSchema),
-    disconnectGoogle: () => validated(
-      http.post<unknown>("/auth/google/disconnect", {}),
-      z.object({ connected: z.literal(false), revocationPending: z.boolean() }).strict(),
-    ),
+    preferences: () =>
+      validated(
+        http.get<unknown>("/account/preferences"),
+        AccountPreferencesSchema,
+      ),
+    savePreferences: (input: AccountPreferences) =>
+      validated(
+        http.post<unknown>(
+          "/account/preferences",
+          checked(input, AccountPreferencesSchema),
+        ),
+        AccountPreferencesSchema,
+      ),
+    account: () =>
+      validated(http.get<unknown>("/account/me"), AccountProfileSchema),
+    disconnectGoogle: () =>
+      validated(
+        http.post<unknown>("/auth/google/disconnect", {}),
+        GoogleDisconnectResponseSchema,
+      ),
     chat: (input: ChatRequest) =>
       validated(
         http.post<unknown>("/jarvis/chat", checked(input, ChatRequestSchema)),

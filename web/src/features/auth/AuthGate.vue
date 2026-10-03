@@ -2,8 +2,12 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { env } from "@/core/config/env";
 import { joinUrl } from "@/core/api/http";
+import SettingsView from "@/views/SettingsView.vue";
+import { usePreferencesStore } from "@/stores/preferencesStore";
+import { SignInOptionsSchema } from "@/core/contracts/v1";
 import { AccountProfileSchema } from "@/core/api/account";
 
+const preferences = usePreferencesStore();
 const apiUrl = (path: string) => joinUrl(env.apiBaseUrl, path);
 
 const state = ref<"loading" | "signed-out" | "signed-in" | "error">("loading");
@@ -15,21 +19,24 @@ async function refresh() {
   state.value = "loading";
   error.value = "";
   try {
-    const response = await fetch(apiUrl("/account/me"), { credentials: "include" });
+    const response = await fetch(apiUrl("/account/me"), {
+      credentials: "include",
+    });
     if (response.ok) {
       AccountProfileSchema.parse(await response.json());
+      await preferences.load();
+      if (!preferences.current) throw new Error();
       state.value = "signed-in";
       return;
     }
     if (response.status !== 401) throw new Error();
-    const options = await fetch(apiUrl("/account/sign-in-options"), { credentials: "include" });
+    const options = await fetch(apiUrl("/account/sign-in-options"), {
+      credentials: "include",
+    });
     if (!options.ok) throw new Error();
-    const data: unknown = await options.json();
-    googleAvailable.value =
-      typeof data === "object" &&
-      data !== null &&
-      "google" in data &&
-      data.google === true;
+    googleAvailable.value = SignInOptionsSchema.parse(
+      await options.json(),
+    ).google;
     state.value = "signed-out";
     if (new URL(window.location.href).searchParams.has("error")) {
       error.value =
@@ -112,7 +119,13 @@ onMounted(() => {
         Se déconnecter</button
       ><span v-if="error" role="alert">{{ error }}</span>
     </div>
-    <slot />
+    <main
+      v-if="!preferences.current?.onboardingCompleted"
+      class="mx-auto max-w-3xl p-6"
+    >
+      <SettingsView onboarding />
+    </main>
+    <slot v-else />
   </template>
   <main v-else class="auth-screen">
     <section class="auth-card" aria-labelledby="login-title">

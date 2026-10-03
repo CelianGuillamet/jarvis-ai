@@ -1,3 +1,5 @@
+import { GoogleDisconnectResponseSchema } from '../contracts/v1';
+import { ResponseContract } from '../http/response-contract';
 import { Controller, Get, Post, Query, Res, Req } from '@nestjs/common';
 import { ConversationService } from '../auth/conversation.service';
 import type { AuthenticatedRequest } from '../auth/session.guard';
@@ -57,6 +59,7 @@ export class GoogleAuthController {
   }
 
   @Post('disconnect')
+  @ResponseContract(GoogleDisconnectResponseSchema)
   disconnect(@Req() request: AuthenticatedRequest) {
     return this.auth.disconnect(request.identity.userId);
   }

@@ -3,6 +3,41 @@
 import { z } from 'zod';
 
 export const CONTRACT_VERSION = '1' as const;
+export const AccountProfileSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().nullable(),
+    email: z.email(),
+  })
+  .strict();
+export type AccountProfile = z.infer<typeof AccountProfileSchema>;
+export const SignInOptionsSchema = z.object({ google: z.boolean() }).strict();
+export const GoogleDisconnectResponseSchema = z
+  .object({
+    connected: z.literal(false),
+    revocationPending: z.boolean(),
+  })
+  .strict();
+export const TimezoneSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .refine((value) => {
+    try {
+      new Intl.DateTimeFormat('fr-FR', { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Fuseau horaire invalide.');
+export const AccountPreferencesSchema = z
+  .object({
+    displayTimezone: TimezoneSchema,
+    theme: z.enum(['light', 'dark']),
+    onboardingCompleted: z.boolean(),
+  })
+  .strict();
+export type AccountPreferences = z.infer<typeof AccountPreferencesSchema>;
 const text = z.string();
 const nullableText = text.nullable();
 const count = z.number().int().nonnegative();
