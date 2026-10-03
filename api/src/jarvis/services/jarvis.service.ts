@@ -1,4 +1,6 @@
-import { readStatusResource } from './status-resource';
+import { StatusResourceCache } from './status-resource-cache';
+import { JarvisChatResponseSchema } from '../../contracts/v1';
+import { dataUnavailable } from '../../http/data-unavailable';
 import { InvalidModelResponseError } from '../providers/model-response';
 import {
   CommandCompensationService,
@@ -454,6 +456,12 @@ export class JarvisService {
 
   private readonly convo = new Map<string, ConversationState>();
   private readonly recentMemory = new Map<string, SessionMemoryTurn[]>();
+  private readonly statusGmail = new StatusResourceCache<
+    Awaited<ReturnType<GmailProvider['listMessages']>>
+  >();
+  private readonly statusCalendar = new StatusResourceCache<
+    Awaited<ReturnType<CalendarProvider['listEventsInterval']>>
+  >();
   private readonly convoTtlMs: number;
 
   constructor(
@@ -1622,7 +1630,7 @@ export class JarvisService {
     const { ownerId } = await this.prisma.forConversation(sessionId);
     return this.prisma.googleOAuthToken.findFirst({
       where: { integrationAccount: { ownerId, provider: 'google' } },
-      select: { scope: true, updatedAt: true },
+      select: { scope: true, updatedAt: true, integrationAccountId: true },
     });
   }
 
@@ -1828,7 +1836,7 @@ export class JarvisService {
       throw new Error('Le plan de mission n’a pas pu être enregistré.');
   }
 
-  async status(sessionId?: string) {
+  async status(sessionId?: string, refreshProviders = false) {
     const resolvedSessionId = this.resolveSessionId(sessionId);
     const prisma = await this.prisma.forConversation(resolvedSessionId);
     const profile = await this.getHumanProfile(resolvedSessionId);
@@ -1872,27 +1880,58 @@ export class JarvisService {
       Promise.resolve([] as Awaited<ReturnType<JarvisHabitService['list']>>),
     ]);
 
-    const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
     const now = DateTime.now().setZone(this.tz);
     const todayRange = resolveRange("aujourd'hui", this.tz);
+    const cacheKey = JSON.stringify([prisma.ownerId, resolvedSessionId]);
+    const revisionOf = (token: typeof googleToken) =>
+      JSON.stringify([
+        token?.integrationAccountId ?? null,
+        token?.scope ?? null,
+        token?.updatedAt?.toISOString() ?? null,
+        todayRange.startIso,
+      ]);
+    const revision = revisionOf(googleToken);
+    let statusGoogleToken = googleToken;
 
-    const [gmailResource, calendarResource] = await Promise.all([
-      readStatusResource(() =>
-        this.gmail.listMessages(resolvedSessionId, {
-          q: 'is:unread',
-          maxResults: 5,
-        }),
+    let [gmailResource, calendarResource] = await Promise.all([
+      this.statusGmail.read(cacheKey, revision, refreshProviders, async () =>
+        (
+          await this.gmail.listMessages(resolvedSessionId, {
+            q: 'is:unread',
+            maxResults: 5,
+          })
+        ).slice(0, 5),
       ),
-      readStatusResource(() =>
-        this.calendar.listEventsInterval(
-          resolvedSessionId,
-          todayRange.startIso,
-          todayRange.endIso,
-          this.tz,
-          12,
-        ),
+      this.statusCalendar.read(cacheKey, revision, refreshProviders, async () =>
+        (
+          await this.calendar.listEventsInterval(
+            resolvedSessionId,
+            todayRange.startIso,
+            todayRange.endIso,
+            this.tz,
+            12,
+          )
+        ).slice(0, 12),
       ),
     ]);
+    if (refreshProviders) {
+      statusGoogleToken =
+        await this.googleTokenForConversation(resolvedSessionId);
+      const latestRevision = revisionOf(statusGoogleToken);
+      if (latestRevision !== revision) {
+        // A disconnect/account/credential change during transport invalidates
+        // both cached and just-returned data before it reaches the browser.
+        [gmailResource, calendarResource] = await Promise.all([
+          this.statusGmail.read(cacheKey, latestRevision, false, () =>
+            Promise.resolve([]),
+          ),
+          this.statusCalendar.read(cacheKey, latestRevision, false, () =>
+            Promise.resolve([]),
+          ),
+        ]);
+      }
+    }
+    const googleStatus = buildGoogleConnectionStatus(statusGoogleToken?.scope);
     const unreadEmails = gmailResource.data;
     const todayEvents = calendarResource.data;
 
@@ -1927,16 +1966,30 @@ export class JarvisService {
       }),
     );
 
-    const pendingPreview = pendingAction
-      ? await previewTool(
-          await this.buildToolContext(
-            resolvedSessionId,
-            pendingAction.call,
-            pendingAction.targets,
-          ),
-          pendingAction.call,
-        )
-      : null;
+    // Status never re-resolves provider targets or invokes model/tool transport.
+    // The pending summary remains bound to its frozen command envelope.
+    let pendingPreview: string | null = null;
+    if (pendingAction) {
+      try {
+        const recorded = await this.prisma.conversationTurn.findFirst({
+          where: {
+            ownerId: prisma.ownerId,
+            conversationId: resolvedSessionId,
+            commandId: pendingAction.id,
+            state: 'completed',
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          select: { response: true },
+        });
+        if (recorded) {
+          const response = JarvisChatResponseSchema.parse(recorded.response);
+          if (response.pending_action?.id === pendingAction.id)
+            pendingPreview = response.pending_action.preview ?? null;
+        }
+      } catch {
+        throw dataUnavailable();
+      }
+    }
     const pendingActionView = pendingAction
       ? this.buildPendingActionView(profile, pendingAction, {
           preview: pendingPreview,
@@ -2011,12 +2064,22 @@ export class JarvisService {
         gmail: gmailResource.availability,
         calendar: calendarResource.availability,
       },
+      freshness: {
+        gmail: {
+          fetchedAt: gmailResource.fetchedAt,
+          expiresAt: gmailResource.expiresAt,
+        },
+        calendar: {
+          fetchedAt: calendarResource.fetchedAt,
+          expiresAt: calendarResource.expiresAt,
+        },
+      },
       integrations: {
         googleConnected: googleStatus.connected,
         calendarConnected: googleStatus.calendarConnected,
         gmailConnected: googleStatus.gmailConnected,
         scopes: googleStatus.scopes,
-        lastGoogleSyncAt: googleToken?.updatedAt?.toISOString() ?? null,
+        lastGoogleSyncAt: statusGoogleToken?.updatedAt?.toISOString() ?? null,
       },
       metrics: {
         openTodos,

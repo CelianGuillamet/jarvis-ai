@@ -16,6 +16,7 @@ const availabilityLabels = {
   permission_required: 'Autorisation requise',
   unavailable: 'Indisponible',
   invalid_response: 'Réponse invalide',
+  not_refreshed: 'À actualiser',
 };
 
 const status = useStatusStore();
@@ -68,7 +69,7 @@ const metricConfigs: MetricConfig[] = [
         variant="secondary"
         size="sm"
         :loading="status.busy"
-        @click="status.refresh"
+        @click="status.refresh(true)"
       >
         <svg
           class="size-3.5"
@@ -204,6 +205,12 @@ const metricConfigs: MetricConfig[] = [
               {{ status.snapshot?.providers.web || 'web —' }}
             </BaseBadge>
           </div>
+          <p v-if="status.snapshot?.freshness.gmail.fetchedAt" class="mt-3 text-xs text-muted-foreground">
+            Emails actualisés à {{ new Date(status.snapshot.freshness.gmail.fetchedAt).toLocaleTimeString('fr-FR') }}
+          </p>
+          <p v-if="status.snapshot?.freshness.calendar.fetchedAt" class="mt-1 text-xs text-muted-foreground">
+            Calendrier actualisé à {{ new Date(status.snapshot.freshness.calendar.fetchedAt).toLocaleTimeString('fr-FR') }}
+          </p>
         </BaseCard>
 
         <!-- Quick actions -->

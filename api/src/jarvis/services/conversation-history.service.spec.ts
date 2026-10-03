@@ -58,6 +58,19 @@ describe('Durable conversation capture', () => {
     expect(operation).not.toHaveBeenCalled();
   });
 
+  it('does not execute if verifying conversation ownership is unavailable', async () => {
+    const { service, conversation, create } = fixture();
+    conversation.findFirst.mockRejectedValue(
+      new Error('private connection details'),
+    );
+    const operation = jest.fn();
+    await expect(
+      service.capture('owner', 'conversation', 'chat', 'Question', operation),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(create).not.toHaveBeenCalled();
+    expect(operation).not.toHaveBeenCalled();
+  });
+
   it('preserves a completed domain result when saving its history fails', async () => {
     const { service, updateMany } = fixture();
     updateMany.mockRejectedValue(new Error('storage offline'));

@@ -578,6 +578,7 @@ model ConversationTurn {
   updatedAt DateTime @updatedAt
 
   @@index([ownerId, conversationId, createdAt, id])
+  @@index([ownerId, conversationId, commandId, createdAt, id], map: "ConversationTurn_command_history_idx")
 }
 
 model CommandTransition {

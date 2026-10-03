@@ -85,6 +85,7 @@ function makeService(options: ServiceOptions = {}) {
 
   const prisma = {
     ownerId: 'fixture-owner',
+    conversationTurn: { findFirst: jest.fn().mockResolvedValue(null) },
     forConversation: jest
       .fn()
       .mockImplementation(() => Promise.resolve(prisma)),
@@ -408,10 +409,111 @@ function makeService(options: ServiceOptions = {}) {
     workflowStore,
     auditStore,
     calendar,
+    prisma,
   };
 }
 
 describe('JarvisService', () => {
+  it('reads passive status without invoking any model or provider transport', async () => {
+    const { service, llmChat, calendar } = makeService();
+    const mail = jest.spyOn(service['gmail'], 'listMessages');
+    const events = jest.spyOn(calendar, 'listEventsInterval');
+    const snapshot = await service.status('passive-status');
+    expect(snapshot.availability).toEqual({
+      gmail: 'not_refreshed',
+      calendar: 'not_refreshed',
+    });
+    expect(snapshot.freshness.gmail.fetchedAt).toBeNull();
+    expect(mail).not.toHaveBeenCalled();
+    expect(events).not.toHaveBeenCalled();
+    expect(llmChat).not.toHaveBeenCalled();
+  });
+
+  it('uses explicit refresh once and invalidates cached status when credentials change', async () => {
+    const { service, llmChat, calendar, prisma } = makeService();
+    const mail = jest.spyOn(service['gmail'], 'listMessages');
+    const events = jest.spyOn(calendar, 'listEventsInterval');
+    const refreshed = await service.status('cached-status', true);
+    expect(refreshed.availability.gmail).toBe('available');
+    expect(refreshed.freshness.gmail.fetchedAt).not.toBeNull();
+    expect((await service.status('cached-status')).freshness).toEqual(
+      refreshed.freshness,
+    );
+    expect(mail).toHaveBeenCalledTimes(1);
+    expect(events).toHaveBeenCalledTimes(1);
+    prisma.googleOAuthToken.findFirst.mockResolvedValue({
+      scope: 'new-scope',
+      updatedAt: new Date(),
+      integrationAccountId: 'new-account',
+    });
+    const invalidated = await service.status('cached-status');
+    expect(invalidated.metrics.unreadEmails).toBeNull();
+    expect(invalidated.availability.gmail).toBe('not_refreshed');
+    expect(mail).toHaveBeenCalledTimes(1);
+    expect(llmChat).not.toHaveBeenCalled();
+  });
+
+  it('withholds provider results if the integration is disconnected during refresh', async () => {
+    const { service, prisma } = makeService({
+      googleScope: 'https://www.googleapis.com/auth/gmail.modify',
+    });
+    prisma.googleOAuthToken.findFirst
+      .mockResolvedValueOnce({
+        scope: 'https://www.googleapis.com/auth/gmail.modify',
+        updatedAt: new Date(1000),
+        integrationAccountId: 'old-account',
+      })
+      .mockResolvedValue(null);
+    const snapshot = await service.status('disconnect-during-refresh', true);
+    expect(snapshot.integrations.googleConnected).toBe(false);
+    expect(snapshot.metrics.unreadEmails).toBeNull();
+    expect(snapshot.metrics.eventsToday).toBeNull();
+    expect(snapshot.freshness.gmail.fetchedAt).toBeNull();
+  });
+
+  it('restores the frozen pending preview without re-resolving provider targets', async () => {
+    const { service, prisma, calendar, llmChat } = makeService({
+      pendingAction: {
+        id: 'frozen-command',
+        call: {
+          name: 'calendar.create',
+          args: { title: 'Cible figée', whenIso: '2026-10-04T12:00:00Z' },
+        },
+      },
+    });
+    prisma.conversationTurn.findFirst.mockResolvedValue({
+      response: {
+        text: 'Confirme cette cible.',
+        pending_action: {
+          id: 'frozen-command',
+          name: 'calendar.create',
+          args: {},
+          summary: 'Cible figée',
+          preview: 'Prévisualisation approuvée',
+          risk: 'medium',
+          sideEffect: true,
+          planner: 'direct',
+          confidence: 'high',
+        },
+      },
+    });
+    const events = jest.spyOn(calendar, 'listEventsInterval');
+    const snapshot = await service.status('frozen-preview');
+    expect(snapshot.pendingAction?.preview).toBe('Prévisualisation approuvée');
+    expect(prisma.conversationTurn.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          ownerId: 'fixture-owner',
+          conversationId: 'frozen-preview',
+          commandId: 'frozen-command',
+          state: 'completed',
+        },
+      }),
+    );
+    expect(events).not.toHaveBeenCalled();
+    expect(llmChat).not.toHaveBeenCalled();
+  });
+
   it('returns the execution state when cancellation loses the claim race', async () => {
     const { service, pending, auditStore } = makeService({
       pendingAction: {
@@ -935,7 +1037,7 @@ describe('JarvisService', () => {
       },
     });
 
-    const snapshot = await service.status('console-session');
+    const snapshot = await service.status('console-session', true);
 
     expect(snapshot.availability).toEqual({
       gmail: 'available',
@@ -1023,7 +1125,7 @@ describe('JarvisService', () => {
       ],
     });
 
-    const snapshot = await service.status('gmail-priority');
+    const snapshot = await service.status('gmail-priority', true);
 
     expect(snapshot.focus.topUnreadEmail?.subject).toBe('Client important');
   });

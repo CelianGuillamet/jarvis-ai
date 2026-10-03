@@ -18,10 +18,11 @@ export const useStatusStore = defineStore('status', () => {
   const quickActions = computed(() => snapshot.value?.quickActions ?? []);
   const suggestions = computed(() => snapshot.value?.proactiveSuggestions ?? []);
 
-  const refresh = async () => {
+  const refresh = async (refreshProviders = false) => {
+    if (busy.value) return;
     busy.value = true;
     try {
-      const next = await app.jarvis.status(app.sessionId);
+      const next = await (refreshProviders ? app.jarvis.refreshStatus(app.sessionId) : app.jarvis.status(app.sessionId));
       snapshot.value = next;
       lastSyncAt.value = Date.now();
     } catch (error) {
@@ -53,4 +54,3 @@ export const useStatusStore = defineStore('status', () => {
     refresh,
   };
 });
-

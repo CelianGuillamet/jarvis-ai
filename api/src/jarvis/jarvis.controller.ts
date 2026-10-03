@@ -95,4 +95,18 @@ export class JarvisController {
       ),
     );
   }
+
+  @Post('status/refresh')
+  @ResponseContract(JarvisStatusSnapshotSchema)
+  async refreshStatus(
+    @Req() request: AuthenticatedRequest,
+    @Body(new RequestContract(ConversationQuerySchema))
+    query: ConversationQueryDto,
+  ) {
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      query.sessionId,
+    );
+    return this.jarvis.status(conversationId, true);
+  }
 }

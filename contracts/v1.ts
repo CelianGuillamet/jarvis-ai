@@ -240,6 +240,7 @@ export const ResourceAvailabilitySchema = z.enum([
   'permission_required',
   'unavailable',
   'invalid_response',
+  'not_refreshed',
 ]);
 export const JarvisStatusSnapshotSchema = z.object({
   sessionId: text,
@@ -252,6 +253,16 @@ export const JarvisStatusSnapshotSchema = z.object({
   availability: z.object({
     gmail: ResourceAvailabilitySchema,
     calendar: ResourceAvailabilitySchema,
+  }),
+  freshness: z.object({
+    gmail: z.object({
+      fetchedAt: z.iso.datetime().nullable(),
+      expiresAt: z.iso.datetime().nullable(),
+    }),
+    calendar: z.object({
+      fetchedAt: z.iso.datetime().nullable(),
+      expiresAt: z.iso.datetime().nullable(),
+    }),
   }),
   integrations: z.object({
     googleConnected: z.boolean(),

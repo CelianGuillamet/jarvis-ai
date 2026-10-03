@@ -122,6 +122,11 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
         ),
         JarvisStatusSnapshotSchema,
       ),
+    refreshStatus: (sessionId?: string) =>
+      validated(
+        http.post<unknown>("/jarvis/status/refresh", checked({ sessionId }, ConversationQuerySchema)),
+        JarvisStatusSnapshotSchema,
+      ),
     googleAuthUrl: (sessionId: string) =>
       joinUrl(options.baseUrl || "", "/auth/google") +
       queryString({ sessionId }, ConversationQuerySchema),

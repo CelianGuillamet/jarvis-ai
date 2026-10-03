@@ -74,7 +74,13 @@ export const useChatStore = defineStore('chat', () => {
   };
 
   const restorePendingFromStatus = (pending: PendingActionView | null) => {
-    if (!historyLoaded.value || busy.value || !pending || pending.id !== historyPendingId.value) return;
+    if (!historyLoaded.value || busy.value) return;
+    if (pendingAction.value && pending?.id !== pendingAction.value.id) {
+      pendingAction.value = null;
+      if (lastMeta.value?.awaiting === 'confirm') lastMeta.value = null;
+    }
+    if (!pending || pending.id !== historyPendingId.value) return;
+    if (pendingAction.value?.id === pending.id) return;
     pendingAction.value = pending;
     lastMeta.value = { awaiting: 'confirm' };
   };

@@ -29,7 +29,10 @@ import { OllamaProvider } from '../../src/jarvis/providers/ollama.provider';
 import { OpenAIProvider } from '../../src/jarvis/providers/openai.provider';
 import { fakeCalendar, fakeGmail } from '../fixtures/providers';
 import { allowedPorts } from '../fixtures/integration-safety';
-import { JarvisChatResponseSchema } from '../../src/contracts/v1';
+import {
+  JarvisChatResponseSchema,
+  JarvisStatusSnapshotSchema,
+} from '../../src/contracts/v1';
 
 const scopes =
   'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
@@ -726,8 +729,58 @@ describe('API against disposable migrated PostgreSQL', () => {
         'POST /inbox-zero/step',
         'POST /jarvis/chat',
         'POST /jarvis/confirm',
+        'POST /jarvis/status/refresh',
       ].sort(),
     );
+  });
+
+  it('separates passive status from an explicit authenticated provider refresh without invoking a model', async () => {
+    const sessionId = 'status-cache-http';
+    const mailCalls = gmail.listMessages.mock.calls.length;
+    const calendarCalls = calendar.listEventsInterval.mock.calls.length;
+    const model = jest.spyOn(OllamaProvider.prototype, 'chat');
+    const modelCalls = model.mock.calls.length;
+    const passive = await request(baseUrl)
+      .get('/jarvis/status')
+      .set('Cookie', sessionCookie)
+      .query({ sessionId })
+      .expect(200);
+    const first = JarvisStatusSnapshotSchema.parse(passive.body);
+    expect(first.availability.gmail).toBe('not_refreshed');
+    expect(first.freshness.gmail.fetchedAt).toBeNull();
+    expect(gmail.listMessages.mock.calls.length).toBe(mailCalls);
+    expect(calendar.listEventsInterval.mock.calls.length).toBe(calendarCalls);
+    const refreshed = await request(baseUrl)
+      .post('/jarvis/status/refresh')
+      .set('Cookie', sessionCookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId })
+      .expect(201);
+    const next = JarvisStatusSnapshotSchema.parse(refreshed.body);
+    expect(next.availability.gmail).toBe('available');
+    expect(next.freshness.gmail.fetchedAt).not.toBeNull();
+    expect(gmail.listMessages.mock.calls.length).toBe(mailCalls + 1);
+    expect(calendar.listEventsInterval.mock.calls.length).toBe(
+      calendarCalls + 1,
+    );
+    const cached = await request(baseUrl)
+      .get('/jarvis/status')
+      .set('Cookie', sessionCookie)
+      .query({ sessionId })
+      .expect(200);
+    expect(JarvisStatusSnapshotSchema.parse(cached.body).freshness).toEqual(
+      next.freshness,
+    );
+    expect(gmail.listMessages.mock.calls.length).toBe(mailCalls + 1);
+    expect(calendar.listEventsInterval.mock.calls.length).toBe(
+      calendarCalls + 1,
+    );
+    expect(model.mock.calls.length).toBe(modelCalls);
+    await request(baseUrl)
+      .post('/jarvis/status/refresh')
+      .set('Cookie', sessionCookie)
+      .send({ sessionId })
+      .expect(403);
   });
 
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
@@ -753,6 +806,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/auth/google/disconnect',
       '/jarvis/chat',
       '/jarvis/confirm',
+      '/jarvis/status/refresh',
       '/inbox-zero/scan',
       '/inbox-zero/step',
       '/inbox-zero/apply',
@@ -1105,6 +1159,12 @@ describe('API against disposable migrated PostgreSQL', () => {
         .set('Cookie', cookie)
         .expect(404);
     }
+    await request(baseUrl)
+      .post('/jarvis/status/refresh')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ sessionId: first })
+      .expect(404);
     await request(baseUrl)
       .post('/jarvis/confirm')
       .set('Cookie', cookie)

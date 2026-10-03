@@ -102,3 +102,32 @@ test('status cannot revive a command missing from the current history reference'
   assert.equal(chat.pendingAction, null);
   assert.equal(chat.canConfirmPending, false);
 });
+
+test('a passive status preserves the exact historical preview of a live confirmation', async () => {
+  const pending = { id: 'current', name: 'todo.delete', args: {}, summary: 'Cible figée', preview: 'Prévisualisation exacte', risk: 'medium', sideEffect: true, planner: 'direct', confidence: 'high' };
+  const history = page();
+  history.pendingCommand = { id: 'current', state: 'waiting', expiresAt: new Date(Date.now() + 60000).toISOString() };
+  history.turns[0].command = { id: 'current', state: 'waiting' };
+  history.turns[0].response.pending_action = pending;
+  globalThis.fetch = async () => new Response(JSON.stringify(history));
+  const chat = store();
+  await chat.loadHistory();
+  chat.restorePendingFromStatus({ ...pending, preview: null });
+  assert.equal(chat.pendingAction.preview, 'Prévisualisation exacte');
+  assert.equal(chat.canConfirmPending, true);
+  chat.restorePendingFromStatus(null);
+  assert.equal(chat.pendingAction, null);
+  assert.equal(chat.canConfirmPending, false);
+});
+
+test('status store uses passive reads unless provider refresh is explicitly requested', async () => {
+  setActivePinia(createPinia());
+  const app = modules.useAppStore();
+  const status = modules.useStatusStore();
+  const calls = [];
+  app.jarvis.status = () => { calls.push('passive'); return Promise.resolve({}); };
+  app.jarvis.refreshStatus = () => { calls.push('refresh'); return Promise.resolve({}); };
+  await status.refresh();
+  await status.refresh(true);
+  assert.deepEqual(calls, ['passive', 'refresh']);
+});

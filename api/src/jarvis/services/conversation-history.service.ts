@@ -14,10 +14,15 @@ export class ConversationHistoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   private async requireOwner(ownerId: string, conversationId: string) {
-    const conversation = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, ownerId },
-      select: { id: true },
-    });
+    let conversation: { id: string } | null;
+    try {
+      conversation = await this.prisma.conversation.findFirst({
+        where: { id: conversationId, ownerId },
+        select: { id: true },
+      });
+    } catch {
+      throw dataUnavailable();
+    }
     if (!conversation) throw new NotFoundException('Conversation introuvable.');
   }
 
@@ -91,12 +96,17 @@ export class ConversationHistoryService {
     query: ConversationHistoryQuery,
   ) {
     await this.requireOwner(ownerId, conversationId);
-    const cursor = query.cursor
-      ? await this.prisma.conversationTurn.findFirst({
-          where: { id: query.cursor, ownerId, conversationId },
-          select: { id: true, createdAt: true },
-        })
-      : null;
+    let cursor: { id: string; createdAt: Date } | null;
+    try {
+      cursor = query.cursor
+        ? await this.prisma.conversationTurn.findFirst({
+            where: { id: query.cursor, ownerId, conversationId },
+            select: { id: true, createdAt: true },
+          })
+        : null;
+    } catch {
+      throw dataUnavailable();
+    }
     if (query.cursor && !cursor)
       throw new NotFoundException('Page introuvable.');
     try {

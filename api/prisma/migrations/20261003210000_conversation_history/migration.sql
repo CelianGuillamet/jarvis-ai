@@ -19,3 +19,4 @@ CREATE TABLE "ConversationTurn" (
   CONSTRAINT "ConversationTurn_command_owner_fkey" FOREIGN KEY ("commandId", "ownerId", "conversationId") REFERENCES "Command"("id", "ownerId", "conversationId") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 CREATE INDEX "ConversationTurn_ownerId_conversationId_createdAt_id_idx" ON "ConversationTurn"("ownerId", "conversationId", "createdAt", "id");
+CREATE INDEX "ConversationTurn_command_history_idx" ON "ConversationTurn"("ownerId", "conversationId", "commandId", "createdAt", "id");

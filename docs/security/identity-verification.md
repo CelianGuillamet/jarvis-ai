@@ -12,6 +12,7 @@ The local gate uses the real Nest guards, Better Auth signed cookies and disposa
 | GET `/account/me` | Spoofed owner query/header still returns only the signed-in account. |
 | GET `/jarvis/history`, `/jarvis/status`, `/inbox-zero/session`, `/inbox-zero/message`, `/auth/google/status`, `/auth/google` | A known foreign canonical conversation returns 404 before accessing its data or authorization flow. |
 | POST `/jarvis/chat`, `/jarvis/confirm` | Foreign conversation refused; a real foreign pending-action ID paired with the attacker's own conversation is not consumed. |
+| POST `/jarvis/status/refresh` | Refresh requires the authenticated conversation owner and an allowed Origin. Passive GET status performs no provider or model transport. |
 | POST `/inbox-zero/scan`, `/inbox-zero/step`, `/inbox-zero/apply`, `/inbox-zero/draft-reply` | Valid DTOs with a foreign conversation and known message ID return 404. |
 | GET `/auth/google/callback` | A state belonging to another account is rejected and remains claimable by its owner. |
 | POST `/auth/google/disconnect` | A spoofed body owner cannot remove the other account's integration. |
