@@ -1,7 +1,7 @@
 import { dataUnavailable } from '../../http/data-unavailable';
 import { parseStoredTags } from '../lib/stored-json';
 import type { JarvisKnowledgeEntry } from '@prisma/client';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type KnowledgeEntry = {
@@ -17,8 +17,6 @@ export type KnowledgeEntry = {
 
 @Injectable()
 export class JarvisKnowledgeBaseService {
-  private readonly logger = new Logger(JarvisKnowledgeBaseService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async save(
@@ -41,9 +39,8 @@ export class JarvisKnowledgeBaseService {
         },
       });
       return this.map(entry);
-    } catch (error) {
-      this.logger.error(`Failed to save knowledge for ${sessionId}: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -74,8 +71,7 @@ export class JarvisKnowledgeBaseService {
       }
 
       return rows.map((r) => this.map(r));
-    } catch (error) {
-      this.logger.warn(`Failed to find knowledge for ${sessionId}: ${error}`);
+    } catch {
       throw dataUnavailable();
     }
   }
@@ -94,8 +90,7 @@ export class JarvisKnowledgeBaseService {
         take: options?.limit ?? 20,
       });
       return rows.map((r) => this.map(r));
-    } catch (error) {
-      this.logger.warn(`Failed to list knowledge for ${sessionId}: ${error}`);
+    } catch {
       throw dataUnavailable();
     }
   }

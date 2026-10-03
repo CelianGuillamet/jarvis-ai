@@ -1,5 +1,6 @@
+import { dataUnavailable } from '../../http/data-unavailable';
 import type { JarvisSchedulingSuggestion } from '@prisma/client';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type SchedulingSuggestionRecord = {
@@ -16,8 +17,6 @@ export type SchedulingSuggestionRecord = {
 
 @Injectable()
 export class JarvisSmartSchedulingService {
-  private readonly logger = new Logger(JarvisSmartSchedulingService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async suggestSchedule(
@@ -42,9 +41,8 @@ export class JarvisSmartSchedulingService {
       });
 
       return this.mapSuggestionRecord(suggestion);
-    } catch (error) {
-      this.logger.error(`Failed to create scheduling suggestion: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -67,11 +65,8 @@ export class JarvisSmartSchedulingService {
       );
 
       return suggestions.map((s) => this.mapSuggestionRecord(s));
-    } catch (error) {
-      this.logger.error(
-        `Failed to list suggestions for ${sessionId}: ${error}`,
-      );
-      return [];
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -86,9 +81,8 @@ export class JarvisSmartSchedulingService {
       });
 
       return this.mapSuggestionRecord(updated);
-    } catch (error) {
-      this.logger.error(`Failed to apply suggestion ${suggestionId}: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -145,9 +139,8 @@ export class JarvisSmartSchedulingService {
       }
 
       return null;
-    } catch (error) {
-      this.logger.error(`Failed to find next available slot: ${error}`);
-      return null;
+    } catch {
+      throw dataUnavailable();
     }
   }
 
@@ -173,11 +166,8 @@ export class JarvisSmartSchedulingService {
       }
 
       return lines.join('\n');
-    } catch (error) {
-      this.logger.error(
-        `Failed to build prompt context for ${sessionId}: ${error}`,
-      );
-      return '';
+    } catch {
+      throw dataUnavailable();
     }
   }
 

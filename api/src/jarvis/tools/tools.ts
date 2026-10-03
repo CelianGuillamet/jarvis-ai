@@ -5500,7 +5500,7 @@ export async function runTool(
 
         // ===== CONFLICTS =====
         case 'conflict.detect': {
-          if (!ctx.conflicts) return 'Service conflits non disponible.';
+          if (!ctx.conflicts) throw dataUnavailable();
           const reports = await ctx.conflicts.detectAllConflicts(sessionId);
           if (!reports.length) return 'Aucun conflit détecté.';
           return reports
@@ -5513,7 +5513,7 @@ export async function runTool(
 
         // ===== DEPENDENCIES =====
         case 'dependency.add': {
-          if (!ctx.dependencies) return 'Service dépendances non disponible.';
+          if (!ctx.dependencies) throw dataUnavailable();
           const dep = await ctx.dependencies.addDependency(
             sessionId,
             call.args.sourceTaskId,
@@ -5523,12 +5523,15 @@ export async function runTool(
               estimatedDays: call.args.estimatedDays,
             },
           );
-          if (!dep) return "Échec de l'ajout de la dépendance.";
+          if (!dep)
+            throw new CommandRejectedError(
+              'Dépendance invalide ou tâches introuvables.',
+            );
           return `Dépendance ajoutée: ${dep.sourceTaskId.slice(0, 8)} → ${dep.targetTaskId.slice(0, 8)} (${dep.dependencyType})`;
         }
 
         case 'dependency.list': {
-          if (!ctx.dependencies) return 'Service dépendances non disponible.';
+          if (!ctx.dependencies) throw dataUnavailable();
           const graph = await ctx.dependencies.getDependencies(
             sessionId,
             call.args.taskId,
@@ -5550,7 +5553,7 @@ export async function runTool(
         }
 
         case 'dependency.order': {
-          if (!ctx.dependencies) return 'Service dépendances non disponible.';
+          if (!ctx.dependencies) throw dataUnavailable();
           const ordered = await ctx.dependencies.orderTasks(
             sessionId,
             call.args.taskIds,
@@ -5632,14 +5635,14 @@ export async function runTool(
 
         // ===== SCHEDULING =====
         case 'schedule.suggest': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const suggestion = await ctx.scheduling.suggestSchedule(sessionId, {
             taskId: call.args.taskId,
             suggestedTime: new Date(call.args.suggestedTime),
             rationale: call.args.rationale,
             priority: call.args.priority,
           });
-          if (!suggestion) return 'Échec de la suggestion de planification.';
+          if (!suggestion) throw dataUnavailable();
           const time = new Date(suggestion.suggestedTime).toLocaleString(
             'fr-FR',
             { dateStyle: 'short', timeStyle: 'short' },
@@ -5648,7 +5651,7 @@ export async function runTool(
         }
 
         case 'schedule.list': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const suggestions = await ctx.scheduling.listSuggestions(sessionId, {
             applied: call.args.applied,
           });
@@ -5665,12 +5668,12 @@ export async function runTool(
         }
 
         case 'schedule.apply': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const applied = await ctx.scheduling.applySuggestion(
             sessionId,
             call.args.suggestionId,
           );
-          if (!applied) return 'Suggestion introuvable.';
+          if (!applied) throw dataUnavailable();
           const time = new Date(applied.suggestedTime).toLocaleString('fr-FR', {
             dateStyle: 'short',
             timeStyle: 'short',
@@ -5679,7 +5682,7 @@ export async function runTool(
         }
 
         case 'schedule.next_slot': {
-          if (!ctx.scheduling) return 'Service planification non disponible.';
+          if (!ctx.scheduling) throw dataUnavailable();
           const after = call.args.afterDate
             ? new Date(call.args.afterDate)
             : new Date();
@@ -5699,19 +5702,19 @@ export async function runTool(
 
         // ===== CONTEXTUAL HELP =====
         case 'help.create': {
-          if (!ctx.help) return 'Service aide non disponible.';
+          if (!ctx.help) throw dataUnavailable();
           const help = await ctx.help.createHelp(sessionId, {
             context: call.args.context,
             contentType: call.args.contentType,
             content: call.args.content,
             relevanceScore: call.args.relevanceScore,
           });
-          if (!help) return "Échec de la création de l'aide.";
+          if (!help) throw dataUnavailable();
           return `Aide créée [${help.id.slice(0, 8)}] pour contexte "${help.context}": ${help.contentType}`;
         }
 
         case 'help.find': {
-          if (!ctx.help) return 'Service aide non disponible.';
+          if (!ctx.help) throw dataUnavailable();
           const items = await ctx.help.findRelevant(
             sessionId,
             call.args.context,
@@ -5723,7 +5726,7 @@ export async function runTool(
 
         // ===== SEARCH =====
         case 'search.query': {
-          if (!ctx.search) return 'Service recherche non disponible.';
+          if (!ctx.search) throw dataUnavailable();
           const results = await ctx.search.query(sessionId, call.args);
           if (!results.length)
             return `Aucun résultat pour "${call.args.query}".`;
@@ -5732,16 +5735,14 @@ export async function runTool(
 
         // ===== KNOWLEDGE BASE =====
         case 'knowledge.save': {
-          if (!ctx.knowledge)
-            return 'Service base de connaissances non disponible.';
+          if (!ctx.knowledge) throw dataUnavailable();
           const entry = await ctx.knowledge.save(sessionId, call.args);
-          if (!entry) return 'Impossible de sauvegarder la connaissance.';
+          if (!entry) throw dataUnavailable();
           return `OK. Connaissance sauvegardée: "${entry.title}" [${entry.category}]`;
         }
 
         case 'knowledge.find': {
-          if (!ctx.knowledge)
-            return 'Service base de connaissances non disponible.';
+          if (!ctx.knowledge) throw dataUnavailable();
           const entries = await ctx.knowledge.find(sessionId, call.args);
           if (!entries.length)
             return `Aucune connaissance trouvée pour "${call.args.query}".`;
@@ -5749,8 +5750,7 @@ export async function runTool(
         }
 
         case 'knowledge.list': {
-          if (!ctx.knowledge)
-            return 'Service base de connaissances non disponible.';
+          if (!ctx.knowledge) throw dataUnavailable();
           const entries = await ctx.knowledge.list(sessionId, call.args);
           if (!entries.length) return 'Base de connaissances vide.';
           return `${entries.length} entrée(s):\n${entries.map((e) => `- [${e.category}] ${e.title} (utilisée ${e.useCount}x)`).join('\n')}`;
