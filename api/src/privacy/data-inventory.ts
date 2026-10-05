@@ -13,6 +13,7 @@ export type OwnershipScope =
   | 'migration-owner';
 export type ExportDisposition = 'data' | 'metadata' | 'excluded';
 export const RETAINED_DATA_INVENTORY = {
+  AccountErasureJob: { scope: 'owner', export: 'metadata' },
   Todo: { scope: 'owner', export: 'data' },
   CalendarEvent: { scope: 'owner', export: 'data' },
   Note: { scope: 'owner', export: 'data' },

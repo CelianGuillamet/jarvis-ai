@@ -95,9 +95,21 @@ describe('Coherent account download', () => {
 
   it('awaits each emitted batch and sanitizes its records', async () => {
     const { service, tx } = fixture();
-    tx.$queryRaw.mockResolvedValueOnce([
-      { record: { text: 'Task', refreshToken: 'secret' } },
-    ]);
+    let todoCursor = false;
+    let emitted = false;
+    tx.$executeRaw.mockImplementation((query: Prisma.Sql) => {
+      if (query.sql?.startsWith('DECLARE')) {
+        todoCursor = query.sql.includes('FROM "Todo"');
+      }
+      return Promise.resolve(0);
+    });
+    tx.$queryRaw.mockImplementation(() => {
+      if (!todoCursor || emitted) return Promise.resolve([]);
+      emitted = true;
+      return Promise.resolve([
+        { record: { text: 'Task', refreshToken: 'secret' } },
+      ]);
+    });
     const records: unknown[] = [];
     await service.stream(
       'signed-owner',

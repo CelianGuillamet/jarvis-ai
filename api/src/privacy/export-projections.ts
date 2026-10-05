@@ -2,6 +2,16 @@ import { RETAINED_DATA_INVENTORY } from './data-inventory';
 
 // Reviewed allowlists: adding a Prisma field does not silently expose it.
 export const EXPORT_PROJECTIONS = {
+  AccountErasureJob: [
+    'id',
+    'state',
+    'revocationStatus',
+    'requestedAt',
+    'localDeletedAt',
+    'completedAt',
+    'receiptExpiresAt',
+    'retainedUntil',
+  ],
   Todo: ['ownerId', 'id', 'text', 'done', 'doneAt', 'createdAt'],
   CalendarEvent: ['ownerId', 'id', 'title', 'when', 'createdAt'],
   Note: ['ownerId', 'id', 'title', 'text', 'createdAt'],

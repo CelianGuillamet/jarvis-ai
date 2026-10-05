@@ -37,6 +37,32 @@ export const AccountPreferencesSchema = z
   })
   .strict();
 export type AccountPreferences = z.infer<typeof AccountPreferencesSchema>;
+export const AccountErasureReceiptSchema = z.string().regex(/^[a-f0-9]{64}$/);
+export const AccountErasureRequestSchema = z
+  .object({
+    confirmEmail: z.email().max(320),
+    receipt: AccountErasureReceiptSchema,
+  })
+  .strict();
+export type AccountErasureRequest = z.infer<typeof AccountErasureRequestSchema>;
+export const AccountErasureStatusSchema = z
+  .object({
+    id: z.uuid(),
+    state: z.enum([
+      'queued',
+      'purging',
+      'local_deleted',
+      'completed',
+      'blocked',
+    ]),
+    revocationStatus: z.enum(['pending', 'complete', 'manual_required']),
+    requestedAt: z.iso.datetime(),
+    localDeletedAt: z.iso.datetime().nullable(),
+    completedAt: z.iso.datetime().nullable(),
+    receiptExpiresAt: z.iso.datetime(),
+  })
+  .strict();
+export type AccountErasureStatus = z.infer<typeof AccountErasureStatusSchema>;
 export const AccountProfileExportSchema = z
   .object({
     formatVersion: z.literal(1),

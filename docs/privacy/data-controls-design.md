@@ -185,3 +185,27 @@ HumanProfile passe 65 suites / 444 tests unitaires, types, lint et build. Six ca
 spécifiques couvrent les lectures en vol, mises à jour, défauts après erreur,
 propriétaire désactivé et limites de concurrence. Vérifier le prochain head CI
 après publication de cette couche.
+
+### Durable erasure request — implementation in progress
+
+`AccountErasureJob` retains an opaque owner identifier independently of the user
+row. A request locks the account, checks its email confirmation, runs the execution
+preflight, and atomically creates the job while invalidating sessions, Google OAuth
+states and beta admission. Repeating the same client-generated 256-bit receipt
+returns the same job; only its SHA-256 digest is stored. The public status projection
+contains no email, owner identifier, receipt digest or revocation credentials.
+Receipts expire after seven days; the proposed backup tombstone horizon is thirty
+days. This does not yet establish a verified backup retention or restore procedure.
+
+Revocation credentials use the existing AES-GCM implementation with a key derived
+from AUTH_SECRET and authenticated job-specific context. Changing AUTH_SECRET
+before pending credentials are consumed requires handling unreadable credentials
+as manual revocation; automatic key rotation support is not implemented here.
+Worker leases use database time and SKIP LOCKED. Neither the request route nor a
+purge worker is mounted yet: this intermediate code does not provide usable account
+deletion. Purge, lease-fenced completion, revocation retries, retention and user
+controls must be completed before the ticket can merge.
+
+Local validation: 67 suites / 452 unit tests passed, types and lint passed. Four new
+PostgreSQL cases cover request replay/isolation, invalid confirmation rollback,
+receipt expiry and distinct concurrent worker leases; they await CI execution.

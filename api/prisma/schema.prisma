@@ -724,3 +724,27 @@ model InboxReplyDraft {
 
   @@id([ownerId, conversationId, messageId])
 }
+
+// Minimal erasure receipt/tombstone survives deletion of User for restart/restore.
+// Credential payload is encrypted and never exposed by the receipt or export.
+model AccountErasureJob {
+  id String @id @default(uuid())
+  ownerId String @unique
+  receiptDigest String @unique
+  state String @default("queued")
+  revocationStatus String @default("pending")
+  encryptedTokens String?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  claimToken String?
+  claimedUntil DateTime?
+  requestedAt DateTime @default(now())
+  localDeletedAt DateTime?
+  completedAt DateTime?
+  receiptExpiresAt DateTime
+  retainedUntil DateTime
+  blockerCode String?
+
+  @@index([state, nextAttemptAt, claimedUntil])
+  @@index([retainedUntil])
+}

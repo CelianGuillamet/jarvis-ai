@@ -9,6 +9,10 @@ type WriteRecord = (value: unknown) => Promise<void>;
 
 // Stored tool payloads and migration archives can contain credential-shaped keys.
 const secretKeys = new Set([
+  'encryptedtokens',
+  'claimtoken',
+  'receiptdigest',
+  'receipttoken',
   'token',
   'accesstoken',
   'refreshtoken',
