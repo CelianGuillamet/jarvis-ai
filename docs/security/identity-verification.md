@@ -10,6 +10,7 @@ The local gate uses the real Nest guards, Better Auth signed cookies and disposa
 | --- | --- |
 | GET `/account/preferences`, POST `/account/preferences` | Signed-in owner only; rejects anonymous requests, identity overrides, invalid timezones and untrusted mutation origins. |
 | GET `/account/me` | Spoofed owner query/header still returns only the signed-in account. |
+| GET `/account/export/profile`, GET `/account/export/data` | Authenticated owner only; explicit credential-free projections, strictly validated collection/cursor, pages bounded to 50. PostgreSQL export isolation checks remain in progress under JAR-039. |
 | GET `/jarvis/history`, `/jarvis/status`, `/inbox-zero/session`, `/inbox-zero/message`, `/auth/google/status`, `/auth/google` | A known foreign canonical conversation returns 404 before accessing its data or authorization flow. |
 | POST `/jarvis/chat`, `/jarvis/confirm` | Foreign conversation refused; a real foreign pending-action ID paired with the attacker's own conversation is not consumed. |
 | GET `/today`, POST `/today/mutations` | Foreign canonical conversations and resource IDs are refused; owner comes from the signed session. Mutations require an allowed Origin and strict deterministic input. |

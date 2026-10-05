@@ -806,6 +806,8 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(routes.sort()).toEqual(
       [
         'GET /account/me',
+        'GET /account/export/profile',
+        'GET /account/export/data',
         'GET /account/preferences',
         'GET /auth/google',
         'GET /auth/google/callback',
@@ -1016,6 +1018,8 @@ describe('API against disposable migrated PostgreSQL', () => {
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
     for (const path of [
       '/account/me',
+      '/account/export/profile',
+      '/account/export/data?collection=notes',
       '/account/preferences',
       '/today',
       '/jarvis/history',
