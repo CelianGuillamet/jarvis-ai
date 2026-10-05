@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { AccountPreferences } from "@/core/contracts/v1";
 import { useAppStore } from "./appStore";
 
@@ -8,6 +8,13 @@ export const usePreferencesStore = defineStore("preferences", () => {
   const current = ref<AccountPreferences | null>(null);
   const busy = ref(false);
   const error = ref("");
+  let generation = 0;
+  watch(() => app.accountEpoch, () => {
+    generation += 1;
+    current.value = null;
+    error.value = "";
+    busy.value = false;
+  }, { flush: "sync" });
 
   function apply(value: AccountPreferences) {
     current.value = value;
@@ -17,9 +24,13 @@ export const usePreferencesStore = defineStore("preferences", () => {
   async function load() {
     current.value = null;
     error.value = "";
+    const requestGeneration = generation;
     try {
-      apply(await app.jarvis.preferences());
+      const value = await app.jarvis.preferences();
+      if (requestGeneration !== generation) return;
+      apply(value);
     } catch {
+      if (requestGeneration !== generation) return;
       error.value = "Impossible de charger vos préférences. Réessayez.";
     }
   }
@@ -27,16 +38,20 @@ export const usePreferencesStore = defineStore("preferences", () => {
   async function save(value: AccountPreferences) {
     if (busy.value) return false;
     busy.value = true;
+    const requestGeneration = generation;
     error.value = "";
     try {
-      apply(await app.jarvis.savePreferences(value));
+      const saved = await app.jarvis.savePreferences(value);
+      if (requestGeneration !== generation) return false;
+      apply(saved);
       return true;
     } catch {
+      if (requestGeneration !== generation) return false;
       error.value =
         "L’enregistrement ne peut pas être confirmé. Réessayez avant de continuer.";
       return false;
     } finally {
-      busy.value = false;
+      if (requestGeneration === generation) busy.value = false;
     }
   }
 

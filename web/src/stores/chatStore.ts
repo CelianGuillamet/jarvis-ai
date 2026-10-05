@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import type { JarvisChatResponse, PendingActionView } from '@/core/types/jarvis';
 import { TimeoutError } from '@/core/api/http';
@@ -43,6 +43,8 @@ export const useChatStore = defineStore('chat', () => {
     if (historyBusy.value || busy.value || (!older && historyLoaded.value)) return;
     if (older && !historyCursor.value) return;
     const currentGeneration = generation;
+    const controller = new AbortController();
+    activeAbort.value = controller;
     historyBusy.value = true;
     historyError.value = null;
     try {
@@ -50,7 +52,7 @@ export const useChatStore = defineStore('chat', () => {
         sessionId: app.sessionId,
         limit: 20,
         ...(older && historyCursor.value ? { cursor: historyCursor.value } : {}),
-      });
+      }, controller.signal);
       if (currentGeneration !== generation) return;
       const restored = historyMessages(page);
       const existingIds = new Set(messages.value.map(message => message.id));
@@ -70,6 +72,7 @@ export const useChatStore = defineStore('chat', () => {
       historyError.value = error instanceof Error ? error.message : 'Historique indisponible.';
     } finally {
       if (currentGeneration === generation) historyBusy.value = false;
+      if (activeAbort.value === controller) activeAbort.value = null;
     }
   };
 
@@ -119,6 +122,13 @@ export const useChatStore = defineStore('chat', () => {
   };
 
   const abort = () => {
+    if (!busy.value && !historyBusy.value) return;
+    generation += 1;
+    historyBusy.value = false;
+    pendingAction.value = null;
+    choices.value = [];
+    lastMeta.value = null;
+    pushMessage({ role: 'system', text: 'Réception arrêtée. Une commande déjà transmise peut avoir été exécutée. Vérifiez l’historique et l’activité avant de la relancer.' });
     activeAbort.value?.abort();
     activeAbort.value = null;
     busy.value = false;
@@ -128,8 +138,10 @@ export const useChatStore = defineStore('chat', () => {
     const text = normalizeText(textRaw);
     if (!text) return;
     if (busy.value || historyBusy.value) return;
+    const startingGeneration = generation;
     if (!historyLoaded.value) {
       await loadHistory();
+      if (startingGeneration !== generation) return;
       if (!historyLoaded.value) {
         toast.push({ title: 'Historique indisponible', detail: historyError.value ?? 'Recharge l’historique avant de poursuivre.', tone: 'danger' });
         return;
@@ -149,7 +161,7 @@ export const useChatStore = defineStore('chat', () => {
       const res = await app.jarvis.chat({
         text,
         sessionId: app.sessionId,
-      });
+      }, controller.signal);
       if (currentGeneration !== generation) return;
       applyJarvisResponse(res);
     } catch (error) {
@@ -181,13 +193,15 @@ export const useChatStore = defineStore('chat', () => {
     if (!pendingAction.value || busy.value || historyBusy.value) return;
     busy.value = true;
     const actionId = pendingAction.value.id;
+    const controller = new AbortController();
+    activeAbort.value = controller;
     const currentGeneration = generation;
 
     try {
       const res = await app.jarvis.confirm({
         actionId,
         sessionId: app.sessionId,
-      });
+      }, controller.signal);
       if (currentGeneration !== generation) return;
       applyJarvisResponse(res);
     } catch (error) {
@@ -203,6 +217,7 @@ export const useChatStore = defineStore('chat', () => {
       });
     } finally {
       if (currentGeneration === generation) busy.value = false;
+      if (activeAbort.value === controller) activeAbort.value = null;
     }
   };
 
@@ -232,6 +247,8 @@ export const useChatStore = defineStore('chat', () => {
     activeAbort.value?.abort();
     activeAbort.value = null;
   };
+
+  watch(() => [app.sessionId, app.accountEpoch], reset, { flush: 'sync' });
 
   return {
     messages,

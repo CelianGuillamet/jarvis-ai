@@ -3,11 +3,14 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { env } from "@/core/config/env";
 import { joinUrl } from "@/core/api/http";
 import SettingsView from "@/views/SettingsView.vue";
+import { useAppStore } from "@/stores/appStore";
 import { usePreferencesStore } from "@/stores/preferencesStore";
 import { SignInOptionsSchema } from "@/core/contracts/v1";
 import { AccountProfileSchema } from "@/core/api/account";
 
 const preferences = usePreferencesStore();
+const app = useAppStore();
+let refreshGeneration = 0;
 const apiUrl = (path: string) => joinUrl(env.apiBaseUrl, path);
 
 const state = ref<"loading" | "signed-out" | "signed-in" | "error">("loading");
@@ -16,6 +19,8 @@ const googleAvailable = ref(false);
 const busy = ref(false);
 
 async function refresh() {
+  const generation = ++refreshGeneration;
+  app.invalidateAccount();
   state.value = "loading";
   error.value = "";
   try {
@@ -24,16 +29,20 @@ async function refresh() {
     });
     if (response.ok) {
       AccountProfileSchema.parse(await response.json());
+      if (generation !== refreshGeneration) return;
       await preferences.load();
+      if (generation !== refreshGeneration) return;
       if (!preferences.current) throw new Error();
       state.value = "signed-in";
       return;
     }
+    if (generation !== refreshGeneration) return;
     if (response.status !== 401) throw new Error();
     const options = await fetch(apiUrl("/account/sign-in-options"), {
       credentials: "include",
     });
     if (!options.ok) throw new Error();
+    if (generation !== refreshGeneration) return;
     googleAvailable.value = SignInOptionsSchema.parse(
       await options.json(),
     ).google;
@@ -43,6 +52,7 @@ async function refresh() {
         "Connexion refusée. Utilisez le compte Google associé à votre invitation.";
     }
   } catch {
+    if (generation !== refreshGeneration) return;
     error.value =
       "Impossible de vérifier votre connexion. Réessayez dans un instant.";
     state.value = "error";
@@ -92,6 +102,7 @@ async function signOut() {
       body: "{}",
     });
     if (!response.ok) throw new Error();
+    app.invalidateAccount();
     // A full reload clears account data retained by mounted views and stores.
     window.location.reload();
   } catch {

@@ -248,3 +248,35 @@ test('invalid display timezone blocks completion before any preference mutation'
     assert.equal(f.requests.filter(request => request.method === 'POST').length, 0);
   } finally { f.app.unmount(); }
 });
+
+test('session expiry removes previous account stores before a new account becomes visible', async () => {
+  const mounted = fixture({ completed: true });
+  try {
+    await settle();
+    const chat = modules.useChatStore();
+    const inbox = modules.useInboxZeroStore();
+    const status = modules.useStatusStore();
+    chat.messages = [{ id: 'old', role: 'assistant', text: 'Secret précédent', createdAt: 0 }];
+    chat.historyLoaded = true;
+    inbox.replyText = 'Brouillon privé';
+    inbox.reminderText = 'Rappel privé';
+    inbox.items = [{ messageId: 'old' }];
+    status.snapshot = { private: true };
+    let resolveAccount;
+    globalThis.fetch = (url) => url.endsWith('/account/me')
+      ? new Promise(resolve => { resolveAccount = resolve; })
+      : Promise.resolve(new Response(JSON.stringify({ displayTimezone: 'Europe/Paris', theme: 'dark', onboardingCompleted: true })));
+    dom.window.dispatchEvent(new dom.window.Event('jarvis:session-expired'));
+    assert.deepEqual(chat.messages, []);
+    assert.deepEqual(inbox.items, []);
+    assert.equal(inbox.replyText, '');
+    assert.equal(inbox.reminderText, '');
+    assert.equal(status.snapshot, null);
+    await nextTick();
+    assert.equal(document.querySelector('#private-app'), null);
+    resolveAccount(new Response(JSON.stringify({ id: 'new-owner', name: 'Nouveau', email: 'new@example.test' })));
+    await settle();
+    assert.ok(document.querySelector('#private-app'));
+    assert.deepEqual(chat.messages, []);
+  } finally { mounted.app.unmount(); }
+});

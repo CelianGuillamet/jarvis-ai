@@ -131,3 +131,87 @@ test('status store uses passive reads unless provider refresh is explicitly requ
   await status.refresh(true);
   assert.deepEqual(calls, ['passive', 'refresh']);
 });
+
+for (const operation of ['chat', 'confirm']) {
+  test(`stop invalidates a late ${operation} result and forwards its abort signal`, async () => {
+    let resolve;
+    let signal;
+    const chat = store();
+    chat.historyLoaded = true;
+    chat.pendingAction = { id: 'command', summary: 'Envoyer', risk: 'high', sideEffect: true };
+    globalThis.fetch = (_url, options) => { signal = options.signal; return new Promise(done => { resolve = done; }); };
+    const request = operation === 'chat' ? chat.send('Envoyer') : chat.confirmPending();
+    chat.abort();
+    assert.equal(signal.aborted, true);
+    assert.equal(chat.busy, false);
+    assert.match(chat.messages.at(-1).text, /commande déjà transmise peut avoir été exécutée/);
+    resolve(new Response(JSON.stringify({ text: 'Ancien résultat', meta: { commandState: 'completed' } })));
+    await request;
+    assert.ok(!chat.messages.some(message => message.text === 'Ancien résultat'));
+    assert.equal(chat.pendingAction, null);
+  });
+}
+
+test('account invalidation clears chat and status synchronously and rejects old responses', async () => {
+  setActivePinia(createPinia());
+  const app = modules.useAppStore();
+  const chat = modules.useChatStore();
+  const status = modules.useStatusStore();
+  chat.historyLoaded = true;
+  chat.messages = [{ id: 'private', role: 'assistant', text: 'Privé', createdAt: 0 }];
+  status.snapshot = { private: true };
+  let resolveStatus;
+  app.jarvis.status = () => new Promise(resolve => { resolveStatus = resolve; });
+  const loading = status.refresh();
+  app.invalidateAccount();
+  assert.deepEqual(chat.messages, []);
+  assert.equal(chat.historyLoaded, false);
+  assert.equal(status.snapshot, null);
+  resolveStatus({ private: true });
+  await loading;
+  assert.equal(status.snapshot, null);
+  assert.equal(status.busy, false);
+});
+
+test('reset during initial history prevents a pending send from crossing conversations', async () => {
+  const chat = store();
+  let resolve;
+  let requests = 0;
+  globalThis.fetch = () => { requests++; return new Promise(done => { resolve = done; }); };
+  const sending = chat.send('Ancien compte');
+  chat.reset();
+  resolve(new Response(JSON.stringify(page())));
+  await sending;
+  assert.equal(requests, 1);
+  assert.deepEqual(chat.messages, []);
+});
+
+test('a new store restores history after reload without browser text persistence', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify(page('durable')));
+  const first = store();
+  await first.loadHistory();
+  const reloaded = store();
+  assert.deepEqual(reloaded.messages, []);
+  await reloaded.loadHistory();
+  assert.deepEqual(reloaded.messages.map(message => message.text), first.messages.map(message => message.text));
+});
+
+test('old preference and inbox reads cannot restore private data after invalidation', async () => {
+  setActivePinia(createPinia());
+  const app = modules.useAppStore();
+  const preferences = modules.usePreferencesStore();
+  const inbox = modules.useInboxZeroStore();
+  let resolvePreferences;
+  let resolveInbox;
+  app.jarvis.preferences = () => new Promise(resolve => { resolvePreferences = resolve; });
+  app.jarvis.inboxZeroSession = () => new Promise(resolve => { resolveInbox = resolve; });
+  const preferenceRead = preferences.load();
+  const inboxRead = inbox.loadSession();
+  app.invalidateAccount();
+  resolvePreferences({ displayTimezone: 'America/New_York', theme: 'light', onboardingCompleted: true });
+  resolveInbox({ session: { sessionId: 'old', items: [{ messageId: 'private' }] }, recentActions: [] });
+  await Promise.all([preferenceRead, inboxRead]);
+  assert.equal(preferences.current, null);
+  assert.equal(inbox.session, null);
+  assert.deepEqual(inbox.items, []);
+});

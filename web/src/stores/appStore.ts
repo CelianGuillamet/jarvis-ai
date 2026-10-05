@@ -17,6 +17,8 @@ export type ThemeMode = "dark" | "light";
 export const useAppStore = defineStore("app", () => {
   // Installation configuration never comes from editable browser storage.
   const sessionId = ref(env.defaultSessionId);
+  const accountEpoch = ref(0);
+  const invalidateAccount = () => { accountEpoch.value += 1; };
   const apiBaseUrl = ref(env.apiBaseUrl);
   const timeoutMs = ref(env.requestTimeoutMs);
   const theme = ref<ThemeMode>(
@@ -45,6 +47,8 @@ export const useAppStore = defineStore("app", () => {
   );
 
   return {
+    accountEpoch,
+    invalidateAccount,
     sessionId,
     apiBaseUrl,
     timeoutMs,

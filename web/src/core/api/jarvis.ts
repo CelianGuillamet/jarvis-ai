@@ -135,27 +135,28 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
         http.post<unknown>("/auth/google/disconnect", {}),
         GoogleDisconnectResponseSchema,
       ),
-    chat: (input: ChatRequest) =>
+    chat: (input: ChatRequest, signal?: AbortSignal) =>
       validated(
-        http.post<unknown>("/jarvis/chat", checked(input, ChatRequestSchema)),
+        http.post<unknown>("/jarvis/chat", checked(input, ChatRequestSchema), signal ? { signal } : {}),
         JarvisChatResponseSchema,
       ),
-    confirm: (input: ConfirmRequest) =>
+    confirm: (input: ConfirmRequest, signal?: AbortSignal) =>
       validated(
         http.post<unknown>(
           "/jarvis/confirm",
           checked(input, ConfirmRequestSchema),
+          signal ? { signal } : {},
         ),
         JarvisChatResponseSchema,
       ),
-    history: (input: ConversationHistoryQuery) => {
+    history: (input: ConversationHistoryQuery, signal?: AbortSignal) => {
       const query = checked(input, ConversationHistoryQuerySchema);
       const params = new URLSearchParams();
       if (query.sessionId) params.set("sessionId", query.sessionId);
       if (query.cursor) params.set("cursor", query.cursor);
       params.set("limit", String(query.limit));
       return validated(
-        http.get<unknown>(`/jarvis/history?${params}`),
+        http.get<unknown>(`/jarvis/history?${params}`, signal ? { signal } : {}),
         ConversationHistoryResponseSchema,
       );
     },

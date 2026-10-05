@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import type { JarvisStatusSnapshot } from '@/core/types/jarvis';
 import { TimeoutError } from '@/core/api/http';
@@ -13,6 +13,14 @@ export const useStatusStore = defineStore('status', () => {
   const snapshot = ref<JarvisStatusSnapshot | null>(null);
   const busy = ref(false);
   const lastSyncAt = ref<number | null>(null);
+  let generation = 0;
+  const reset = () => {
+    generation += 1;
+    snapshot.value = null;
+    busy.value = false;
+    lastSyncAt.value = null;
+  };
+  watch(() => [app.sessionId, app.accountEpoch], reset, { flush: 'sync' });
 
   const integrations = computed(() => snapshot.value?.integrations ?? null);
   const quickActions = computed(() => snapshot.value?.quickActions ?? []);
@@ -21,11 +29,14 @@ export const useStatusStore = defineStore('status', () => {
   const refresh = async (refreshProviders = false) => {
     if (busy.value) return;
     busy.value = true;
+    const currentGeneration = generation;
     try {
       const next = await (refreshProviders ? app.jarvis.refreshStatus(app.sessionId) : app.jarvis.status(app.sessionId));
+      if (currentGeneration !== generation) return;
       snapshot.value = next;
       lastSyncAt.value = Date.now();
     } catch (error) {
+      if (currentGeneration !== generation) return;
       if (error instanceof TimeoutError) {
         toast.push({
           title: 'Sync trop lente',
@@ -40,7 +51,7 @@ export const useStatusStore = defineStore('status', () => {
         });
       }
     } finally {
-      busy.value = false;
+      if (currentGeneration === generation) busy.value = false;
     }
   };
 
@@ -52,5 +63,6 @@ export const useStatusStore = defineStore('status', () => {
     quickActions,
     suggestions,
     refresh,
+    reset,
   };
 });

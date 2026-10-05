@@ -59,3 +59,13 @@ test('configured API requests include account cookies across origins', async () 
   await createHttpClient({ baseUrl: 'https://api.example.test' }).get('/account/me');
   assert.deepEqual(observed, { url: 'https://api.example.test/account/me', credentials: 'include' });
 });
+
+test('caller cancellation is preserved rather than reported as a timeout', async () => {
+  const controller = new AbortController();
+  globalThis.fetch = async (_url, options) => {
+    controller.abort();
+    assert.equal(options.signal.aborted, true);
+    throw new DOMException('Stopped', 'AbortError');
+  };
+  await assert.rejects(client.get('/chat', { signal: controller.signal }), error => error.name === 'AbortError' && !(error instanceof TimeoutError));
+});
