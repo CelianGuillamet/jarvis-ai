@@ -397,6 +397,8 @@ function makeService(options: ServiceOptions = {}) {
         label: 'ajout todo',
       }),
     } as unknown as ServiceDependencies[26],
+    {} as ServiceDependencies[27],
+    {} as ServiceDependencies[28],
   );
   jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 

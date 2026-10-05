@@ -13,6 +13,7 @@ export async function loadAccountComponents() {
     stdin: {
       contents: `
       export { default as AuthGate } from './src/features/auth/AuthGate.vue';
+      export { default as TodayView } from './src/views/TodayView.vue';
       export { default as SettingsView } from './src/views/SettingsView.vue';
       export { usePreferencesStore } from './src/stores/preferencesStore.ts';
       export { useStatusStore } from './src/stores/statusStore.ts';
@@ -25,7 +26,7 @@ export async function loadAccountComponents() {
     bundle: true,
     platform: "node",
     format: "esm",
-    external: ["vue", "pinia", "zod"],
+    external: ["vue", "pinia", "zod", "vue-router"],
     alias: { "@": resolve(root, "src") },
     define: {
       "import.meta.env": JSON.stringify({

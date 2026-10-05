@@ -20,6 +20,7 @@ export type CommandExecution = {
   policy: MutationPolicyContext;
 } & (
   | { source: 'chat' | 'inbox' }
+  | { source: 'direct'; commandId: string }
   | { source: 'confirmation'; commandId: string }
 );
 
@@ -59,7 +60,7 @@ export class CommandExecutionService {
     classify?: (result: T) => BusinessOutcome,
   ): Promise<T> {
     const id =
-      input.source === 'confirmation'
+      'commandId' in input
         ? input.commandId
         : await this.prisma.$transaction(async (tx) => {
             const journal = new CommandJournalService(tx);

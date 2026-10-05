@@ -1,4 +1,8 @@
 import {
+  TodayQuerySchema,
+  TodayPageResponseSchema,
+  TodayMutationRequestSchema,
+  TodayCommandResponseSchema,
   AccountPreferencesSchema,
   GoogleDisconnectResponseSchema,
   ChatRequestSchema,
@@ -13,6 +17,7 @@ import {
   ConversationHistoryResponseSchema,
 } from "../contracts/v1";
 import type {
+  TodayMutationRequest,
   AccountPreferences,
   ChatRequest,
   ConfirmRequest,
@@ -70,6 +75,27 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
   const http = createHttpClient(options);
 
   return {
+    today: (sessionId: string, taskOffset = 0, noteOffset = 0) => {
+      const input = checked(
+        { sessionId, taskOffset, noteOffset },
+        TodayQuerySchema,
+      );
+      const query = new URLSearchParams(
+        Object.entries(input).map(([key, value]) => [key, String(value)]),
+      );
+      return validated(
+        http.get<unknown>("/today?" + query.toString()),
+        TodayPageResponseSchema,
+      );
+    },
+    mutateToday: (input: TodayMutationRequest) =>
+      validated(
+        http.post<unknown>(
+          "/today/mutations",
+          checked(input, TodayMutationRequestSchema),
+        ),
+        TodayCommandResponseSchema,
+      ),
     preferences: () =>
       validated(
         http.get<unknown>("/account/preferences"),
@@ -124,7 +150,10 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
       ),
     refreshStatus: (sessionId?: string) =>
       validated(
-        http.post<unknown>("/jarvis/status/refresh", checked({ sessionId }, ConversationQuerySchema)),
+        http.post<unknown>(
+          "/jarvis/status/refresh",
+          checked({ sessionId }, ConversationQuerySchema),
+        ),
         JarvisStatusSnapshotSchema,
       ),
     googleAuthUrl: (sessionId: string) =>

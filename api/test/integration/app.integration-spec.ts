@@ -4,7 +4,7 @@ import { GoogleCredentialService } from '../../src/google/google-credential.serv
 import { OAuthStateService } from '../../src/google/oauth-state.service';
 import { createAuth } from '../../src/auth/create-auth';
 import { readAuthConfig } from '../../src/auth/auth-config';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { configureAuth } from '../../src/auth/configure-auth';
 import { configureHttpSafety } from '../../src/http/configure-http-safety';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -721,6 +721,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         'GET /inbox-zero/session',
         'GET /jarvis/history',
         'GET /jarvis/status',
+        'GET /today',
         'POST /account/preferences',
         'POST /auth/google/disconnect',
         'POST /inbox-zero/apply',
@@ -730,8 +731,141 @@ describe('API against disposable migrated PostgreSQL', () => {
         'POST /jarvis/chat',
         'POST /jarvis/confirm',
         'POST /jarvis/status/refresh',
+        'POST /today/mutations',
       ].sort(),
     );
+  });
+
+  it('executes direct task and note controls without model routing and replays creation', async () => {
+    const sessionId = 'today-http';
+    const ownerId = 'today-http-owner';
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        name: 'Today HTTP',
+        email: 'today-http@example.invalid',
+        emailVerified: true,
+      },
+    });
+    await prisma.betaInvite.create({
+      data: { email: 'today-http@example.invalid' },
+    });
+    const token = 'today-http-session-token';
+    await prisma.session.create({
+      data: {
+        id: 'today-http-session',
+        token,
+        userId: ownerId,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const todayCookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+
+    const modelCalls = model.mock.calls.length;
+    const text = `Today ${randomUUID()}`;
+    const create = {
+      sessionId,
+      requestId: randomUUID(),
+      mutation: { operation: 'task.create', text },
+    };
+    const post = (body: object) =>
+      request(baseUrl)
+        .post('/today/mutations')
+        .set('Cookie', todayCookie)
+        .set('Origin', 'http://localhost:5173')
+        .send(body);
+    const first = await post(create).expect(201);
+    const replay = await post(create).expect(201);
+    expect(replay.body).toEqual(first.body);
+    const task = await prisma.todo.findFirstOrThrow({
+      where: { ownerId, text },
+    });
+    expect(await prisma.todo.count({ where: { ownerId, text } })).toBe(1);
+    const duplicate = await prisma.todo.create({ data: { ownerId, text } });
+    const foreign = await prisma.todo.create({
+      data: { ownerId: 'integration-user', text },
+    });
+    await post({
+      sessionId,
+      requestId: randomUUID(),
+      mutation: { operation: 'task.complete', id: foreign.id },
+    }).expect(404);
+    expect(
+      (await prisma.todo.findUniqueOrThrow({ where: { id: foreign.id } })).done,
+    ).toBe(false);
+    await post({
+      sessionId,
+      requestId: randomUUID(),
+      mutation: { operation: 'task.edit', id: task.id, text: `${text} edited` },
+    }).expect(201);
+    await post({
+      sessionId,
+      requestId: randomUUID(),
+      mutation: { operation: 'task.complete', id: task.id },
+    }).expect(201);
+    expect(
+      (await prisma.todo.findUniqueOrThrow({ where: { id: task.id } })).done,
+    ).toBe(true);
+    await post({
+      sessionId,
+      requestId: randomUUID(),
+      mutation: { operation: 'task.reopen', id: task.id },
+    }).expect(201);
+    await post({
+      sessionId,
+      requestId: randomUUID(),
+      mutation: { operation: 'note.create', title: 'Title', text },
+    }).expect(201);
+    expect(
+      await prisma.todo.findUniqueOrThrow({ where: { id: duplicate.id } }),
+    ).toMatchObject({ text, done: false });
+    const note = await prisma.note.findFirstOrThrow({
+      where: { ownerId, text },
+    });
+    await post({
+      sessionId,
+      requestId: randomUUID(),
+      mutation: {
+        operation: 'note.edit',
+        id: note.id,
+        title: null,
+        text: 'Changed body',
+      },
+    }).expect(201);
+    expect(
+      await prisma.note.findUniqueOrThrow({ where: { id: note.id } }),
+    ).toMatchObject({ title: null, text: 'Changed body' });
+    await post({
+      sessionId,
+      requestId: randomUUID(),
+      mutation: { operation: 'task.complete', id: randomUUID() },
+    }).expect(404);
+    await request(baseUrl)
+      .post('/today/mutations')
+      .set('Cookie', todayCookie)
+      .send(create)
+      .expect(403);
+    await post({ ...create, ownerId: 'other' }).expect(400);
+    await request(baseUrl)
+      .get('/today')
+      .set('Cookie', todayCookie)
+      .query({ sessionId })
+      .expect(200);
+    expect(model.mock.calls.length).toBe(modelCalls);
+    expect(
+      await prisma.commandCompensation.count({
+        where: {
+          command: {
+            ownerId,
+            source: 'direct',
+            conversation: { clientKey: sessionId },
+          },
+        },
+      }),
+    ).toBe(6);
   });
 
   it('separates passive status from an explicit authenticated provider refresh without invoking a model', async () => {
@@ -787,6 +921,7 @@ describe('API against disposable migrated PostgreSQL', () => {
     for (const path of [
       '/account/me',
       '/account/preferences',
+      '/today',
       '/jarvis/history',
       '/jarvis/status',
       '/inbox-zero/session',
@@ -806,6 +941,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/auth/google/disconnect',
       '/jarvis/chat',
       '/jarvis/confirm',
+      '/today/mutations',
       '/jarvis/status/refresh',
       '/inbox-zero/scan',
       '/inbox-zero/step',
@@ -1142,6 +1278,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       (status.body as { metrics: { openTodos: number } }).metrics.openTodos,
     ).toBe(1);
     for (const path of [
+      '/today',
       '/jarvis/history',
       '/jarvis/status',
       '/inbox-zero/session',
@@ -1159,6 +1296,16 @@ describe('API against disposable migrated PostgreSQL', () => {
         .set('Cookie', cookie)
         .expect(404);
     }
+    await request(baseUrl)
+      .post('/today/mutations')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({
+        sessionId: first,
+        requestId: randomUUID(),
+        mutation: { operation: 'task.create', text: 'Foreign' },
+      })
+      .expect(404);
     await request(baseUrl)
       .post('/jarvis/status/refresh')
       .set('Cookie', cookie)

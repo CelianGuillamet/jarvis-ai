@@ -643,3 +643,100 @@ export function errorCodeForStatus(status: number): ApiErrorCode {
       return 'INTERNAL_ERROR';
   }
 }
+
+// Direct Today controls carry exact resource IDs; no assistant text interpretation.
+const TodayTextSchema = z.string().trim().min(1).max(10000);
+const TodayResourceIdSchema = z.uuid();
+export const TodayMutationSchema = z.discriminatedUnion('operation', [
+  z
+    .object({ operation: z.literal('task.create'), text: TodayTextSchema })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('task.edit'),
+      id: TodayResourceIdSchema,
+      text: TodayTextSchema,
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('task.complete'),
+      id: TodayResourceIdSchema,
+    })
+    .strict(),
+  z
+    .object({ operation: z.literal('task.reopen'), id: TodayResourceIdSchema })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('note.create'),
+      title: z.string().trim().max(200).nullable(),
+      text: TodayTextSchema,
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('note.edit'),
+      id: TodayResourceIdSchema,
+      title: z.string().trim().max(200).nullable(),
+      text: TodayTextSchema,
+    })
+    .strict(),
+]);
+export type TodayMutation = z.infer<typeof TodayMutationSchema>;
+export const TodayTaskSchema = z
+  .object({
+    id: TodayResourceIdSchema,
+    text: z.string(),
+    done: z.boolean(),
+    doneAt: z.iso.datetime().nullable(),
+    createdAt: z.iso.datetime(),
+  })
+  .strict();
+export const TodayNoteSchema = z
+  .object({
+    id: TodayResourceIdSchema,
+    title: z.string().nullable(),
+    text: z.string(),
+    createdAt: z.iso.datetime(),
+  })
+  .strict();
+export const TodayLocalSnapshotSchema = z
+  .object({
+    fetchedAt: z.iso.datetime(),
+    tasks: z.array(TodayTaskSchema).max(50),
+    notes: z.array(TodayNoteSchema).max(50),
+    tasksHasMore: z.boolean(),
+    notesHasMore: z.boolean(),
+  })
+  .strict();
+export type TodayLocalSnapshot = z.infer<typeof TodayLocalSnapshotSchema>;
+
+export const TodayMutationRequestSchema = z
+  .object({
+    sessionId: z.string().trim().min(1).max(128),
+    requestId: z.uuid(),
+    mutation: TodayMutationSchema,
+  })
+  .strict();
+export type TodayMutationRequest = z.infer<typeof TodayMutationRequestSchema>;
+
+export const TodayCommandResponseSchema = z
+  .object({
+    commandId: z.uuid(),
+    state: z.enum(['completed', 'executing', 'unknown', 'failed']),
+    text: z.string(),
+    simulation: z.boolean(),
+  })
+  .strict();
+export type TodayCommandResponse = z.infer<typeof TodayCommandResponseSchema>;
+
+export const TodayQuerySchema = ConversationQuerySchema.extend({
+  taskOffset: z.coerce.number().int().min(0).max(10000).default(0),
+  noteOffset: z.coerce.number().int().min(0).max(10000).default(0),
+}).strict();
+export type TodayQuery = z.infer<typeof TodayQuerySchema>;
+
+export const TodayPageResponseSchema = TodayLocalSnapshotSchema.extend({
+  conversationId: z.uuid(),
+}).strict();

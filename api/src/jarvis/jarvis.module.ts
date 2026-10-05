@@ -1,3 +1,7 @@
+import { TodayController } from '../today/today.controller';
+import { TodayReadService } from '../today/today-read.service';
+import { TodayTargetService } from '../today/today-target.service';
+import { TodayCommandService } from '../today/today-command.service';
 import { ConversationHistoryService } from './services/conversation-history.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
@@ -29,6 +33,9 @@ import { JarvisFinanceService } from './services/jarvis-finance.service';
 @Module({
   imports: [AuthModule, CommandJournalModule],
   providers: [
+    TodayReadService,
+    TodayTargetService,
+    TodayCommandService,
     ConversationHistoryService,
     JarvisService,
     PendingActionsService,
@@ -53,6 +60,6 @@ import { JarvisFinanceService } from './services/jarvis-finance.service';
     JarvisContactService,
     JarvisFinanceService,
   ],
-  controllers: [JarvisController],
+  controllers: [JarvisController, TodayController],
 })
 export class JarvisModule {}
