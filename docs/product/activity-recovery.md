@@ -8,4 +8,4 @@ Une panne réseau ou réponse serveur 5xx affiche une seule voie de reconnexion 
 
 Les écrans distinguent les lectures en cours, les données indisponibles et les collections réellement vides. Google déconnecté est un état propre à ses fonctions : les tâches, notes, conversations et leur activité locale restent utilisables sans Google.
 
-Validation : tests unitaires du journal/ownership/curseur/erreur, tests DOM de résultats durables, pagination, unavailable versus vide, panne unique et reconnexion sans remplacement du contenu ; tests PostgreSQL du journal après redémarrage et pagination à timestamps identiques. Aucun appel fournisseur réel ni déploiement.
+Validation : tests unitaires du journal/ownership/curseur/erreur, tests DOM de résultats durables, pagination, unavailable versus vide, panne unique et reconnexion sans remplacement du contenu ; tests PostgreSQL du journal après redémarrage et pagination sans doublons. Aucun appel fournisseur réel ni déploiement.
