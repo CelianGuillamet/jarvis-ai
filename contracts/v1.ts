@@ -37,17 +37,19 @@ export const AccountPreferencesSchema = z
   })
   .strict();
 export type AccountPreferences = z.infer<typeof AccountPreferencesSchema>;
-export const AccountProfileExportSchema = z.object({
-  formatVersion: z.literal(1),
-  exportedAt: z.iso.datetime(),
-  profile: AccountProfileSchema.extend({
-    emailVerified: z.boolean(),
-    image: z.string().nullable(),
-    createdAt: z.iso.datetime(),
-    updatedAt: z.iso.datetime(),
-  }).strict(),
-  preferences: AccountPreferencesSchema,
-}).strict();
+export const AccountProfileExportSchema = z
+  .object({
+    formatVersion: z.literal(1),
+    exportedAt: z.iso.datetime(),
+    profile: AccountProfileSchema.extend({
+      emailVerified: z.boolean(),
+      image: z.string().nullable(),
+      createdAt: z.iso.datetime(),
+      updatedAt: z.iso.datetime(),
+    }).strict(),
+    preferences: AccountPreferencesSchema,
+  })
+  .strict();
 const text = z.string();
 const nullableText = text.nullable();
 const count = z.number().int().nonnegative();
@@ -714,21 +716,97 @@ export const TodayNoteSchema = z
     createdAt: z.iso.datetime(),
   })
   .strict();
-export const AccountDataExportQuerySchema = z.object({
-  collection: z.enum(['tasks', 'notes', 'shopping', 'calendar', 'memory']),
-  after: z.uuid().optional(),
-}).strict();
-export type AccountDataExportQuery = z.infer<typeof AccountDataExportQuerySchema>;
-const exportPage = { formatVersion:z.literal(1), exportedAt:z.iso.datetime(), nextCursor:z.uuid().nullable() };
+export const AccountDataExportQuerySchema = z
+  .object({
+    collection: z.enum(['tasks', 'notes', 'shopping', 'calendar', 'memory']),
+    after: z.uuid().optional(),
+  })
+  .strict();
+export type AccountDataExportQuery = z.infer<
+  typeof AccountDataExportQuerySchema
+>;
+const exportPage = {
+  formatVersion: z.literal(1),
+  exportedAt: z.iso.datetime(),
+  nextCursor: z.uuid().nullable(),
+};
 export const AccountDataExportPageSchema = z.discriminatedUnion('collection', [
-  z.object({ ...exportPage, collection:z.literal('tasks'), items:z.array(TodayTaskSchema).max(50) }).strict(),
-  z.object({ ...exportPage, collection:z.literal('notes'), items:z.array(TodayNoteSchema).max(50) }).strict(),
-  z.object({ ...exportPage, collection:z.literal('memory'), items:z.array(z.object({
-    id:z.uuid(), conversationId:z.uuid(), layer:z.string(), key:z.string(), label:z.string(), value:z.string(),
-    confidence:z.number(), source:z.string(), lastSeenAt:z.iso.datetime(), createdAt:z.iso.datetime(), updatedAt:z.iso.datetime(),
-  }).strict()).max(50) }).strict(),
-  z.object({ ...exportPage, collection:z.literal('shopping'), items:z.array(z.object({ id:z.uuid(), text:z.string(), bought:z.boolean(), boughtAt:z.iso.datetime().nullable(), createdAt:z.iso.datetime() }).strict()).max(50) }).strict(),
-  z.object({ ...exportPage, collection:z.literal('calendar'), items:z.array(z.object({ id:z.uuid(), title:z.string(), when:z.iso.datetime(), createdAt:z.iso.datetime() }).strict()).max(50) }).strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('tasks'),
+      items: z.array(TodayTaskSchema).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('notes'),
+      items: z.array(TodayNoteSchema).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('memory'),
+      items: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              conversationId: z.uuid(),
+              layer: z.string(),
+              key: z.string(),
+              label: z.string(),
+              value: z.string(),
+              confidence: z.number(),
+              source: z.string(),
+              lastSeenAt: z.iso.datetime(),
+              createdAt: z.iso.datetime(),
+              updatedAt: z.iso.datetime(),
+            })
+            .strict(),
+        )
+        .max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('shopping'),
+      items: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              text: z.string(),
+              bought: z.boolean(),
+              boughtAt: z.iso.datetime().nullable(),
+              createdAt: z.iso.datetime(),
+            })
+            .strict(),
+        )
+        .max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('calendar'),
+      items: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              title: z.string(),
+              when: z.iso.datetime(),
+              createdAt: z.iso.datetime(),
+            })
+            .strict(),
+        )
+        .max(50),
+    })
+    .strict(),
 ]);
 export const TodayLocalSnapshotSchema = z
   .object({
