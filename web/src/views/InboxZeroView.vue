@@ -522,15 +522,21 @@ onBeforeUnmount(() => {
                 label="Message"
                 placeholder="Ta réponse…"
               />
+              <div v-if="inbox.replyReview && inbox.replyReview.messageId === inbox.messagePanel.message.id && inbox.replyReview.text === inbox.replyText.trim()" class="mt-3 rounded-lg border border-border p-3" aria-label="Revue avant envoi">
+                <p>À : {{ inbox.replyReview.to }}</p><p>Sujet : {{ inbox.replyReview.subject }}</p>
+                <p class="my-3 whitespace-pre-wrap break-words">{{ inbox.replyReview.text }}</p>
+                <p class="mb-3 text-sm text-muted-foreground">Cette réponse sera envoyée, puis le message sera marqué lu et archivé.</p>
+                <BaseButton :loading="inbox.busy" @click="inbox.sendReply(inbox.messagePanel.message.id)">Confirmer l’envoi et archiver</BaseButton>
+              </div>
               <div class="mt-3 flex justify-end">
                 <BaseButton
                   variant="primary"
                   size="sm"
                   :disabled="!inbox.replyText.trim()"
                   :loading="inbox.busy"
-                  @click="inbox.sendReply(inbox.messagePanel.message.id)"
+                  @click="inbox.reviewReply(inbox.messagePanel.message.id)"
                 >
-                  Envoyer + archiver
+                  Vérifier la réponse
                 </BaseButton>
               </div>
             </BaseCard>
@@ -550,6 +556,12 @@ onBeforeUnmount(() => {
                   label="Texte (optionnel)"
                   placeholder="Relancer…"
                 />
+              </div>
+              <div v-if="inbox.replyReview && inbox.replyReview.messageId === inbox.messagePanel.message.id && inbox.replyReview.text === inbox.replyText.trim()" class="mt-3 rounded-lg border border-border p-3" aria-label="Revue avant envoi">
+                <p>À : {{ inbox.replyReview.to }}</p><p>Sujet : {{ inbox.replyReview.subject }}</p>
+                <p class="my-3 whitespace-pre-wrap break-words">{{ inbox.replyReview.text }}</p>
+                <p class="mb-3 text-sm text-muted-foreground">Cette réponse sera envoyée, puis le message sera marqué lu et archivé.</p>
+                <BaseButton :loading="inbox.busy" @click="inbox.sendReply(inbox.messagePanel.message.id)">Confirmer l’envoi et archiver</BaseButton>
               </div>
               <div class="mt-3 flex justify-end">
                 <BaseButton

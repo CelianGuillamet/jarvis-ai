@@ -361,9 +361,37 @@ describe('API against disposable migrated PostgreSQL', () => {
       requestId: 'fixture-reply',
       messageIds: ['fixture-message'],
       replyText: 'Fixture reply',
+      reviewedReply: {
+        to: 'sender@example.invalid',
+        subject: 'Re: Test question',
+      },
       archiveAfter: false,
     };
     const before = gmail.sendMessage.mock.calls.length;
+    const missingReview = { ...payload, reviewedReply: undefined };
+    await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send(missingReview)
+      .expect(400);
+    const changedReview = await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({
+        ...payload,
+        requestId: 'wrong-review',
+        reviewedReply: {
+          ...payload.reviewedReply,
+          to: 'other@example.invalid',
+        },
+      })
+      .expect(201);
+    expect(
+      (changedReview.body as { results: { ok: boolean }[] }).results[0].ok,
+    ).toBe(false);
+    expect(gmail.sendMessage.mock.calls.length).toBe(before);
     gmail.modifyLabels.mockRejectedValueOnce(
       new Error('Injected label failure'),
     );
@@ -587,6 +615,10 @@ describe('API against disposable migrated PostgreSQL', () => {
           requestId: 'simulation-reply',
           messageIds: ['fixture-message'],
           replyText: 'Simulation seulement',
+          reviewedReply: {
+            to: 'sender@example.invalid',
+            subject: 'Re: Test question',
+          },
         })
         .expect(201);
       expect((response.body as { results: unknown[] }).results).toEqual([

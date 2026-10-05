@@ -51,6 +51,7 @@ describe('Shared request validation', () => {
         messageIds: ['id'],
         replyText: 'Bonjour',
         requestId: 'attempt',
+        reviewedReply: { to: 'sender@example.invalid', subject: 'Re: subject' },
       }),
     ).toMatchObject({ requestId: 'attempt' });
   });

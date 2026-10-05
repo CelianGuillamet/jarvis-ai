@@ -17,6 +17,7 @@ export type InboxReplyIntent = {
   accountSubject: string;
   messageId: string;
   replyText: string;
+  reviewedReply: { to: string; subject: string };
   archiveAfter: boolean;
 };
 export type InboxReplySteps = {
@@ -38,6 +39,7 @@ export class InboxReplyOperationService {
       accountSubject: input.accountSubject,
       messageId: input.messageId,
       replyText: input.replyText,
+      reviewedReply: input.reviewedReply,
       archiveAfter: input.archiveAfter,
     };
     const { ownerId, requestId } = input;
@@ -57,6 +59,11 @@ export class InboxReplyOperationService {
         throw new BadRequestException('Identité de réponse invalide.');
     }
     if (
+      !intent.reviewedReply ||
+      typeof intent.reviewedReply.to !== 'string' ||
+      typeof intent.reviewedReply.subject !== 'string' ||
+      !intent.reviewedReply.to.trim() ||
+      !intent.reviewedReply.subject.trim() ||
       typeof intent.replyText !== 'string' ||
       !intent.replyText.trim() ||
       intent.replyText.length > REQUEST_LIMITS.replyChars ||

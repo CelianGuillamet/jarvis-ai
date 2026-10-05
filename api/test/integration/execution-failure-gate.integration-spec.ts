@@ -53,6 +53,10 @@ describe('Phase 2 execution failure gate', () => {
       accountSubject: 'fake-subject',
       messageId: 'original',
       replyText: 'Bonjour',
+      reviewedReply: {
+        to: 'sender@example.invalid',
+        subject: 'Re: Test question',
+      },
       archiveAfter: true,
     };
     return { ownerId, conversationId, input, reply };

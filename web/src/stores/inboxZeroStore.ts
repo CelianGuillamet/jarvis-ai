@@ -1,4 +1,5 @@
 import type { InboxZeroApplyRequest, InboxZeroApplyResponse } from '@/core/contracts/v1';
+import { InboxZeroApplyResultSchema } from '@/core/contracts/v1';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
@@ -58,6 +59,13 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   const messagePanel = ref<InboxZeroMessageResponse | null>(null);
   const draft = ref<InboxZeroDraftReplyResponse | null>(null);
   const replyText = ref('');
+  const replyReview = ref<{
+    messageId: string;
+    conversationId: string;
+    text: string;
+    to: string;
+    subject: string;
+  } | null>(null);
 
   const reminderWhen = ref('demain 9h');
   const reminderText = ref('');
@@ -129,6 +137,17 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     session.value = res.session;
     items.value = res.items ?? [];
     recentActions.value = res.recentActions ?? [];
+    const recovered = new Map<string, InboxZeroApplyResponse['results'][number]>();
+    for (const action of recentActions.value) {
+      const candidates = action.payload?.results;
+      if (!Array.isArray(candidates)) continue;
+      for (const candidate of candidates) {
+        const parsed = InboxZeroApplyResultSchema.safeParse(candidate);
+        if (parsed.success && !recovered.has(parsed.data.messageId))
+          recovered.set(parsed.data.messageId, parsed.data);
+      }
+    }
+    if (recovered.size) actionResults.value = [...recovered.values()].slice(0, 100);
     selectedIds.value = selectedIds.value.filter((id) =>
       items.value.some((i) => i.messageId === id),
     );
@@ -206,6 +225,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     setCursor(messageId);
     detailBusy.value = true;
     draft.value = null;
+    replyReview.value = null;
     replyText.value = '';
     try {
       const res = await app.jarvis.inboxZeroMessage(app.sessionId, messageId);
@@ -228,6 +248,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     draftLoadToken += 1;
     messagePanel.value = null;
     draft.value = null;
+    replyReview.value = null;
     replyText.value = '';
     reminderText.value = '';
   };
@@ -260,7 +281,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     action: InboxZeroActionType,
     extra?: Pick<
       InboxZeroApplyRequest,
-      'replyText' | 'reminderWhen' | 'reminderText' | 'archiveAfter'
+      'replyText' | 'reminderWhen' | 'reminderText' | 'archiveAfter' | 'reviewedReply'
     >,
     options?: { cursorHintIndex?: number },
   ) => {
@@ -290,6 +311,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
               messageId: messageIds[0]!,
               replyText: String(extra?.replyText ?? ''),
               archiveAfter: extra?.archiveAfter !== false,
+              ...(extra?.reviewedReply ? { reviewedReply: extra.reviewedReply } : {}),
             })
           : undefined;
       const res = await app.jarvis.inboxZeroApply({
@@ -397,15 +419,54 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     await apply(suggested.action);
   };
 
+  const reviewReply = (messageId: string) => {
+    if (
+      busy.value ||
+      !replyText.value.trim() ||
+      messagePanel.value?.message.id !== messageId ||
+      !session.value
+    )
+      return;
+    replyReview.value = {
+      messageId,
+      conversationId: session.value.sessionId,
+      text: replyText.value.trim(),
+      ...messagePanel.value.reply,
+    };
+  };
+
   const sendReply = async (messageId: string) => {
     const text = replyText.value.trim();
-    if (!text) return;
+    const review = replyReview.value;
+    if (
+      actionResults.value.some(
+        (result) => result.messageId === messageId && result.outcome === 'unknown',
+      )
+    ) {
+      actionError.value =
+        'Le résultat de cet envoi est incertain. Vérifiez le message envoyé avant toute nouvelle action.';
+      return;
+    }
+    if (
+      !text ||
+      !review ||
+      review.messageId !== messageId ||
+      review.text !== text ||
+      review.conversationId !== session.value?.sessionId
+    )
+      return;
     selectedIds.value = [messageId];
     const completed = await apply('send_reply', {
-      replyText: text,
+      replyText: review.text,
+      reviewedReply: { to: review.to, subject: review.subject },
       archiveAfter: true,
     });
-    if (completed && messagePanel.value?.message.id === messageId && replyText.value.trim() === text) closeMessage();
+    if (
+      completed &&
+      messagePanel.value?.message.id === messageId &&
+      replyText.value.trim() === text
+    )
+      closeMessage();
   };
 
   const createReminder = async (messageId: string) => {
@@ -434,6 +495,8 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     messagePanel,
     draft,
     replyText,
+    replyReview,
+    reviewReply,
     reminderWhen,
     reminderText,
     currentStep,

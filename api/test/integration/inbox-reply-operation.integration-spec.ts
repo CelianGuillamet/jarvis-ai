@@ -31,6 +31,7 @@ describe('Durable Inbox reply steps', () => {
       accountSubject: 'subject',
       messageId: 'message',
       replyText: 'Bonjour',
+      reviewedReply: { to: 'sender@example.test', subject: 'Re: Subject' },
       archiveAfter: true,
     };
   }
@@ -145,6 +146,10 @@ describe('Durable Inbox reply steps', () => {
     await service.execute(input, steps);
     for (const change of [
       { replyText: 'Changed' },
+      {
+        reviewedReply: { ...input.reviewedReply, to: 'other@example.invalid' },
+      },
+      { reviewedReply: { ...input.reviewedReply, subject: 'Re: Changed' } },
       { accountId: 'other-account' },
       { archiveAfter: false },
     ]) {

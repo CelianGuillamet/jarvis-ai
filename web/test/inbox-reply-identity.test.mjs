@@ -33,3 +33,10 @@ test('isolates conversations and clears only the acknowledged attempt', async ()
   await completeReplyRequest(intent.conversationId, intent.messageId, first);
   assert.notEqual(await replyRequestId(intent), first);
 });
+
+test('binds durable attempt identity to reviewed recipient and subject', async () => {
+  const reviewed = { ...intent, reviewedReply: { to: 'sender@example.invalid', subject: 'Re: Subject' } };
+  await replyRequestId(reviewed);
+  await assert.rejects(replyRequestId({ ...reviewed, reviewedReply: { ...reviewed.reviewedReply, to: 'other@example.invalid' } }), /précédente/);
+  await assert.rejects(replyRequestId({ ...reviewed, reviewedReply: { ...reviewed.reviewedReply, subject: 'Other' } }), /précédente/);
+});

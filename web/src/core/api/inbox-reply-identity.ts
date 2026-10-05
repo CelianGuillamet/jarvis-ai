@@ -3,6 +3,7 @@ type ReplyIntent = {
   messageId: string;
   replyText: string;
   archiveAfter: boolean;
+  reviewedReply?: { to: string; subject: string };
 };
 
 function storageKey(conversationId: string, messageId: string) {
@@ -13,7 +14,7 @@ function storageKey(conversationId: string, messageId: string) {
 export async function replyRequestId(intent: ReplyIntent): Promise<string> {
   if (!intent.conversationId || !navigator.locks)
     throw new Error('La reprise sécurisée des envois nécessite un navigateur compatible.');
-  const bytes = new TextEncoder().encode(JSON.stringify([intent.replyText.trim(), intent.archiveAfter]));
+  const bytes = new TextEncoder().encode(JSON.stringify([intent.replyText.trim(), intent.archiveAfter, intent.reviewedReply ?? null]));
   const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const key = storageKey(intent.conversationId, intent.messageId);
   return navigator.locks.request(key, () => {

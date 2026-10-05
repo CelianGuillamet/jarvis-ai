@@ -17,8 +17,9 @@ function fixture(outcome) {
   const app = modules.useAppStore();
   const inbox = modules.useInboxZeroStore();
   inbox.session = { sessionId: 'conversation', step: 'urgent' };
-  inbox.messagePanel = { message: { id: 'message' }, item: null };
+  inbox.messagePanel = { message: { id: 'message' }, item: null, reply: { to: 'sender@example.invalid', subject: 'Re: Test question' } };
   inbox.replyText = 'My response';
+  inbox.reviewReply('message');
   app.jarvis.inboxZeroApply = async () => ({ session: inbox.session, items: [], recentActions: [], results: [{ messageId: 'message', outcome, ok: outcome === 'completed' }] });
   return { app, inbox };
 }
@@ -57,4 +58,29 @@ test('does not close a different message opened while the reply is in flight', a
   await inbox.sendReply('message');
   assert.equal(inbox.messagePanel.message.id, 'other');
   assert.equal(inbox.replyText, 'Other draft');
+});
+
+test('does not send without review or after reviewed text changes', async () => {
+  const { inbox, app } = fixture('completed');
+  let calls = 0;
+  app.jarvis.inboxZeroApply = async () => { calls++; throw new Error('Must not send'); };
+  inbox.replyReview = null;
+  await inbox.sendReply('message');
+  inbox.reviewReply('message');
+  inbox.replyText = 'Changed after review';
+  await inbox.sendReply('message');
+  assert.equal(calls, 0);
+});
+
+test('recovers validated per-message outcomes from the persisted action journal', async () => {
+  const { inbox, app } = fixture('unknown');
+  app.jarvis.inboxZeroSession = async () => ({ session: inbox.session, items: [], recentActions: [{ id: 'history', payload: { results: [{ messageId: 'message', outcome: 'unknown', ok: false }, { messageId: 'corrupt', outcome: 'completed', ok: false }] } }] });
+  await inbox.loadSession();
+  assert.equal(inbox.actionResults.length, 1);
+  assert.equal(inbox.actionResults[0].outcome, 'unknown');
+  let calls = 0;
+  app.jarvis.inboxZeroApply = async () => { calls++; throw new Error('Must not resend'); };
+  await inbox.sendReply('message');
+  assert.equal(calls, 0);
+  assert.match(inbox.actionError, /incertain/);
 });

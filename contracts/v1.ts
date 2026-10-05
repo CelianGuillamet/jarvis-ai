@@ -470,6 +470,7 @@ export const GmailMessageDetailSchema = z.object({
 export const InboxZeroMessageResponseSchema = z.object({
   item: InboxZeroItemViewSchema.nullable(),
   message: GmailMessageDetailSchema,
+  reply: z.strictObject({ to: z.email(), subject: text }),
 });
 export const InboxZeroDraftReplyResponseSchema = z.object({
   messageId: text,
@@ -568,11 +569,12 @@ export const InboxZeroApplyRequestSchema = z
     reminderText: text.trim().min(1).max(REQUEST_LIMITS.chatChars).optional(),
     replyText: text.trim().min(1).max(REQUEST_LIMITS.replyChars).optional(),
     archiveAfter: z.boolean().optional(),
+    reviewedReply: z.strictObject({ to: z.email(), subject: text }).optional(),
   })
   .superRefine((value, context) => {
     const required =
       value.action === 'send_reply'
-        ? (['requestId', 'replyText'] as const)
+        ? (['requestId', 'replyText', 'reviewedReply'] as const)
         : value.action === 'remind'
           ? (['reminderWhen'] as const)
           : [];
