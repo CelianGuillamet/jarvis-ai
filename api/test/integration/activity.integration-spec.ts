@@ -37,7 +37,13 @@ describe('Durable activity pagination', () => {
       await journal.advance(ownerId, command.id, 0, 'waiting');
       await journal.approve(ownerId, command.id, 1, command.digest);
       await journal.advance(ownerId, command.id, 2, 'executing');
-      await journal.advance(ownerId, command.id, 3, state as CommandState);
+      await journal.advance(
+        ownerId,
+        command.id,
+        3,
+        state as CommandState,
+        'TEST_RESULT',
+      );
       expected.set(command.id, state);
     }
   });
