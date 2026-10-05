@@ -26,7 +26,7 @@ export type CommandProposal = {
   requestId: string;
   toolName: string;
   toolVersion: string;
-  source?: 'confirmation' | 'chat' | 'inbox';
+  source?: 'confirmation' | 'chat' | 'inbox' | 'direct';
   arguments: Prisma.InputJsonObject;
   /** Resolved target snapshots, never display indices such as #1. */
   targets: Prisma.InputJsonObject[];
@@ -75,7 +75,7 @@ export class CommandJournalService {
 
   async propose(input: CommandProposal) {
     input = { ...input, source: input.source ?? 'confirmation' };
-    if (!['confirmation', 'chat', 'inbox'].includes(input.source!))
+    if (!['confirmation', 'chat', 'inbox', 'direct'].includes(input.source!))
       throw new BadRequestException('Origine de commande invalide.');
     this.assertIdentifiers(input.ownerId, input.conversationId);
     for (const [value, max] of [

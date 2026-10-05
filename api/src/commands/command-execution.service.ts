@@ -19,7 +19,7 @@ export type CommandExecution = {
   targets: Prisma.InputJsonObject[];
   policy: MutationPolicyContext;
 } & (
-  | { source: 'chat' | 'inbox' }
+  | { source: 'chat' | 'inbox' | 'direct' }
   | { source: 'confirmation'; commandId: string }
 );
 

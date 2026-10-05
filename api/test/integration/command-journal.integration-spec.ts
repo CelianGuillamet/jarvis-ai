@@ -35,6 +35,20 @@ describe('Durable command journal in PostgreSQL', () => {
     await prisma.$disconnect();
   });
 
+  it('records direct controls separately and keeps their source immutable', async () => {
+    const input = { ...proposal(), source: 'direct' as const };
+    const row = await journal.propose(input);
+    expect(row.source).toBe('direct');
+    expect((await journal.propose(input)).id).toBe(row.id);
+    await expect(
+      prisma.command.update({
+        where: { id: row.id },
+        data: { source: 'chat' },
+      }),
+    ).rejects.toThrow();
+    expect((await journal.read('command-a', row.id))?.source).toBe('direct');
+  });
+
   it('deduplicates concurrent requests durably and refuses changed payloads', async () => {
     const input = proposal();
     const rows = await Promise.all(
