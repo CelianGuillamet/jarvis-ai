@@ -146,3 +146,23 @@ Ils doivent encore être exécutés par la CI de cette migration. La prochaine
 étape est d’appeler cette préparation dans la transaction créant le travail
 d’effacement durable et invalidant sessions/OAuth state, avant la purge et la
 révocation fournisseur avec reprise après crash.
+
+
+## Écritures différées des modèles historiques
+
+JarvisHumanProfile possède son propre cache et un timer flushDirty, distinct des
+caches de statut. La plupart des tables sessionId historiques ne possèdent pas
+de clé étrangère Conversation. Une requête ou un flush déjà engagé pourrait donc
+réinsérer une ligne après purge. La migration owner_write_fence protège INSERT et
+UPDATE de 36 tables de données : propriétaire direct, conversation, habit parent
+ou integration parent. La même écriture du compteur User exige un propriétaire
+actif et sérialise la préparation d’effacement. Une conversation disparue ne peut
+plus recevoir de nouvelles données historiques. DELETE reste disponible pour la
+purge. Les transitions et résultats Command/Inbox restent séparés pour enregistrer
+les réceptions après révocation, sans autoriser un nouveau départ.
+
+Quatre tests PostgreSQL supplémentaires couvrent les quatre collections locales,
+le flush HumanProfile/mémoire, une conversation déjà supprimée et les relations
+HabitLog/GoogleOAuthToken. La CI de cette migration doit les valider. Le cache
+HumanProfile doit également être invalidé lors de l’effacement durable : le refus
+SQL de réinsertion ne dispense pas de retirer ses références en mémoire.

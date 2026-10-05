@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { CommandJournalService } from '../../src/commands/command-journal.service';
+import { TokenCipher } from '../../src/google/token-cipher';
 
 describe('Account deactivation execution fence', () => {
   const prisma = new PrismaService();
@@ -290,5 +291,144 @@ describe('Account deactivation execution fence', () => {
       'RECORDED_AFTER_REVOCATION',
     );
     await prepareErasure(ownerId);
+  });
+
+  it('rejects delayed account-level writes without changing another owner', async () => {
+    const scope = await owner();
+    const other = await owner();
+    const note = await prisma.note.create({
+      data: { ownerId: scope.ownerId, text: 'Existing private note' },
+    });
+    await prepareErasure(scope.ownerId);
+    await expect(
+      prisma.note.update({
+        where: { id: note.id },
+        data: { text: 'Late update' },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.todo.create({
+        data: { ownerId: scope.ownerId, text: 'Late task' },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.calendarEvent.create({
+        data: { ownerId: scope.ownerId, title: 'Late event', when: new Date() },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.shoppingItem.create({
+        data: { ownerId: scope.ownerId, text: 'Late item' },
+      }),
+    ).rejects.toThrow();
+    await prisma.note.create({
+      data: { ownerId: other.ownerId, text: 'Other account remains writable' },
+    });
+    expect(
+      (await prisma.note.findUniqueOrThrow({ where: { id: note.id } })).text,
+    ).toBe('Existing private note');
+  });
+
+  it('blocks a delayed human-profile flush and memory write after preflight', async () => {
+    const scope = await owner();
+    await prisma.jarvisHumanProfile.create({
+      data: {
+        sessionId: scope.conversationId,
+        speechMode: 'tu',
+        verbosity: 'normal',
+      },
+    });
+    await prepareErasure(scope.ownerId);
+    await expect(
+      prisma.jarvisHumanProfile.upsert({
+        where: { sessionId: scope.conversationId },
+        create: {
+          sessionId: scope.conversationId,
+          speechMode: 'tu',
+          verbosity: 'normal',
+          preferredName: 'Late private name',
+        },
+        update: { preferredName: 'Late private name' },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.jarvisMemoryFact.create({
+        data: {
+          sessionId: scope.conversationId,
+          layer: 'preference',
+          key: 'late',
+          label: 'Late',
+          value: 'Late memory',
+        },
+      }),
+    ).rejects.toThrow();
+    expect(
+      (
+        await prisma.jarvisHumanProfile.findUniqueOrThrow({
+          where: { sessionId: scope.conversationId },
+        })
+      ).preferredName,
+    ).toBeNull();
+  });
+
+  it('does not recreate legacy records after their conversation is gone', async () => {
+    const scope = await owner();
+    await prisma.conversation.delete({ where: { id: scope.conversationId } });
+    await expect(
+      prisma.jarvisHumanProfile.create({
+        data: {
+          sessionId: scope.conversationId,
+          speechMode: 'tu',
+          verbosity: 'normal',
+        },
+      }),
+    ).rejects.toThrow();
+    expect(
+      await prisma.jarvisHumanProfile.count({
+        where: { sessionId: scope.conversationId },
+      }),
+    ).toBe(0);
+  });
+
+  it('derives habit-log and credential write ownership through their parent records', async () => {
+    const scope = await owner();
+    const habit = await prisma.habit.create({
+      data: { sessionId: scope.conversationId, name: 'Private habit' },
+    });
+    const integration = await prisma.integrationAccount.create({
+      data: {
+        ownerId: scope.ownerId,
+        provider: 'google',
+        providerSubject: randomUUID(),
+      },
+    });
+    const id = randomUUID();
+    const cipher = new TokenCipher(
+      JSON.stringify({ fixture: Buffer.alloc(32, 41).toString('base64') }),
+      'fixture',
+    );
+    const token = await prisma.googleOAuthToken.create({
+      data: {
+        id,
+        integrationAccountId: integration.id,
+        sessionId: scope.conversationId,
+        refreshToken: cipher.encrypt('fixture-secret', `google:${id}:refresh`),
+      },
+    });
+    await prepareErasure(scope.ownerId);
+    await expect(
+      prisma.habitLog.create({
+        data: { habitId: habit.id, date: '2026-10-05' },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.googleOAuthToken.update({
+        where: { id: token.id },
+        data: { generation: randomUUID() },
+      }),
+    ).rejects.toThrow();
+    expect(await prisma.habitLog.count({ where: { habitId: habit.id } })).toBe(
+      0,
+    );
   });
 });
