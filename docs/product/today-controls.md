@@ -1,62 +1,58 @@
-# Today controls — implementation checkpoint
+# Today controls
 
-JAR-030 is in progress. GET `/today` and POST `/today/mutations` are now exposed through authenticated
-owner-scoped routes; this document does not claim that the product flow is complete.
+The French Aujourd’hui screen is the default landing page. It displays the next
+calendar event, pending confirmation, owned tasks and notes. Calendar reads remain
+passive until the user explicitly refreshes; unavailable and expired data are
+labelled separately from a verified empty result.
 
 ## Data and ownership
 
-The authenticated account supplies the owner. Clients cannot submit an owner in
-Today mutation contracts. Every edit/completion resolves the exact resource ID
-with an owner predicate. Missing and foreign IDs both return Not Found; there is
-no text-search fallback. Existing local command compensation checks the frozen
-resource values again inside its transaction before changing anything.
+GET `/today` and POST `/today/mutations` require an authenticated session and
+owned conversation. Mutation requests are subject to the existing Origin guard.
+Clients cannot submit an owner. Every edit/completion resolves the exact resource
+ID with an owner predicate. Missing and foreign IDs both return Not Found; there
+is no text-search fallback. Local compensation checks frozen resource values
+again inside its transaction before changing anything.
 
-Tasks and notes are read together in a transaction, ordered deterministically,
-with at most 50 rows per resource and explicit has-more flags. Storage failure
-returns a sanitized Unavailable outcome, never an apparently empty account.
-The snapshot includes the time of the successful read.
+Tasks and notes are read together, ordered by creation time and ID descending.
+Independent offsets select pages of at most 50 rows; a 51st row supplies the
+has-more flag. Offsets are bounded to 10,000. Navigation retains the last
+successful page on failure. Offset pagination can shift when records are inserted
+between reads; it is not an immutable browsing snapshot. Completion does not
+change ordering. Storage failures return Unavailable, never an empty account.
+The response includes the successful read time and canonical conversation ID.
 
-## Remaining execution work
+## Deterministic writes and recovery
 
-Explicit operations now enter the shared command policy and atomic local
-compensation handlers, retaining their transactional stale-target checks. Commands use the distinct `direct` source, with
-the existing database trigger continuing to forbid source changes.
+Task creation, editing, completion and reopening, and note creation and editing,
+use strict typed contracts without LLM routing. They enter the shared command
+policy and atomic compensation handlers. Commands use the immutable `direct`
+source. Simulation is labelled and produces no domain effect.
 
-The client must retain one request UUID for a submitted mutation until its
-outcome is known. The server must bind that identity to immutable intent and
-replay a completed response, never repeat an uncertain effect. A retry must
-reuse the recorded target snapshot, rather than recompute a changed envelope.
-The durable TodayCommandService now implements request-scoped transaction locks,
-immutable intent matching, a single execution claim, completed-response replay,
-unknown-outcome refusal to repeat, and simulation replay. Its PostgreSQL tests
-cover concurrent duplicates and a fresh service instance. The adapter is connected to HTTP and compensation handlers. The integration
-fixture exercises all six operations, exact-resource updates, creation replay,
-invalid input, missing IDs, owner isolation and Origin restrictions without LLM
-routing. UI submission and durable client request identity remain unfinished.
+The client retains a request UUID and SHA-256 intent fingerprint per owner,
+canonical conversation and resource lane. Task/note text is not stored in this
+recovery metadata. Web Locks serialize submissions across tabs. An unresolved
+intent must be retried with its original values; a distinct intent cannot replace
+it. Completed identities remain available for duplicate response replay. The
+explicit Nouvelle tâche/ Nouvelle note control starts a fresh creation intent
+only after the previous outcome is known.
 
-## Remaining product work
+The server serializes claims with a transaction-scoped lock, binds each request
+to immutable intent and the original target snapshot, and claims execution once.
+Completed retries replay the stored response. Executing or unknown results never
+repeat an effect automatically. The screen retains uncertain form input and
+refreshes owned data and passive status after a response.
 
-Build the French Today surface for calendar, owned tasks, notes and current
-pending actions. Add create/edit/complete/reopen controls, bounded navigation,
-explicit unavailable/stale/empty states and relevant refresh after writes.
-Preserve the passive status and explicit provider refresh introduced by JAR-026.
-No LLM routing is required for these deterministic controls.
+## Verification
 
-## Verification recorded so far
+413 API unit tests, 112 disposable PostgreSQL integration tests across 26
+migrations, 64 web tests and four integration-runner tests pass. Coverage includes
+all six HTTP operations, exact IDs and homonyms, foreign ownership and Origin
+rejection, atomic compensation, concurrent duplicate claims, restart replay,
+uncertain outcomes, tied-timestamp pagination and independent offsets.
 
-Thirteen focused unit tests pass: owner-scoped reads, bounded response and
-continuation metadata, genuine empty state, storage and malformed-row failures,
-strict mutation input, deterministic handler selection, exact owner/ID resolution,
-missing targets, frozen task/note values and creation without target lookup.
-PostgreSQL integration passes 104 tests in 12 suites with all 26 migrations,
-including direct-source persistence and immutability. The disposable database
-was removed. API typecheck and changed-file lint pass without warnings.
-
-Additional validation: 109 PostgreSQL tests in 13 suites pass with all 26
-migrations and database cleanup. Types and changed-file lint pass. The direct
-executor accepts a previously claimed command ID instead of inventing a new
-request identity.
-
-HTTP milestone: 110 PostgreSQL tests pass in 13 suites, 26 migrations replayed
-and disposable database removed. The six actual product mutations each record
-an atomic compensation; completed creation replay records no second effect.
+Real Vue DOM tests exercise task/note forms, exact editing, completion/reopening,
+uncertain retries and pagination failure. API/web typecheck, zero-warning lint,
+application builds and prototype build pass. Live Google calls, browser visual
+inspection and deployment were not performed. GitHub checks must pass on the
+reviewed head before merge; Notion moves to Done only after merge is verified.
