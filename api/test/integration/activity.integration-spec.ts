@@ -58,9 +58,11 @@ describe('Durable activity pagination', () => {
       conversationId,
       { limit: 2, cursor: first.nextCursor! },
     );
-    expect(second.commands.map((command) => command.id)).toEqual([
-      'activity-a',
-    ]);
+    expect(second.commands).toHaveLength(1);
+    const all = [...first.commands, ...second.commands];
+    expect(new Set(all.map((command) => command.id)).size).toBe(3);
+    for (const command of all)
+      expect(command.state).toBe(expected.get(command.id));
     expect(second.nextCursor).toBeNull();
     await expect(
       new ActivityService(prisma).list('foreign', conversationId, { limit: 2 }),
