@@ -22,7 +22,8 @@ const scrollToBottom = async () => {
   await nextTick();
   const el = listRef.value;
   if (!el) return;
-  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
 };
 
 const onScroll = () => {

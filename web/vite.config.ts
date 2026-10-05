@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api/auth": { target: proxyTarget, changeOrigin: true },
         "/account": { target: proxyTarget, changeOrigin: true },
+        "/today": { target: proxyTarget, changeOrigin: true },
         "/jarvis": { target: proxyTarget, changeOrigin: true },
         "/inbox-zero": { target: proxyTarget, changeOrigin: true },
         "/auth": { target: proxyTarget, changeOrigin: true },

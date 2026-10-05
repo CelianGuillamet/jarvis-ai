@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Respect the system preference for every component, including scoped animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer base {
   :root {
     --radius: 12px;
