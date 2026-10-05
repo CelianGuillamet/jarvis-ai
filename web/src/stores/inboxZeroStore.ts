@@ -589,7 +589,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   };
 
   watch(
-    () => app.sessionId,
+    () => [app.sessionId, app.accountEpoch],
     () => {
       sessionGeneration++;
       messageLoadToken++;
@@ -610,7 +610,11 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       replyText.value = '';
       actionError.value = '';
       draftSaveError.value = '';
+      draft.value = null;
+      reminderText.value = '';
+      reminderWhen.value = 'demain 9h';
     },
+    { flush: 'sync' },
   );
 
   return {

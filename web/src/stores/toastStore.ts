@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
+import { useAppStore } from './appStore';
 import { createId } from '@/shared/utils/ids';
 
 export type ToastTone = 'info' | 'success' | 'warning' | 'danger';
@@ -60,6 +61,9 @@ export const useToastStore = defineStore('toast', () => {
   const clear = () => {
     items.value = [];
   };
+
+  const app = useAppStore();
+  watch(() => app.accountEpoch, clear, { flush: 'sync' });
 
   return { items, push, dismiss, clear };
 });

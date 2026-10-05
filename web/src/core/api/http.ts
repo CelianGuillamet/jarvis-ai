@@ -146,6 +146,7 @@ export function createHttpClient(options: HttpClientOptions = {}) {
       return payload as T;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
+        if (input.signal?.aborted) throw error;
         throw new TimeoutError();
       }
       throw error;
