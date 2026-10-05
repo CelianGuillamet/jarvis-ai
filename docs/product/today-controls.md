@@ -26,8 +26,12 @@ The client must retain one request UUID for a submitted mutation until its
 outcome is known. The server must bind that identity to immutable intent and
 replay a completed response, never repeat an uncertain effect. A retry must
 reuse the recorded target snapshot, rather than recompute a changed envelope.
-Concurrent claims must have only one winner. Implement and test these guarantees
-before exposing mutation routes or enabling UI submission.
+The durable TodayCommandService now implements request-scoped transaction locks,
+immutable intent matching, a single execution claim, completed-response replay,
+unknown-outcome refusal to repeat, and simulation replay. Its PostgreSQL tests
+cover concurrent duplicates and a fresh service instance. This adapter is not
+yet connected to the HTTP routes or local compensation handlers; complete that
+wiring and its tests before enabling UI submission.
 
 ## Remaining product work
 
@@ -46,3 +50,8 @@ missing targets, frozen task/note values and creation without target lookup.
 PostgreSQL integration passes 104 tests in 12 suites with all 26 migrations,
 including direct-source persistence and immutability. The disposable database
 was removed. API typecheck and changed-file lint pass without warnings.
+
+Additional validation: 109 PostgreSQL tests in 13 suites pass with all 26
+migrations and database cleanup. Types and changed-file lint pass. The direct
+executor accepts a previously claimed command ID instead of inventing a new
+request identity.
