@@ -10,6 +10,8 @@ const tasks = Array.from({ length: 51 }, (_, index) => ({ id: randomUUID(), text
 const notes = [];
 const requests = [];
 const turns = [];
+let pendingAction = null;
+let nextEvent = null;
 let replyDraft = null;
 const inboxItem = contracts.InboxZeroItemViewSchema.parse({ id: 'fixture-item', messageId: 'fixture-message', threadId: 'fixture-thread', subject: 'Question de vérification', from: 'sender@example.test', to: 'fixture@example.test', date: now(), snippet: 'Pouvez-vous confirmer la démonstration ?', labels: ['INBOX', 'UNREAD'], gmailCategory: null, unread: true, category: 'urgent', priority: 1, reason: 'Message fictif', suggested: null, status: 'pending', lastActionAt: null });
 function inbox() {
@@ -22,12 +24,12 @@ function status() {
   const availability = revoked ? 'permission_required' : 'available';
   return contracts.JarvisStatusSnapshotSchema.parse({
     sessionId: conversationId, now: now(), timezone: 'Europe/Paris', simulation: true,
-    providers: { llm: 'local-fixture', web: 'disabled' }, profile: { speechMode: 'text', verbosity: 'concise' }, pendingAction: null,
+    providers: { llm: 'local-fixture', web: 'disabled' }, profile: { speechMode: 'text', verbosity: 'concise' }, pendingAction,
     availability: { gmail: availability, calendar: availability },
-    freshness: { gmail: { fetchedAt: now(), expiresAt: null }, calendar: { fetchedAt: now(), expiresAt: null } },
+    freshness: { gmail: { fetchedAt: now(), expiresAt: new Date(Date.now() + 60000).toISOString() }, calendar: { fetchedAt: now(), expiresAt: new Date(Date.now() + 60000).toISOString() } },
     integrations: { googleConnected: !revoked, calendarConnected: !revoked, gmailConnected: !revoked, scopes: [], lastGoogleSyncAt: now() },
     metrics: { openTodos: tasks.filter(task => !task.done).length, openShopping: 0, notesTotal: notes.length, unreadEmails: 0, eventsToday: 0, upcomingReminders: 0, habitsTotal: 0, habitsLoggedToday: 0 },
-    focus: { nextEvent: null, activeMission: null, topUnreadEmail: null },
+    focus: { nextEvent, activeMission: null, topUnreadEmail: null },
     worldModel: { factsByLayer: { identity: [], preference: [], project: [], relationship: [], workflow: [] }, sessionSummary: null },
     missions: [], actionAudit: [], workflowMemory: [], workflowSuggestions: [], upcomingReminders: [], habits: [], quickActions: [], proactiveSuggestions: [], recentActivity: [], memoryTurns: [],
   });
@@ -90,9 +92,17 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/jarvis/chat') {
       const chat = contracts.ChatRequestSchema.parse(input);
-      const result = contracts.JarvisChatResponseSchema.parse({ text: 'Réponse du fournisseur local de vérification.', meta: { simulation: true, sessionId: conversationId, historySaved: true } });
+      if (chat.text === 'Créer un rendez-vous de vérification') pendingAction = contracts.PendingActionViewSchema.parse({ id: randomUUID(), name: 'calendar.create', args: {}, summary: 'Créer le rendez-vous fictif', preview: 'Démonstration locale uniquement', risk: 'medium', sideEffect: true, planner: 'fixture', confidence: 'certain' });
+      const result = contracts.JarvisChatResponseSchema.parse({ ...(pendingAction ? { pending_action: pendingAction } : {}), text: pendingAction ? 'Veuillez confirmer le rendez-vous fictif.' : 'Réponse du fournisseur local de vérification.', meta: { simulation: true, sessionId: conversationId, historySaved: true } });
       turns.push({ id: randomUUID(), kind: 'chat', inputText: chat.text, state: 'completed', response: result, command: null, createdAt: now(), updatedAt: now() });
       return reply(result);
+    }
+    if (url.pathname === '/jarvis/confirm') {
+      const confirmation = contracts.ConfirmRequestSchema.parse(input);
+      if (!pendingAction || confirmation.actionId !== pendingAction.id) throw new Error('Unknown fixture confirmation');
+      nextEvent = { title: 'Rendez-vous fictif confirmé', when: new Date(Date.now() + 3600000).toISOString(), end: null };
+      pendingAction = null;
+      return reply(contracts.JarvisChatResponseSchema.parse({ text: 'Rendez-vous fictif enregistré.', meta: { simulation: false, sessionId: conversationId } }));
     }
     if (url.pathname === '/today/mutations' && request.method === 'POST') return reply(mutate(input));
     if (url.pathname === '/jarvis/history') return reply(contracts.ConversationHistoryResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, pendingCommand: null, turns }));

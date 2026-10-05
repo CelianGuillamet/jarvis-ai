@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BaseBadge from '@/shared/ui/BaseBadge.vue';
 import BaseButton from '@/shared/ui/BaseButton.vue';
@@ -18,6 +18,19 @@ const app = useAppStore();
 const preferences = usePreferencesStore();
 const inbox = useInboxZeroStore();
 const status = useStatusStore();
+const messageDialog = ref<HTMLDialogElement | null>(null);
+let messageOpener: HTMLElement | null = null;
+
+watch(() => Boolean(inbox.messagePanel), async open => {
+  if (open) {
+    messageOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    if (inbox.messagePanel && messageDialog.value && !messageDialog.value.open) messageDialog.value.showModal();
+  } else {
+    if (messageOpener?.isConnected) messageOpener.focus();
+    messageOpener = null;
+  }
+}, { flush: 'post' });
 
 const gmailConnected = computed(
   () => status.snapshot?.integrations.gmailConnected ?? false,
@@ -57,6 +70,8 @@ const setStep = async (step: InboxZeroStep) => {
 
 const onKeydown = (event: KeyboardEvent) => {
   if (event.defaultPrevented) return;
+  // The native modal owns keyboard navigation and Escape while open.
+  if (inbox.messagePanel) return;
   const target = event.target instanceof Element ? event.target : null;
   const tag = (target?.tagName || '').toLowerCase();
   if (['input', 'textarea', 'select', 'button', 'a'].includes(tag) || target?.closest('button, a, [role=button]') || target?.closest('[contenteditable=true]')) return;
@@ -367,6 +382,7 @@ onBeforeUnmount(() => {
             >
               <input
                 type="checkbox"
+                :aria-label="`Sélectionner : ${item.subject}`"
                 class="mt-1 size-4 accent-primary"
                 :checked="inbox.isSelected(item.messageId)"
                 @click.stop
@@ -375,9 +391,14 @@ onBeforeUnmount(() => {
               <div class="min-w-0 flex-1">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
-                    <div class="truncate text-sm font-semibold tracking-tight">
+                    <button
+                      type="button"
+                      class="block max-w-full truncate text-left text-sm font-semibold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      :aria-label="`Ouvrir : ${item.subject}`"
+                      @click.stop="inbox.openMessage(item.messageId)"
+                    >
                       {{ item.subject }}
-                    </div>
+                    </button>
                     <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/70">
                       <span class="truncate">{{ item.from }}</span>
                       <button
@@ -457,9 +478,12 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Message panel -->
-    <div
+    <dialog
       v-if="inbox.messagePanel"
-      class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-3"
+      ref="messageDialog"
+      aria-label="Message et réponse"
+      class="m-auto max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] max-w-3xl overflow-auto bg-transparent p-0 text-foreground backdrop:bg-black/70"
+      @cancel.prevent="inbox.closeMessage"
       @click.self="inbox.closeMessage"
     >
       <BaseCard class="w-full max-w-3xl overflow-hidden">
@@ -587,6 +611,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </BaseCard>
-    </div>
+    </dialog>
   </section>
 </template>
