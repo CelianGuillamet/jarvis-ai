@@ -43,6 +43,7 @@ async function retryConnection() {
 
 <template>
   <div class="min-h-dvh bg-background">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-card focus:p-3 focus:text-foreground focus:ring-2 focus:ring-primary">Aller au contenu</a>
     <div
       class="relative mx-auto grid max-w-screen-xl grid-cols-1 gap-4 p-3 lg:grid-cols-[260px_1fr] lg:p-4"
     >
@@ -161,24 +162,24 @@ async function retryConnection() {
 
             <span class="font-medium">{{ item.label }}</span>
             <span
-              class="ml-auto hidden text-xs text-muted-foreground/60 group-hover:block"
+              class="ml-auto hidden text-xs text-muted-foreground group-hover:block"
             >{{ item.hint }}</span>
           </RouterLink>
         </nav>
 
         <!-- Footer tip -->
         <div class="m-3 rounded-xl border border-border/40 bg-muted/20 p-3">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Astuce
           </p>
-          <p class="mt-1 text-xs leading-relaxed text-muted-foreground/60">
+          <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
             "Briefing du jour" · "Mes todos" · "Météo Paris"
           </p>
         </div>
       </aside>
 
       <!-- Main content -->
-      <main class="min-w-0">
+      <main id="main-content" tabindex="-1" class="min-w-0">
         <section v-if="app.apiUnavailable" role="alert" class="rounded-2xl border border-border bg-card p-6 space-y-3">
           <h1 class="text-xl font-semibold">Jarvis est temporairement indisponible</h1>
           <p>La connexion au serveur ne peut pas être vérifiée. Vos actions déjà transmises peuvent avoir été exécutées ; vérifiez leur résultat après reconnexion.</p>

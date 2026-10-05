@@ -46,3 +46,7 @@ une modification locale réelle plutôt qu’une simulation sans effet.
 Panne HTTP503 simulée : Actualiser affiche une seule alerte globale et le bouton
 « Réessayer la connexion ». Après remise en service et clic sur ce bouton, la
 note reste visible. Ceci vérifie la panne API, pas encore le mode réseau offline.
+
+Today vérifié à 390x844, 768x1024 et1440x900 : scrollWidth385/763/1435 inférieur à innerWidth390/768/1440, sans débordement horizontal. Ceci ne valide pas encore les autres écrans. Navigation : conseils alpha0.5/0.6 mesurés rgba(128,132,147) sur fond sombre, contrastes estimés2.15/2.58 ; opacité supprimée (texte opaque5.03 sur rgb16,18,24). Vérification réelle du lien « Aller au contenu » via Enter : activeElement MAIN#main-content. Préférence viewport temporaire réinitialisée.
+
+Inbox fictive : ouverture du message, saisie réponse, revue affichant destinataire/sujet/texte exacts, confirmation puis résultat par message « Action terminée » et compteur0 vérifiés dans navigateur. Aucun mail réel envoyé. Chat : réponse du fournisseur local visible ; rechargement puis accueil (préférences du banc réinitialisées au redémarrage) et retour Chat restaurent ce tour via endpoint history. Ceci ne valide pas la persistance PostgreSQL : elle a ses propres tests. Banc enrichi Inbox/session/message/draft/apply et chat/history ; calendrier/confirm et cas partial/unknown encore à compléter.

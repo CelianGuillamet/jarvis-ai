@@ -9,6 +9,12 @@ let preferences = { displayTimezone: 'Europe/Paris', theme: 'dark', onboardingCo
 const tasks = Array.from({ length: 51 }, (_, index) => ({ id: randomUUID(), text: `Tâche de vérification ${index + 1}`, done: false, doneAt: null, createdAt: now() }));
 const notes = [];
 const requests = [];
+const turns = [];
+let replyDraft = null;
+const inboxItem = contracts.InboxZeroItemViewSchema.parse({ id: 'fixture-item', messageId: 'fixture-message', threadId: 'fixture-thread', subject: 'Question de vérification', from: 'sender@example.test', to: 'fixture@example.test', date: now(), snippet: 'Pouvez-vous confirmer la démonstration ?', labels: ['INBOX', 'UNREAD'], gmailCategory: null, unread: true, category: 'urgent', priority: 1, reason: 'Message fictif', suggested: null, status: 'pending', lastActionAt: null });
+function inbox() {
+  return contracts.InboxZeroScanResponseSchema.parse({ session: { sessionId: conversationId, status: 'active', step: 'urgent', query: 'in:inbox', startedAt: now(), scannedAt: now(), counts: Object.fromEntries(['urgent', 'quick_wins', 'schedule', 'ignore', 'newsletters'].map(category => [category, { pending: category === 'urgent' && inboxItem.status === 'pending' ? 1 : 0, processed: category === 'urgent' && inboxItem.status === 'processed' ? 1 : 0 }])) }, items: [inboxItem], recentActions: [] });
+}
 const results = new Map();
 let unavailable = false;
 let revoked = false;
@@ -67,8 +73,29 @@ const server = createServer(async (request, response) => {
       const query = contracts.TodayQuerySchema.parse(Object.fromEntries(url.searchParams));
       return reply(contracts.TodayPageResponseSchema.parse({ conversationId, fetchedAt: now(), tasks: tasks.slice(query.taskOffset, query.taskOffset + 50), notes: notes.slice(query.noteOffset, query.noteOffset + 50), tasksHasMore: tasks.length > query.taskOffset + 50, notesHasMore: notes.length > query.noteOffset + 50 }));
     }
+    if (url.pathname === '/inbox-zero/session' || url.pathname === '/inbox-zero/scan') return reply(inbox());
+    if (url.pathname === '/inbox-zero/message') return reply(contracts.InboxZeroMessageResponseSchema.parse({ item: inboxItem, message: { ...inboxItem, id: inboxItem.messageId, bodyText: 'Pouvez-vous confirmer la démonstration ?', }, reply: { to: 'sender@example.test', subject: 'Re: Question de vérification' } }));
+    if (url.pathname === '/inbox-zero/reply-draft') {
+      if (request.method === 'POST') {
+        const draft = contracts.InboxReplyDraftSaveRequestSchema.parse(input);
+        replyDraft = { messageId: draft.messageId, text: draft.text, version: (replyDraft?.version || 0) + 1, updatedAt: now() };
+      }
+      return reply(contracts.InboxReplyDraftResponseSchema.parse({ draft: replyDraft }));
+    }
+    if (url.pathname === '/inbox-zero/apply') {
+      const action = contracts.InboxZeroApplyRequestSchema.parse(input);
+      if (action.messageIds.some(id => id !== inboxItem.messageId)) throw new Error('Unknown fixture message');
+      inboxItem.status = 'processed'; inboxItem.lastActionAt = now();
+      return reply(contracts.InboxZeroApplyResponseSchema.parse({ ...inbox(), results: action.messageIds.map(messageId => ({ messageId, ok: true, outcome: 'completed' })) }));
+    }
+    if (url.pathname === '/jarvis/chat') {
+      const chat = contracts.ChatRequestSchema.parse(input);
+      const result = contracts.JarvisChatResponseSchema.parse({ text: 'Réponse du fournisseur local de vérification.', meta: { simulation: true, sessionId: conversationId, historySaved: true } });
+      turns.push({ id: randomUUID(), kind: 'chat', inputText: chat.text, state: 'completed', response: result, command: null, createdAt: now(), updatedAt: now() });
+      return reply(result);
+    }
     if (url.pathname === '/today/mutations' && request.method === 'POST') return reply(mutate(input));
-    if (url.pathname === '/jarvis/history') return reply(contracts.ConversationHistoryResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, pendingCommand: null, turns: [] }));
+    if (url.pathname === '/jarvis/history') return reply(contracts.ConversationHistoryResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, pendingCommand: null, turns }));
     if (url.pathname === '/jarvis/activity') return reply(contracts.ActivityResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, commands: [] }));
     response.statusCode = 404; reply({ error: 'Unsupported verification route' });
   } catch (error) { response.statusCode = 400; response.end(JSON.stringify({ error: error.message })); }
