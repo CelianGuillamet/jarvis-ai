@@ -61,7 +61,7 @@ la migration SQL spécifique après revue des contraintes et courses d’exécut
 
 Export profil : projection User explicite. Pages locales tâches/notes/shopping/calendar : ownerId de l’identité signée, curseur UUID strict, take51/items50. Mémoire : jointure SQL paramétrée JarvisMemoryFact.sessionId vers Conversation.id, ownerId obligatoire sans liste de conversations non bornée. Inventaire HTTP privé et matrice de sécurité mis à jour.
 
-Ces pages lisent l’état courant à chaque requête : elles ne garantissent pas encore un snapshot cohérent multi-pages/multi-collections sous mutations concurrentes. La cohérence de l’export complet reste à implémenter et tester avant livraison. Historique, Inbox et autres modèles retenus doivent être couverts. Aucun test PostgreSQL d’export encore exécuté.
+Ces pages lisent l’état courant à chaque requête : elles ne garantissent pas encore un snapshot cohérent multi-pages/multi-collections sous mutations concurrentes. La cohérence de l’export complet reste à implémenter et tester avant livraison. Historique, Inbox et autres modèles retenus doivent être couverts. Les tests PostgreSQL de ces exports sont désormais validés par la CI sur le commit 2e0cd93.
 
 ## Inventaire complet et copies historiques
 
@@ -93,3 +93,30 @@ annulation et absence de marqueur complet si commit échoue. Tests PostgreSQL aj
 pour isolation entre comptes, pagination et mutations concurrentes pendant le
 snapshot, mais non exécutés : Docker répond HTTP 500, et le runner de base jetable
 a échoué avant les tests. La suppression, rétention et interface restent à faire.
+
+
+## Preuves CI et frontière de suppression
+
+Sur 2e0cd93, les quatre contrôles de PR31 sont SUCCESS (runs 37356557497 et
+37356524670). Le log API de 37356524670 contient PASS app.integration-spec.ts
+et 16 suites / 117 tests PostgreSQL. Le test ajouté exécute le téléchargement
+réel, vérifie son marqueur complet, exclut le jeton de session et les données
+d’un autre compte, puis modifie et insère des notes après le début de la
+transaction : le snapshot conserve les 51 notes originales. L’indisponibilité
+Docker locale reste une limitation locale, sans empêcher cette preuve CI.
+
+Avant toute suppression, la simple désactivation de User ne suffit pas : une
+requête déjà authentifiée peut encore commencer un effet fournisseur. Il faut
+synchroniser la désactivation avec les transitions Command -> executing et
+InboxReplyOperation -> sending au niveau PostgreSQL, par verrouillage du compte
+et refus des nouveaux départs lorsque disabled=true. Les états executing/unknown,
+sending/unknown et les suites Inbox encore incomplètes exigent une réconciliation
+avant purge. Une désactivation durable doit précéder le travail d’effacement ;
+ce cycle, sa reprise après crash et son journal minimal restent à implémenter.
+
+StatusResourceCache dispose maintenant d’une invalidation ciblée qui retire
+l’entrée et empêche un refresh en vol de republier son résultat. Le test préserve
+le cache d’un autre compte et vérifie la libération de capacité après fin du
+refresh. Cette primitive n’est pas encore raccordée au cycle d’effacement ; les
+maps convo/recentMemory de JarvisService doivent aussi être vidées pour chaque
+conversation appartenant au compte. Aucune suppression de compte n’est livrée.

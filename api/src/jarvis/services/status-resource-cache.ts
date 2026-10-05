@@ -33,6 +33,11 @@ export class StatusResourceCache<T> {
     };
   }
 
+  /** Removal also prevents an already-running refresh from republishing data. */
+  invalidate(key: string): void {
+    this.entries.delete(key);
+  }
+
   async read(
     key: string,
     revision: string,
