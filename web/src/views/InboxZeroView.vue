@@ -123,20 +123,28 @@ const onKeydown = (event: KeyboardEvent) => {
   }
 };
 
+let disposed = false;
 onMounted(async () => {
   await status.refresh();
+  if (disposed || app.apiUnavailable || !gmailConnected.value) return;
   await inbox.loadSession();
+  if (disposed || app.apiUnavailable) return;
   if (!inbox.session?.scannedAt) await inbox.scan({ refresh: true });
-  window.addEventListener('keydown', onKeydown);
+  if (!disposed) window.addEventListener('keydown', onKeydown);
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   window.removeEventListener('keydown', onKeydown);
 });
 </script>
 
 <template>
   <section class="flex h-[calc(100dvh-2rem)] flex-col gap-3">
+    <p v-if="status.busy || inbox.busy" role="status">Chargement de la boîte de réception…</p>
+    <p v-else-if="!status.snapshot" role="alert">La connexion Gmail ne peut pas être vérifiée. Actualisez la connexion avant de scanner.</p>
+    <p v-else-if="!gmailConnected" role="status">Gmail n’est pas connecté. Connectez votre compte pour consulter vos messages.</p>
+    <p v-else-if="inbox.session?.scannedAt && !inbox.items.length" role="status">Aucun message dans cette lecture.</p>
     <p v-if="inbox.actionError" role="alert" class="shrink-0 rounded-xl border border-red-500/40 p-3">{{ inbox.actionError }} Votre réponse reste disponible ; vérifiez le résultat avant tout nouvel envoi.</p>
     <aside v-if="inbox.actionResults.length" aria-label="Résultats des actions" class="max-h-40 shrink-0 overflow-auto rounded-xl border border-border p-3">
       <h2 class="font-medium">Résultats par message</h2>

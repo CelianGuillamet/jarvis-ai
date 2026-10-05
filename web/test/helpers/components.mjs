@@ -12,6 +12,9 @@ export async function loadAccountComponents() {
   await build({
     stdin: {
       contents: `
+      export { default as ActivityView } from './src/views/ActivityView.vue';
+      export { default as AppShell } from './src/layouts/AppShell.vue';
+      export { useToastStore } from './src/stores/toastStore.ts';
       export { default as AuthGate } from './src/features/auth/AuthGate.vue';
       export { default as InboxZeroView } from './src/views/InboxZeroView.vue';
       export { default as TodayView } from './src/views/TodayView.vue';

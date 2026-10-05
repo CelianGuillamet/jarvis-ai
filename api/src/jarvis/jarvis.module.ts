@@ -1,3 +1,4 @@
+import { ActivityService } from './services/activity.service';
 import { TodayController } from '../today/today.controller';
 import { TodayReadService } from '../today/today-read.service';
 import { TodayTargetService } from '../today/today-target.service';
@@ -33,6 +34,7 @@ import { JarvisFinanceService } from './services/jarvis-finance.service';
 @Module({
   imports: [AuthModule, CommandJournalModule],
   providers: [
+    ActivityService,
     TodayReadService,
     TodayTargetService,
     TodayCommandService,

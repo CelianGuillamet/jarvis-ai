@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAppStore } from '@/stores/appStore';
 import { useStatusStore } from '@/stores/statusStore';
@@ -19,12 +19,26 @@ const items: NavItem[] = [
   { to: '/chat', label: 'Chat', hint: 'Dialogue & actions', icon: 'chat' },
   { to: '/dashboard', label: 'Aujourd’hui', hint: 'Tâches, notes et calendrier', icon: 'dashboard' },
   { to: '/inbox-zero', label: 'Inbox Zero', hint: 'Email triage', icon: 'inbox' },
-  { to: '/settings', label: 'Settings', hint: 'Session & config', icon: 'settings' },
+  { to: '/activity', label: 'Activité', hint: 'Actions et résultats', icon: 'dashboard' },
+  { to: '/settings', label: 'Paramètres', hint: 'Compte et préférences', icon: 'settings' },
 ];
 
 const currentPath = computed(() => route.path);
 const isActive = (to: string) => currentPath.value.startsWith(to);
-const isOnline = computed(() => !!status.snapshot);
+const isOnline = computed(() => !!status.snapshot && !app.apiUnavailable);
+const recovering = ref(false);
+async function retryConnection() {
+  if (recovering.value) return;
+  recovering.value = true;
+  const epoch = app.accountEpoch;
+  try {
+    const snapshot = await app.jarvis.status(app.sessionId);
+    if (epoch !== app.accountEpoch) return;
+    status.snapshot = snapshot;
+    app.apiUnavailable = false;
+  } catch { if (epoch === app.accountEpoch) app.apiUnavailable = true; }
+  finally { recovering.value = false; }
+}
 </script>
 
 <template>
@@ -165,7 +179,12 @@ const isOnline = computed(() => !!status.snapshot);
 
       <!-- Main content -->
       <main class="min-w-0">
-        <slot />
+        <section v-if="app.apiUnavailable" role="alert" class="rounded-2xl border border-border bg-card p-6 space-y-3">
+          <h1 class="text-xl font-semibold">Jarvis est temporairement indisponible</h1>
+          <p>La connexion au serveur ne peut pas être vérifiée. Vos actions déjà transmises peuvent avoir été exécutées ; vérifiez leur résultat après reconnexion.</p>
+          <button type="button" class="underline" :disabled="recovering" @click="retryConnection">{{ recovering ? 'Vérification en cours…' : 'Réessayer la connexion' }}</button>
+        </section>
+        <div v-show="!app.apiUnavailable" :inert="app.apiUnavailable"><slot /></div>
       </main>
     </div>
   </div>
