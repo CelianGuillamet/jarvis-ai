@@ -166,3 +166,22 @@ le flush HumanProfile/mémoire, une conversation déjà supprimée et les relati
 HabitLog/GoogleOAuthToken. La CI de cette migration doit les valider. Le cache
 HumanProfile doit également être invalidé lors de l’effacement durable : le refus
 SQL de réinsertion ne dispense pas de retirer ses références en mémoire.
+
+
+## Profil humain : invalidation et données indisponibles
+
+HumanProfileService vérifie désormais un propriétaire actif même pour une lecture
+cachée. Les chargements simultanés sont dédupliqués et bornés. forget(conversationId)
+retire cache et jeton de chargement ; une réponse SQL retardée ne peut republier
+son profil ni provoquer une sauvegarde via updateFromUserText. Une lecture en
+échec ne crée plus de profil par défaut sauvegardable qui écraserait des
+préférences existantes. Les warnings de cette couche omettent les identifiants
+et détails bruts d’erreur. Ces protections restent à raccorder au travail
+d’effacement durable ; la suppression du compte n’est toujours pas livrée.
+
+Sur 984b6d7, quatre CI sont SUCCESS ; le log API 37358942525 donne 17 suites /
+129 tests PostgreSQL, dont les 12 cas execution/write-fence. La vérification locale
+HumanProfile passe 65 suites / 444 tests unitaires, types, lint et build. Six cas
+spécifiques couvrent les lectures en vol, mises à jour, défauts après erreur,
+propriétaire désactivé et limites de concurrence. Vérifier le prochain head CI
+après publication de cette couche.
