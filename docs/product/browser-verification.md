@@ -58,3 +58,5 @@ Correction Inbox clavier/lecteur écran : cases désormais nommées « Sélectio
 Calendrier fictif : confirmation affichée dans Chat puis « Rendez-vous fictif confirmé » visible dans Today. Aucune mutation Google réelle.
 
 Dialogue Inbox désormais natif : showModal, nom accessible, fermeture via cancel/Échap et focus rendu après retrait du dialogue. Vérification navigateur : ouverture Enter, dialogue visible, Échap depuis champ Message, dialogue absent puis activeElement aria-label « Ouvrir : Question de vérification ». Le premier essai a révélé un retour de focus trop tôt ; watch flush post corrige ce défaut, revérifié. Aucun test VoiceOver réel encore effectué.
+
+Dialogue Inbox riche à390/768/1440 : largeur interne/scroll361/361,739/739,768/768, aucun débordement. Défaut mobile visuel : header actions masquait Fermer et compressait le sujet ; header vertical sur mobile puis actions repliables corrigent le problème. Bouton Fermer entièrement dans viewport aux trois tailles puis clic ferme et rend focus. Libellés opaques calculés rgb128,132,147 après suppression des opacités faibles Inbox ; audit contraste complet des deux thèmes reste à effectuer.
