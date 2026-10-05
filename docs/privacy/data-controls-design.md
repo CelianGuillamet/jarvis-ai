@@ -91,8 +91,8 @@ complète. Les anciennes pages restent des lectures de l’état courant.
 Tests unitaires : isolation demandée, couverture de projections, redaction,
 annulation et absence de marqueur complet si commit échoue. Tests PostgreSQL ajoutés
 pour isolation entre comptes, pagination et mutations concurrentes pendant le
-snapshot, mais non exécutés : Docker répond HTTP 500, et le runner de base jetable
-a échoué avant les tests. La suppression, rétention et interface restent à faire.
+snapshot. Ils ont été validés en CI (voir preuves ci-dessous) ; Docker local
+répond HTTP 500, et le runner de base jetable local a échoué avant les tests. La suppression, rétention et interface restent à faire.
 
 
 ## Preuves CI et frontière de suppression
@@ -120,3 +120,29 @@ le cache d’un autre compte et vérifie la libération de capacité après fin 
 refresh. Cette primitive n’est pas encore raccordée au cycle d’effacement ; les
 maps convo/recentMemory de JarvisService doivent aussi être vidées pour chaque
 conversation appartenant au compte. Aucune suppression de compte n’est livrée.
+
+
+## Préparation SQL de l’effacement engagée
+
+La migration account_execution_fence ajoute un compteur interne executionEpoch
+sur User. Les propositions Command/Inbox et départs executing/sending doivent
+incrémenter ce compteur sur un compte actif dans la même transaction que la
+transition. Cette écriture sérialise la préparation de suppression et invalide
+une transaction REPEATABLE READ qui aurait lu le compte avant un nouveau départ.
+Les transitions de résultat restent permises après révocation pour enregistrer
+une réception et conserver la possibilité de réconciliation.
+
+prepare_account_erasure verrouille le compte, refuse les Command executing/unknown,
+Inbox sending/unknown et les envois sent dont localComplete est faux, puis
+désactive le compte. Cette fonction est réservée à la préparation d’effacement ;
+la révocation administrative directe reste possible même en cas d’opération
+incertaine. Aucun trigger global ne bloque cette révocation. Aucun effacement de
+journal append-only ni suppression de données n’est encore implémenté.
+
+Huit tests PostgreSQL couvrent refus des nouveaux départs, conservation des
+résultats inconnus, propriétaire distinct, course désactivation/exécution avec
+observation d’un vrai verrou SQL, ancien snapshot, Inbox et révocation immédiate.
+Ils doivent encore être exécutés par la CI de cette migration. La prochaine
+étape est d’appeler cette préparation dans la transaction créant le travail
+d’effacement durable et invalidant sessions/OAuth state, avant la purge et la
+révocation fournisseur avec reprise après crash.

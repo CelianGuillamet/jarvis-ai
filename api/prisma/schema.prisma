@@ -478,6 +478,8 @@ model User {
   emailVerified Boolean   @default(false)
   image         String?
   disabled      Boolean   @default(false)
+  // SQL execution claims increment this fence to serialize account deactivation.
+  executionEpoch BigInt    @default(0)
   displayTimezone String  @default("Europe/Paris")
   theme         String    @default("dark")
   onboardingCompleted Boolean @default(false)
