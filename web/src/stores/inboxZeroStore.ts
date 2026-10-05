@@ -1,6 +1,11 @@
-import type { InboxZeroApplyRequest } from '@/core/contracts/v1';
+import type {
+  InboxZeroApplyRequest,
+  InboxZeroApplyResponse,
+  InboxReplyDraft,
+} from '@/core/contracts/v1';
+import { InboxZeroApplyResultSchema } from '@/core/contracts/v1';
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import type {
   InboxZeroActionType,
@@ -39,11 +44,14 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   const app = useAppStore();
   const toast = useToastStore();
 
+  let sessionGeneration = 0;
   let messageLoadToken = 0;
   let draftLoadToken = 0;
 
   const session = ref<InboxZeroSessionView | null>(null);
   const items = ref<InboxZeroItemView[]>([]);
+  const actionResults = ref<InboxZeroApplyResponse['results']>([]);
+  const actionError = ref('');
   const recentActions = ref<InboxZeroScanResponse['recentActions']>([]);
 
   const busy = ref(false);
@@ -56,6 +64,22 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   const messagePanel = ref<InboxZeroMessageResponse | null>(null);
   const draft = ref<InboxZeroDraftReplyResponse | null>(null);
   const replyText = ref('');
+  const savedDraft = ref<InboxReplyDraft | null>(null);
+  const draftSaveBusy = ref(false);
+  const draftSaveError = ref('');
+  const replyReview = ref<{
+    messageId: string;
+    conversationId: string;
+    text: string;
+    to: string;
+    subject: string;
+  } | null>(null);
+
+  const replyOutcome = computed(
+    () =>
+      actionResults.value.find((result) => result.messageId === messagePanel.value?.message.id)
+        ?.outcome ?? null,
+  );
 
   const reminderWhen = ref('demain 9h');
   const reminderText = ref('');
@@ -120,10 +144,24 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     selectedIds.value = uniqueStrings(filteredItems.value.map((i) => i.messageId));
   };
 
-  const applyScanResponse = (res: InboxZeroScanResponse, options?: { cursorHintIndex?: number }) => {
+  const applyScanResponse = (
+    res: InboxZeroScanResponse,
+    options?: { cursorHintIndex?: number },
+  ) => {
     session.value = res.session;
     items.value = res.items ?? [];
     recentActions.value = res.recentActions ?? [];
+    const recovered = new Map<string, InboxZeroApplyResponse['results'][number]>();
+    for (const action of recentActions.value) {
+      const candidates = action.payload?.results;
+      if (!Array.isArray(candidates)) continue;
+      for (const candidate of candidates) {
+        const parsed = InboxZeroApplyResultSchema.safeParse(candidate);
+        if (parsed.success && !recovered.has(parsed.data.messageId))
+          recovered.set(parsed.data.messageId, parsed.data);
+      }
+    }
+    if (recovered.size) actionResults.value = [...recovered.values()].slice(0, 100);
     selectedIds.value = selectedIds.value.filter((id) =>
       items.value.some((i) => i.messageId === id),
     );
@@ -131,6 +169,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   };
 
   const scan = async (options?: { refresh?: boolean; query?: string }) => {
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const res = await app.jarvis.inboxZeroScan({
@@ -139,12 +178,14 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
         ...(options?.query ? { query: options.query } : {}),
         limit: 40,
       });
+      if (generation !== sessionGeneration) return;
       applyScanResponse(res);
     } catch (error) {
+      if (generation !== sessionGeneration) return;
       if (error instanceof TimeoutError) {
         toast.push({
           title: 'Scan trop lent',
-          detail: "Le scan Inbox Zero a expiré. Réessaie ou augmente le timeout.",
+          detail: 'Le scan Inbox Zero a expiré. Réessaie ou augmente le timeout.',
           tone: 'warning',
         });
       } else {
@@ -155,57 +196,82 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
         });
       }
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
   };
 
   const loadSession = async () => {
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const res = await app.jarvis.inboxZeroSession(app.sessionId);
+      if (generation !== sessionGeneration) return;
       applyScanResponse(res);
     } catch (error) {
+      if (generation !== sessionGeneration) return;
       toast.push({
         title: 'Erreur reprise',
         detail: error instanceof Error ? error.message : 'Erreur inconnue.',
         tone: 'danger',
       });
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
   };
 
   const setStep = async (step: InboxZeroStep) => {
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const res = await app.jarvis.inboxZeroSetStep({
         sessionId: app.sessionId,
         step,
       });
+      if (generation !== sessionGeneration) return;
       applyScanResponse(res);
       clearSelection();
     } catch (error) {
+      if (generation !== sessionGeneration) return;
       toast.push({
         title: 'Erreur étape',
         detail: error instanceof Error ? error.message : 'Erreur inconnue.',
         tone: 'danger',
       });
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
   };
 
   const openMessage = async (messageId: string) => {
+    if (messagePanel.value?.message.id === messageId) return;
+    if (
+      messagePanel.value &&
+      messagePanel.value.message.id !== messageId &&
+      replyText.value &&
+      replyText.value !== savedDraft.value?.text
+    ) {
+      draftSaveError.value = 'Enregistrez le brouillon avant de changer de message.';
+      return;
+    }
     const token = ++messageLoadToken;
+    messagePanel.value = null;
+    savedDraft.value = null;
+    draftSaveError.value = '';
     draftLoadToken += 1;
     setCursor(messageId);
     detailBusy.value = true;
     draft.value = null;
+    replyReview.value = null;
     replyText.value = '';
     try {
-      const res = await app.jarvis.inboxZeroMessage(app.sessionId, messageId);
+      const [res, persisted] = await Promise.all([
+        app.jarvis.inboxZeroMessage(session.value?.sessionId ?? app.sessionId, messageId),
+        app.jarvis.inboxReplyDraft(session.value?.sessionId ?? app.sessionId, messageId),
+      ]);
       if (token !== messageLoadToken) return;
       messagePanel.value = res;
+      savedDraft.value = persisted.draft;
+      replyText.value = persisted.draft?.text ?? '';
     } catch (error) {
       if (token !== messageLoadToken) return;
       toast.push({
@@ -218,13 +284,47 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     }
   };
 
-  const closeMessage = () => {
+  const dismissMessage = () => {
     messageLoadToken += 1;
     draftLoadToken += 1;
     messagePanel.value = null;
     draft.value = null;
+    replyReview.value = null;
     replyText.value = '';
     reminderText.value = '';
+  };
+
+  const closeMessage = () => {
+    if (replyText.value && replyText.value !== savedDraft.value?.text) {
+      draftSaveError.value = 'Enregistrez le brouillon avant de fermer le message.';
+      return;
+    }
+    dismissMessage();
+  };
+
+  const saveReplyDraft = async () => {
+    const messageId = messagePanel.value?.message.id;
+    if (!messageId || draftSaveBusy.value || busy.value) return;
+    const token = messageLoadToken;
+    draftSaveBusy.value = true;
+    draftSaveError.value = '';
+    try {
+      const result = await app.jarvis.saveInboxReplyDraft({
+        sessionId: session.value?.sessionId ?? app.sessionId,
+        messageId,
+        text: replyText.value,
+        version: savedDraft.value?.version ?? 0,
+      });
+      if (token === messageLoadToken) savedDraft.value = result.draft;
+    } catch (error) {
+      if (token === messageLoadToken)
+        draftSaveError.value =
+          error instanceof Error
+            ? error.message
+            : 'Brouillon non enregistré. Conservez votre texte.';
+    } finally {
+      if (token === messageLoadToken) draftSaveBusy.value = false;
+    }
   };
 
   const createDraftReply = async (messageId: string) => {
@@ -253,13 +353,18 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
 
   const apply = async (
     action: InboxZeroActionType,
-    extra?: Pick<InboxZeroApplyRequest, 'replyText' | 'reminderWhen' | 'reminderText' | 'archiveAfter'>,
+    extra?: Pick<
+      InboxZeroApplyRequest,
+      'replyText' | 'reminderWhen' | 'reminderText' | 'archiveAfter' | 'reviewedReply'
+    >,
     options?: { cursorHintIndex?: number },
   ) => {
-    if (busy.value) return;
+    if (busy.value) return false;
     const messageIds = uniqueStrings(selectedIds.value);
-    if (!messageIds.length) return;
+    if (!messageIds.length) return false;
 
+    actionError.value = '';
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const visibleBefore = filteredItems.value.map((i) => i.messageId);
@@ -274,19 +379,31 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
             : undefined);
 
       const conversationId = session.value?.sessionId;
-      const requestId = action === 'send_reply' ? await replyRequestId({
-        conversationId: conversationId ?? '', messageId: messageIds[0]!,
-        replyText: String(extra?.replyText ?? ''), archiveAfter: extra?.archiveAfter !== false,
-      }) : undefined;
+      const requestId =
+        action === 'send_reply'
+          ? await replyRequestId({
+              conversationId: conversationId ?? '',
+              messageId: messageIds[0]!,
+              replyText: String(extra?.replyText ?? ''),
+              archiveAfter: extra?.archiveAfter !== false,
+              ...(extra?.reviewedReply ? { reviewedReply: extra.reviewedReply } : {}),
+            })
+          : undefined;
       const res = await app.jarvis.inboxZeroApply({
-        sessionId: app.sessionId,
+        sessionId: conversationId ?? app.sessionId,
         action,
         messageIds,
         ...(extra ?? {}),
         ...(requestId ? { requestId } : {}),
       });
+      if (generation !== sessionGeneration) return false;
       if (requestId && conversationId && res.results.length === 1 && res.results[0]?.ok)
         await completeReplyRequest(conversationId, messageIds[0]!, requestId);
+      const changed = new Set(res.results.map((result) => result.messageId));
+      actionResults.value = [
+        ...res.results,
+        ...actionResults.value.filter((result) => !changed.has(result.messageId)),
+      ].slice(0, 100);
       applyScanResponse(res, cursorHintIndex !== undefined ? { cursorHintIndex } : undefined);
 
       const uncertain = res.results.filter((r) => r.outcome === 'unknown').length;
@@ -304,20 +421,42 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       } else {
         toast.push({
           title: simulated ? 'Simulation terminée' : 'Actions terminées',
-          detail: simulated ? `${simulated} action(s) simulée(s), sans modification.` : `${res.results.length} email(s) traités.`,
+          detail: simulated
+            ? `${simulated} action(s) simulée(s), sans modification.`
+            : `${res.results.length} email(s) traités.`,
           tone: 'success',
         });
       }
       clearSelection();
+      return res.results.length === messageIds.length && res.results.every((result) => result.ok);
     } catch (error) {
+      if (generation !== sessionGeneration) return false;
+      actionError.value =
+        error instanceof Error
+          ? error.message
+          : 'Résultat non confirmé. Vérifiez l’état avant de reprendre.';
       toast.push({
         title: 'Erreur action',
-        detail: error instanceof Error ? error.message : 'Erreur inconnue.',
+        detail: actionError.value,
         tone: 'danger',
       });
+      return false;
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
+  };
+
+  const restoreArchivedAction = async (actionId: string) => {
+    if (busy.value) return;
+    const action = recentActions.value.find((action) => action.id === actionId);
+    if (!action || !['archive', 'mark_read_archive'].includes(action.actionType)) return;
+    const candidates = action.payload?.results;
+    if (!Array.isArray(candidates)) return;
+    selectedIds.value = candidates.flatMap((candidate) => {
+      const parsed = InboxZeroApplyResultSchema.safeParse(candidate);
+      return parsed.success && parsed.data.outcome === 'completed' ? [parsed.data.messageId] : [];
+    });
+    await apply('restore_inbox');
   };
 
   const openCursorMessage = async () => {
@@ -370,12 +509,71 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     await apply(suggested.action);
   };
 
+  const reviewReply = (messageId: string) => {
+    if (
+      busy.value ||
+      !replyText.value.trim() ||
+      messagePanel.value?.message.id !== messageId ||
+      !session.value
+    )
+      return;
+    replyReview.value = {
+      messageId,
+      conversationId: session.value.sessionId,
+      text: replyText.value.trim(),
+      ...messagePanel.value.reply,
+    };
+  };
+
   const sendReply = async (messageId: string) => {
     const text = replyText.value.trim();
-    if (!text) return;
+    const review = replyReview.value;
+    if (
+      actionResults.value.some(
+        (result) => result.messageId === messageId && result.outcome === 'unknown',
+      )
+    ) {
+      actionError.value =
+        'Le résultat de cet envoi est incertain. Vérifiez le message envoyé avant toute nouvelle action.';
+      return;
+    }
+    if (
+      !text ||
+      !review ||
+      review.messageId !== messageId ||
+      review.text !== text ||
+      review.conversationId !== session.value?.sessionId
+    )
+      return;
     selectedIds.value = [messageId];
-    await apply('send_reply', { replyText: text, archiveAfter: true });
-    closeMessage();
+    const token = messageLoadToken;
+    const completed = await apply('send_reply', {
+      replyText: review.text,
+      reviewedReply: { to: review.to, subject: review.subject },
+      archiveAfter: true,
+    });
+    if (
+      completed &&
+      token === messageLoadToken &&
+      messagePanel.value?.message.id === messageId &&
+      replyText.value.trim() === text
+    ) {
+      if (savedDraft.value) {
+        try {
+          await app.jarvis.saveInboxReplyDraft({
+            sessionId: review.conversationId,
+            messageId,
+            text: '',
+            version: savedDraft.value.version,
+          });
+        } catch {
+          draftSaveError.value =
+            'Réponse envoyée ; le brouillon enregistré n’a pas pu être effacé. Aucun nouvel envoi nécessaire.';
+          return;
+        }
+      }
+      if (token === messageLoadToken) dismissMessage();
+    }
   };
 
   const createReminder = async (messageId: string) => {
@@ -390,10 +588,38 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     closeMessage();
   };
 
+  watch(
+    () => app.sessionId,
+    () => {
+      sessionGeneration++;
+      messageLoadToken++;
+      draftLoadToken++;
+      busy.value = false;
+      detailBusy.value = false;
+      draftBusy.value = false;
+      draftSaveBusy.value = false;
+      session.value = null;
+      items.value = [];
+      recentActions.value = [];
+      actionResults.value = [];
+      selectedIds.value = [];
+      cursorId.value = null;
+      messagePanel.value = null;
+      savedDraft.value = null;
+      replyReview.value = null;
+      replyText.value = '';
+      actionError.value = '';
+      draftSaveError.value = '';
+    },
+  );
+
   return {
     session,
     items,
     recentActions,
+    restoreArchivedAction,
+    actionResults,
+    actionError,
     busy,
     detailBusy,
     draftBusy,
@@ -402,6 +628,13 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     messagePanel,
     draft,
     replyText,
+    savedDraft,
+    draftSaveBusy,
+    draftSaveError,
+    saveReplyDraft,
+    replyReview,
+    replyOutcome,
+    reviewReply,
     reminderWhen,
     reminderText,
     currentStep,

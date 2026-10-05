@@ -70,6 +70,7 @@ describe('Versioned response boundary', () => {
   it('checks the serialized Date shape used by Gmail', async () => {
     response = {
       item: null,
+      reply: { to: 'sender@example.invalid', subject: 'Re: subject' },
       message: {
         id: 'id',
         threadId: 'thread',

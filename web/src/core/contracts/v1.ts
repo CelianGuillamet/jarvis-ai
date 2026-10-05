@@ -326,6 +326,7 @@ export const InboxZeroStepSchema = z.enum([
 ]);
 export const InboxZeroActionTypeSchema = z.enum([
   'archive',
+  'restore_inbox',
   'mark_read',
   'mark_read_archive',
   'trash',
@@ -471,6 +472,7 @@ export const GmailMessageDetailSchema = z.object({
 export const InboxZeroMessageResponseSchema = z.object({
   item: InboxZeroItemViewSchema.nullable(),
   message: GmailMessageDetailSchema,
+  reply: z.strictObject({ to: z.email(), subject: text }),
 });
 export const InboxZeroDraftReplyResponseSchema = z.object({
   messageId: text,
@@ -569,11 +571,12 @@ export const InboxZeroApplyRequestSchema = z
     reminderText: text.trim().min(1).max(REQUEST_LIMITS.chatChars).optional(),
     replyText: text.trim().min(1).max(REQUEST_LIMITS.replyChars).optional(),
     archiveAfter: z.boolean().optional(),
+    reviewedReply: z.strictObject({ to: z.email(), subject: text }).optional(),
   })
   .superRefine((value, context) => {
     const required =
       value.action === 'send_reply'
-        ? (['requestId', 'replyText'] as const)
+        ? (['requestId', 'replyText', 'reviewedReply'] as const)
         : value.action === 'remind'
           ? (['reminderWhen'] as const)
           : [];
@@ -740,3 +743,21 @@ export type TodayQuery = z.infer<typeof TodayQuerySchema>;
 export const TodayPageResponseSchema = TodayLocalSnapshotSchema.extend({
   conversationId: z.uuid(),
 }).strict();
+
+export const InboxReplyDraftSchema = z.strictObject({
+  messageId: identifier,
+  text: text.max(REQUEST_LIMITS.replyChars),
+  version: z.number().int().min(1).max(1000000000),
+  updatedAt: z.iso.datetime(),
+});
+export const InboxReplyDraftResponseSchema = z.strictObject({
+  draft: InboxReplyDraftSchema.nullable(),
+});
+export const InboxReplyDraftSaveRequestSchema = MessageQuerySchema.extend({
+  text: text.max(REQUEST_LIMITS.replyChars),
+  version: z.number().int().min(0).max(999999999),
+}).strict();
+export type InboxReplyDraftSaveRequest = z.infer<
+  typeof InboxReplyDraftSaveRequestSchema
+>;
+export type InboxReplyDraft = z.infer<typeof InboxReplyDraftSchema>;

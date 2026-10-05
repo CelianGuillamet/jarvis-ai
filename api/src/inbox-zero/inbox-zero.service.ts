@@ -430,6 +430,10 @@ export class InboxZeroService {
           } as RawItemRow)
         : null,
       message: detail,
+      reply: {
+        to: extractEmailAddress(detail.from),
+        subject: buildReplySubject(detail.subject),
+      },
     };
   }
 
@@ -612,6 +616,7 @@ export class InboxZeroService {
               messageId: row.messageId,
               archiveAfter,
               replyText: input.replyText ?? null,
+              reviewedReply: input.reviewedReply ?? null,
               reminderWhen: input.reminderWhen ?? null,
               reminderText: input.reminderText ?? null,
             },
@@ -686,6 +691,20 @@ export class InboxZeroService {
                 );
                 itemPatch.labelsJson = JSON.stringify(nextLabels);
                 itemPatch.status = 'processed';
+                itemPatch.lastActionAt = now;
+              } else if (effectiveAction === 'restore_inbox') {
+                await this.withGoogleGuard(() =>
+                  this.gmail.modifyLabels(
+                    sessionId,
+                    row.messageId,
+                    ['INBOX'],
+                    [],
+                  ),
+                );
+                itemPatch.labelsJson = JSON.stringify(
+                  applyLabels(labels, ['INBOX'], []),
+                );
+                itemPatch.status = 'pending';
                 itemPatch.lastActionAt = now;
               } else if (effectiveAction === 'mark_read') {
                 const nextLabels = applyLabels(labels, [], ['UNREAD']);
@@ -768,6 +787,15 @@ export class InboxZeroService {
                   throw new BadRequestException(
                     'Identité de tentative manquante.',
                   );
+                const reviewed = input.reviewedReply;
+                if (
+                  !reviewed ||
+                  reviewed.to !== extractEmailAddress(row.from) ||
+                  reviewed.subject !== buildReplySubject(row.subject)
+                )
+                  throw new ConflictException(
+                    'Le destinataire ou le sujet a changé. Relisez le message avant envoi.',
+                  );
                 const remove = ['UNREAD', ...(archiveAfter ? ['INBOX'] : [])];
                 const outcome = await this.replies.execute(
                   {
@@ -778,6 +806,7 @@ export class InboxZeroService {
                     accountSubject: googleAccount.providerSubject,
                     messageId: row.messageId,
                     replyText,
+                    reviewedReply: reviewed,
                     archiveAfter,
                   },
                   {
@@ -785,6 +814,13 @@ export class InboxZeroService {
                       const detail = await this.withGoogleGuard(() =>
                         this.gmail.getMessage(sessionId, row.messageId),
                       );
+                      if (
+                        extractEmailAddress(detail.from) !== reviewed.to ||
+                        buildReplySubject(detail.subject) !== reviewed.subject
+                      )
+                        throw new ConflictException(
+                          'Le message a changé depuis la revue. Aucun envoi effectué.',
+                        );
                       const inReplyTo = detail.messageIdHeader ?? undefined;
                       const refs = (detail.referencesHeader || '').trim();
                       const references = !inReplyTo
@@ -796,8 +832,8 @@ export class InboxZeroService {
                             : `${refs} ${inReplyTo}`;
                       return this.withGoogleGuard(() =>
                         this.gmail.sendMessage(sessionId, {
-                          to: extractEmailAddress(detail.from) || detail.from,
-                          subject: buildReplySubject(detail.subject),
+                          to: reviewed.to,
+                          subject: reviewed.subject,
                           text: replyText,
                           threadId: row.threadId,
                           inReplyTo,

@@ -56,9 +56,10 @@ const setStep = async (step: InboxZeroStep) => {
 };
 
 const onKeydown = (event: KeyboardEvent) => {
-  const target = event.target as HTMLElement | null;
+  if (event.defaultPrevented) return;
+  const target = event.target instanceof Element ? event.target : null;
   const tag = (target?.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+  if (['input', 'textarea', 'select', 'button', 'a'].includes(tag) || target?.closest('button, a, [role=button]') || target?.closest('[contenteditable=true]')) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
 
   if (event.key === 'Escape') {
@@ -136,6 +137,18 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="flex h-[calc(100dvh-2rem)] flex-col gap-3">
+    <p v-if="inbox.actionError" role="alert" class="shrink-0 rounded-xl border border-red-500/40 p-3">{{ inbox.actionError }} Votre réponse reste disponible ; vérifiez le résultat avant tout nouvel envoi.</p>
+    <aside v-if="inbox.actionResults.length" aria-label="Résultats des actions" class="max-h-40 shrink-0 overflow-auto rounded-xl border border-border p-3">
+      <h2 class="font-medium">Résultats par message</h2>
+      <ul class="mt-2 space-y-2 text-sm"><li v-for="result in inbox.actionResults" :key="result.messageId">
+        <span>{{ inbox.items.find(item => item.messageId === result.messageId)?.subject || 'Message traité' }} : </span>
+        <span v-if="result.outcome === 'unknown'">Résultat incertain. Vérifiez l’état avant de reprendre.</span>
+        <span v-else-if="result.outcome === 'partial'">Réponse envoyée ; étapes restantes à reprendre sans nouvel envoi.</span>
+        <span v-else-if="result.outcome === 'simulated'">Simulation, aucune modification.</span>
+        <span v-else>Action terminée.</span>
+        <p v-if="result.error" class="text-muted-foreground">{{ result.error }}</p>
+      </li></ul>
+    </aside>
     <!-- Header -->
     <header class="shrink-0 rounded-2xl border border-border/50 bg-card/60 glass px-5 py-4 shadow-soft">
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -419,6 +432,7 @@ onBeforeUnmount(() => {
                   {{ preferences.formatDate(a.createdAt, true) }}
                 </span>
               </div>
+              <BaseButton v-if="['archive', 'mark_read_archive'].includes(a.actionType) && a.status === 'completed' && a.payload?.archiveAfter !== false" class="mt-2" variant="secondary" size="sm" :loading="inbox.busy" @click="inbox.restoreArchivedAction(a.id)">Remettre dans la boîte de réception</BaseButton>
               <div v-if="a.errorMessage" class="mt-1 text-red-300/80">
                 {{ a.errorMessage }}
               </div>
@@ -499,26 +513,37 @@ onBeforeUnmount(() => {
                   variant="secondary"
                   size="sm"
                   :loading="inbox.draftBusy"
+                  :disabled="inbox.busy || inbox.replyOutcome === 'partial' || inbox.replyOutcome === 'unknown'"
                   @click="inbox.createDraftReply(inbox.messagePanel.message.id)"
                 >
                   Draft
                 </BaseButton>
               </div>
+              <p v-if="inbox.draftSaveError" role="alert" class="mt-3">{{ inbox.draftSaveError }}</p>
+              <p v-if="inbox.savedDraft" class="mt-3 text-sm text-muted-foreground">{{ inbox.savedDraft.text === inbox.replyText ? 'Brouillon enregistré' : 'Modifications non enregistrées' }}</p>
+              <BaseButton class="mt-3" variant="secondary" :loading="inbox.draftSaveBusy" :disabled="inbox.busy" @click="inbox.saveReplyDraft">Enregistrer le brouillon</BaseButton>
               <BaseTextarea
                 v-model="inbox.replyText"
+                :disabled="inbox.busy || inbox.replyOutcome === 'partial' || inbox.replyOutcome === 'unknown'"
                 class="mt-3"
                 label="Message"
                 placeholder="Ta réponse…"
               />
+              <div v-if="inbox.replyReview && inbox.replyReview.messageId === inbox.messagePanel.message.id && inbox.replyReview.text === inbox.replyText.trim()" class="mt-3 rounded-lg border border-border p-3" aria-label="Revue avant envoi">
+                <p>À : {{ inbox.replyReview.to }}</p><p>Sujet : {{ inbox.replyReview.subject }}</p>
+                <p class="my-3 whitespace-pre-wrap break-words">{{ inbox.replyReview.text }}</p>
+                <p class="mb-3 text-sm text-muted-foreground">Cette réponse sera envoyée, puis le message sera marqué lu et archivé.</p>
+                <BaseButton :loading="inbox.busy" :disabled="inbox.replyOutcome === 'unknown'" @click="inbox.sendReply(inbox.messagePanel.message.id)">{{ inbox.replyOutcome === 'partial' ? 'Reprendre les étapes restantes sans renvoyer' : 'Confirmer l’envoi et archiver' }}</BaseButton>
+              </div>
               <div class="mt-3 flex justify-end">
                 <BaseButton
                   variant="primary"
                   size="sm"
                   :disabled="!inbox.replyText.trim()"
                   :loading="inbox.busy"
-                  @click="inbox.sendReply(inbox.messagePanel.message.id)"
+                  @click="inbox.reviewReply(inbox.messagePanel.message.id)"
                 >
-                  Envoyer + archiver
+                  Vérifier la réponse
                 </BaseButton>
               </div>
             </BaseCard>

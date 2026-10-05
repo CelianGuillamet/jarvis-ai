@@ -3,6 +3,7 @@ type ReplyIntent = {
   messageId: string;
   replyText: string;
   archiveAfter: boolean;
+  reviewedReply?: { to: string; subject: string };
 };
 
 function storageKey(conversationId: string, messageId: string) {
@@ -13,13 +14,18 @@ function storageKey(conversationId: string, messageId: string) {
 export async function replyRequestId(intent: ReplyIntent): Promise<string> {
   if (!intent.conversationId || !navigator.locks)
     throw new Error('La reprise sécurisée des envois nécessite un navigateur compatible.');
-  const bytes = new TextEncoder().encode(JSON.stringify([intent.replyText.trim(), intent.archiveAfter]));
+  const bytes = new TextEncoder().encode(JSON.stringify([intent.replyText.trim(), intent.archiveAfter, intent.reviewedReply ?? null]));
   const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const key = storageKey(intent.conversationId, intent.messageId);
   return navigator.locks.request(key, () => {
     const saved = localStorage.getItem(key);
     if (saved) {
-      const entry = JSON.parse(saved) as { requestId?: unknown; digest?: unknown };
+      const entry = JSON.parse(saved) as { requestId?: unknown; digest?: unknown; settled?: unknown };
+      if (entry.digest !== digest && entry.settled === true) {
+        const requestId = crypto.randomUUID();
+        localStorage.setItem(key, JSON.stringify({ requestId, digest }));
+        return requestId;
+      }
       if (typeof entry.requestId !== 'string' || entry.digest !== digest)
         throw new Error('Une réponse précédente reste à vérifier. Reprends son texte sans créer un nouvel envoi.');
       return entry.requestId;
@@ -36,6 +42,6 @@ export async function completeReplyRequest(conversationId: string, messageId: st
   await navigator.locks.request(key, () => {
     const saved = localStorage.getItem(key);
     if (saved && (JSON.parse(saved) as { requestId?: unknown }).requestId === requestId)
-      localStorage.removeItem(key);
+      localStorage.setItem(key, JSON.stringify({ ...JSON.parse(saved), settled: true }));
   });
 }

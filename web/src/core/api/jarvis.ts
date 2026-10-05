@@ -1,4 +1,6 @@
 import {
+  InboxReplyDraftResponseSchema,
+  InboxReplyDraftSaveRequestSchema,
   TodayQuerySchema,
   TodayPageResponseSchema,
   TodayMutationRequestSchema,
@@ -17,6 +19,7 @@ import {
   ConversationHistoryResponseSchema,
 } from "../contracts/v1";
 import type {
+  InboxReplyDraftSaveRequest,
   TodayMutationRequest,
   AccountPreferences,
   ChatRequest,
@@ -75,6 +78,22 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
   const http = createHttpClient(options);
 
   return {
+    inboxReplyDraft: (sessionId: string, messageId: string) =>
+      validated(
+        http.get<unknown>(
+          "/inbox-zero/reply-draft?" +
+            new URLSearchParams({ sessionId, messageId }).toString(),
+        ),
+        InboxReplyDraftResponseSchema,
+      ),
+    saveInboxReplyDraft: (input: InboxReplyDraftSaveRequest) =>
+      validated(
+        http.post<unknown>(
+          "/inbox-zero/reply-draft",
+          checked(input, InboxReplyDraftSaveRequestSchema),
+        ),
+        InboxReplyDraftResponseSchema,
+      ),
     today: (sessionId: string, taskOffset = 0, noteOffset = 0) => {
       const input = checked(
         { sessionId, taskOffset, noteOffset },

@@ -25,11 +25,19 @@ test('blocks a changed reply while the previous attempt is unresolved', async ()
   await assert.rejects(replyRequestId({ ...intent, archiveAfter: false }), /précédente/);
 });
 
-test('isolates conversations and clears only the acknowledged attempt', async () => {
+test('isolates conversations and retains the acknowledged identity for duplicate replay', async () => {
   const first = await replyRequestId(intent);
   assert.notEqual(await replyRequestId({ ...intent, conversationId: 'other-owner-conversation' }), first);
   await completeReplyRequest(intent.conversationId, intent.messageId, 'wrong-attempt');
   assert.equal(await replyRequestId(intent), first);
   await completeReplyRequest(intent.conversationId, intent.messageId, first);
-  assert.notEqual(await replyRequestId(intent), first);
+  assert.equal(await replyRequestId(intent), first);
+  assert.notEqual(await replyRequestId({ ...intent, replyText: "A distinct reviewed reply" }), first);
+});
+
+test('binds durable attempt identity to reviewed recipient and subject', async () => {
+  const reviewed = { ...intent, reviewedReply: { to: 'sender@example.invalid', subject: 'Re: Subject' } };
+  await replyRequestId(reviewed);
+  await assert.rejects(replyRequestId({ ...reviewed, reviewedReply: { ...reviewed.reviewedReply, to: 'other@example.invalid' } }), /précédente/);
+  await assert.rejects(replyRequestId({ ...reviewed, reviewedReply: { ...reviewed.reviewedReply, subject: 'Other' } }), /précédente/);
 });

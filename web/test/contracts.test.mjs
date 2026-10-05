@@ -35,7 +35,7 @@ test('quick actions match server labels and neutral suggestions', async () => {
 test('request contracts preserve send identity requirements and batch limits', async () => {
  const { InboxZeroApplyRequestSchema, ChatRequestSchema, MessageQuerySchema } = await import('../src/core/contracts/v1.ts');
  assert.equal(InboxZeroApplyRequestSchema.safeParse({action:'send_reply',messageIds:['m'],replyText:'Bonjour'}).success,false);
- assert.equal(InboxZeroApplyRequestSchema.safeParse({action:'send_reply',messageIds:['m'],replyText:'Bonjour',requestId:'attempt'}).success,true);
+ assert.equal(InboxZeroApplyRequestSchema.safeParse({action:'send_reply',messageIds:['m'],replyText:'Bonjour',requestId:'attempt',reviewedReply:{to:'sender@example.invalid',subject:'Re: Test question'}}).success,true);
  assert.equal(InboxZeroApplyRequestSchema.safeParse({action:'archive',messageIds:Array(21).fill('m')}).success,false);
  assert.equal(ChatRequestSchema.safeParse({text:'Bonjour',ownerId:'foreign'}).success,false);
  assert.equal(MessageQuerySchema.safeParse({messageId:['m','n']}).success,false);
