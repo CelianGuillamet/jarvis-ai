@@ -1,5 +1,7 @@
 import { AccountController } from './account.controller';
 import { AccountExportController } from './account-export.controller';
+import { AccountSnapshotController } from './account-snapshot.controller';
+import { AccountSnapshotService } from '../privacy/account-snapshot.service';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -10,9 +12,14 @@ import { RequestQuotaService } from '../http/request-quota.service';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [AccountController, AccountExportController],
+  controllers: [
+    AccountController,
+    AccountExportController,
+    AccountSnapshotController,
+  ],
   providers: [
     AuthService,
+    AccountSnapshotService,
     ConversationService,
     RequestQuotaService,
     { provide: APP_GUARD, useClass: SessionGuard },

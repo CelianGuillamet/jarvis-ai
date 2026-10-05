@@ -1,3 +1,4 @@
+import { AccountSnapshotService } from '../../src/privacy/account-snapshot.service';
 import { ConversationService } from '../../src/auth/conversation.service';
 import { ConfigService } from '@nestjs/config';
 import { GoogleCredentialService } from '../../src/google/google-credential.service';
@@ -30,6 +31,8 @@ import { OpenAIProvider } from '../../src/jarvis/providers/openai.provider';
 import { fakeCalendar, fakeGmail } from '../fixtures/providers';
 import { allowedPorts } from '../fixtures/integration-safety';
 import {
+  AccountDataExportPageSchema,
+  AccountProfileExportSchema,
   JarvisChatResponseSchema,
   JarvisStatusSnapshotSchema,
 } from '../../src/contracts/v1';
@@ -806,6 +809,7 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(routes.sort()).toEqual(
       [
         'GET /account/me',
+        'GET /account/export/snapshot',
         'GET /account/export/profile',
         'GET /account/export/data',
         'GET /account/preferences',
@@ -1018,6 +1022,7 @@ describe('API against disposable migrated PostgreSQL', () => {
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
     for (const path of [
       '/account/me',
+      '/account/export/snapshot',
       '/account/export/profile',
       '/account/export/data?collection=notes',
       '/account/preferences',
@@ -1057,6 +1062,208 @@ describe('API against disposable migrated PostgreSQL', () => {
         .send({ sessionId: 'integration-session' })
         .expect(401);
     }
+  });
+
+  it('exports only signed-owner data with bounded pagination and conversation ownership', async () => {
+    const ownerId = 'export-user';
+    await prisma.betaInvite.create({
+      data: { email: 'export@example.invalid' },
+    });
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        name: 'Export',
+        email: 'export@example.invalid',
+        emailVerified: true,
+      },
+    });
+    const token = 'export-session-secret-not-exportable';
+    await prisma.session.create({
+      data: {
+        id: 'export-auth-session',
+        userId: ownerId,
+        token,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const noteIds = Array.from({ length: 51 }, () => randomUUID()).sort();
+    await prisma.note.createMany({
+      data: noteIds.map((id) => ({ id, ownerId, text: 'Owned note' })),
+    });
+    const foreignNote = await prisma.note.create({
+      data: { ownerId: 'integration-user', text: 'Foreign private note' },
+    });
+    const profileResponse = await request(baseUrl)
+      .get('/account/export/profile')
+      .set('Cookie', cookie)
+      .expect(200);
+    const profile = AccountProfileExportSchema.parse(profileResponse.body);
+    expect(profile.profile.id).toBe(ownerId);
+    expect(JSON.stringify(profile)).not.toContain(token);
+    const firstResponse = await request(baseUrl)
+      .get('/account/export/data')
+      .query({ collection: 'notes' })
+      .set('Cookie', cookie)
+      .expect(200);
+    const first = AccountDataExportPageSchema.parse(firstResponse.body);
+    expect(first.items.map((item: { id: string }) => item.id)).toEqual(
+      noteIds.slice(0, 50),
+    );
+    expect(first.nextCursor).toBe(noteIds[49]);
+    const lastResponse = await request(baseUrl)
+      .get('/account/export/data')
+      .query({ collection: 'notes', after: first.nextCursor })
+      .set('Cookie', cookie)
+      .expect(200);
+    const last = AccountDataExportPageSchema.parse(lastResponse.body);
+    expect(last.items.map((item: { id: string }) => item.id)).toEqual(
+      noteIds.slice(50),
+    );
+    expect(last.nextCursor).toBeNull();
+    expect(
+      [...first.items, ...last.items].some(
+        (item) => item.id === foreignNote.id,
+      ),
+    ).toBe(false);
+    for (const query of [
+      { collection: 'notes', ownerId: 'integration-user' },
+      { collection: 'notes', after: 'not-a-uuid' },
+      { collection: 'tokens' },
+    ]) {
+      await request(baseUrl)
+        .get('/account/export/data')
+        .query(query)
+        .set('Cookie', cookie)
+        .expect(400);
+    }
+    const conversation = await prisma.conversation.create({
+      data: { ownerId, clientKey: 'export-conversation' },
+    });
+    const foreignConversation = await prisma.conversation.create({
+      data: {
+        ownerId: 'integration-user',
+        clientKey: 'foreign-export-conversation',
+      },
+    });
+    const memory = await prisma.jarvisMemoryFact.create({
+      data: {
+        sessionId: conversation.id,
+        layer: 'preference',
+        key: 'export',
+        label: 'Préférence',
+        value: 'Owned memory',
+      },
+    });
+    await prisma.jarvisMemoryFact.create({
+      data: {
+        sessionId: foreignConversation.id,
+        layer: 'preference',
+        key: 'export',
+        label: 'Secret',
+        value: 'Foreign memory',
+      },
+    });
+    const memoryResponse = await request(baseUrl)
+      .get('/account/export/data')
+      .query({ collection: 'memory' })
+      .set('Cookie', cookie)
+      .expect(200);
+    const memoryPage = AccountDataExportPageSchema.parse(memoryResponse.body);
+    expect(memoryPage.collection).toBe('memory');
+    expect(memoryPage.items.map((item: { id: string }) => item.id)).toEqual([
+      memory.id,
+    ]);
+    expect(JSON.stringify(memoryPage)).not.toContain('Foreign memory');
+    const download = await request(baseUrl)
+      .get('/account/export/snapshot')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(download.headers['cache-control']).toBe('no-store');
+    expect(download.headers['content-type']).toContain('application/x-ndjson');
+    const records = download.text
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            type: string;
+            collection?: string;
+            data?: Record<string, unknown>;
+            records?: number;
+          },
+      );
+    expect(records[0]).toMatchObject({
+      type: 'header',
+      accountId: ownerId,
+      formatVersion: 1,
+    });
+    expect(records.at(-1)).toEqual({
+      type: 'complete',
+      records: records.length - 2,
+    });
+    expect(
+      records
+        .filter((record) => record.collection === 'Note')
+        .map((record) => record.data?.id)
+        .sort(),
+    ).toEqual(noteIds);
+    expect(download.text).not.toContain(token);
+    expect(download.text).not.toContain('Foreign memory');
+    expect(download.text).not.toContain('Foreign private note');
+    expect(
+      records.some((record) =>
+        [
+          'GoogleOAuthToken',
+          'GoogleOAuthState',
+          'Verification',
+          'LegacyOwnershipBatch',
+        ].includes(record.collection ?? ''),
+      ),
+    ).toBe(false);
+
+    const snapshotRecords: Array<{
+      collection?: string;
+      data?: Record<string, unknown>;
+    }> = [];
+    await app.get(AccountSnapshotService).stream(
+      ownerId,
+      async (value) => {
+        const record = value as {
+          type: string;
+          collection?: string;
+          data?: Record<string, unknown>;
+        };
+        if (record.type === 'header') {
+          // A different connection commits after MVCC begins, before Note is scanned.
+          await prisma.note.update({
+            where: { id: noteIds[0] },
+            data: { text: 'Changed during export' },
+          });
+          await prisma.note.create({
+            data: { ownerId, text: 'Inserted during export' },
+          });
+        }
+        snapshotRecords.push(record);
+      },
+      new AbortController().signal,
+    );
+    const snapshotNotes = snapshotRecords.filter(
+      (record) => record.collection === 'Note',
+    );
+    expect(snapshotNotes).toHaveLength(51);
+    expect(
+      snapshotNotes.find((record) => record.data?.id === noteIds[0])?.data
+        ?.text,
+    ).toBe('Owned note');
+    expect(
+      snapshotNotes.some(
+        (record) => record.data?.text === 'Inserted during export',
+      ),
+    ).toBe(false);
   });
 
   it('persists only authenticated account preferences and rejects identity overrides', async () => {

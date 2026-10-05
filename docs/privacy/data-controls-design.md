@@ -1,6 +1,6 @@
 # JAR-039 — Contrôle des données : conception en cours
 
-Statut : conception, aucune fonctionnalité d’export/suppression livrée.
+Statut : implémentation en cours, aucune fonctionnalité livrée ou fusionnée.
 
 ## Architecture existante vérifiée
 
@@ -66,3 +66,30 @@ Ces pages lisent l’état courant à chaque requête : elles ne garantissent pa
 ## Inventaire complet et copies historiques
 
 Tous les modèles Prisma ont une portée de propriété et une disposition export explicites dans api/src/privacy/data-inventory.ts. Le test de couverture compare les noms au schéma pour échouer dès qu’un modèle futur est oublié. Les métadonnées auth restent distinctes des secrets non exportables. Les archives LegacyOwnershipRecord.original et LegacyOwnershipBatch.manifest peuvent contenir des copies de données utilisateur : leur purge ciblée fait partie de l’effacement, en préservant les copies des autres propriétaires. Cet inventaire ne constitue pas encore une implémentation d’effacement.
+
+
+## Téléchargement cohérent engagé
+
+GET /account/export/snapshot produit un fichier NDJSON sans copie persistée.
+Une transaction PostgreSQL REPEATABLE READ en lecture seule couvre tous les modèles
+exportables de l’inventaire. Des curseurs SQL lisent 50 lignes à la fois ; le flux
+HTTP attend le consommateur, et une déconnexion interrompt le traitement. Les
+projections de colonnes sont des listes statiques, pas une sérialisation automatique
+de futurs champs Prisma. OAuth/Verification et manifests de migration sont exclus ;
+les métadonnées Session/Account excluent les identifiants secrets. Les clés de secrets
+dans les objets et payloads JSON hérités sont filtrées récursivement. Les archives
+originales de tables de credentials sont omises.
+
+Le premier enregistrement est `header` (version, date, compte), puis viennent les
+`record` (collection, data). Le dernier `complete` donne le nombre total de lignes,
+uniquement après réussite de la transaction. Sans ce marqueur, le téléchargement
+est incomplet et doit être rejeté ; une panne après envoi des headers produit
+`incomplete`, sans détail interne. La transaction est bornée à 60 secondes : une
+expiration exige un nouveau téléchargement, aucune copie partielle n’est annoncée
+complète. Les anciennes pages restent des lectures de l’état courant.
+
+Tests unitaires : isolation demandée, couverture de projections, redaction,
+annulation et absence de marqueur complet si commit échoue. Tests PostgreSQL ajoutés
+pour isolation entre comptes, pagination et mutations concurrentes pendant le
+snapshot, mais non exécutés : Docker répond HTTP 500, et le runner de base jetable
+a échoué avant les tests. La suppression, rétention et interface restent à faire.
