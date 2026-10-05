@@ -7,12 +7,7 @@ import { CommandExecutionService } from '../commands/command-execution.service';
 import type { MutationPolicyContext } from '../commands/execution-policy';
 import type { ToolOnly } from '../jarvis/tools/tool-registry';
 
-export type DirectOutcome = {
-  commandId: string;
-  state: 'completed' | 'executing' | 'unknown' | 'failed';
-  text: string;
-  simulation: boolean;
-};
+import type { TodayCommandResponse } from '../contracts/v1';
 
 /** Serializes request claims, not effects. A claimed effect is never automatically retried. */
 @Injectable()
@@ -33,7 +28,7 @@ export class TodayCommandService {
     prepare: () => Promise<Prisma.InputJsonObject[]>,
     mutate: (commandId: string, targets: Prisma.JsonValue) => Promise<string>,
     simulate: () => string,
-  ): Promise<DirectOutcome> {
+  ): Promise<TodayCommandResponse> {
     input = {
       ...input,
       call: structuredClone(input.call),

@@ -1,7 +1,7 @@
 # Today controls — implementation checkpoint
 
-JAR-030 is in progress. The read and target services below are not yet exposed
-through HTTP; this document does not claim that the product flow is complete.
+JAR-030 is in progress. GET `/today` and POST `/today/mutations` are now exposed through authenticated
+owner-scoped routes; this document does not claim that the product flow is complete.
 
 ## Data and ownership
 
@@ -18,8 +18,8 @@ The snapshot includes the time of the successful read.
 
 ## Remaining execution work
 
-Wire the explicit operation mapping to the shared command policy and atomic
-local compensation handlers. Commands use the distinct `direct` source, with
+Explicit operations now enter the shared command policy and atomic local
+compensation handlers, retaining their transactional stale-target checks. Commands use the distinct `direct` source, with
 the existing database trigger continuing to forbid source changes.
 
 The client must retain one request UUID for a submitted mutation until its
@@ -29,9 +29,10 @@ reuse the recorded target snapshot, rather than recompute a changed envelope.
 The durable TodayCommandService now implements request-scoped transaction locks,
 immutable intent matching, a single execution claim, completed-response replay,
 unknown-outcome refusal to repeat, and simulation replay. Its PostgreSQL tests
-cover concurrent duplicates and a fresh service instance. This adapter is not
-yet connected to the HTTP routes or local compensation handlers; complete that
-wiring and its tests before enabling UI submission.
+cover concurrent duplicates and a fresh service instance. The adapter is connected to HTTP and compensation handlers. The integration
+fixture exercises all six operations, exact-resource updates, creation replay,
+invalid input, missing IDs, owner isolation and Origin restrictions without LLM
+routing. UI submission and durable client request identity remain unfinished.
 
 ## Remaining product work
 
@@ -55,3 +56,7 @@ Additional validation: 109 PostgreSQL tests in 13 suites pass with all 26
 migrations and database cleanup. Types and changed-file lint pass. The direct
 executor accepts a previously claimed command ID instead of inventing a new
 request identity.
+
+HTTP milestone: 110 PostgreSQL tests pass in 13 suites, 26 migrations replayed
+and disposable database removed. The six actual product mutations each record
+an atomic compensation; completed creation replay records no second effect.

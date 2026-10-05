@@ -1,3 +1,7 @@
+import { TodayCommandService } from '../../today/today-command.service';
+import { TodayTargetService } from '../../today/today-target.service';
+import { todayToolCall } from '../../today/today-tool-call';
+import type { TodayMutationRequest } from '../../contracts/v1';
 import { StatusResourceCache } from './status-resource-cache';
 import { JarvisChatResponseSchema } from '../../contracts/v1';
 import { dataUnavailable } from '../../http/data-unavailable';
@@ -492,6 +496,8 @@ export class JarvisService {
     @Inject(GMAIL_PROVIDER) private readonly gmail: GmailProvider,
     private readonly executor: CommandExecutionService,
     private readonly compensations: CommandCompensationService,
+    private readonly todayCommands: TodayCommandService,
+    private readonly todayTargets: TodayTargetService,
   ) {
     this.simulation = configBool(this.config.get<string>('SIMULATION'), true);
     this.allowDefaultSession = configBool(
@@ -1815,6 +1821,45 @@ export class JarvisService {
       () =>
         `Simulation : l’action « ${call.name} » n’a effectué aucune modification.`,
       () => 'completed',
+    );
+  }
+
+  async mutateToday(request: TodayMutationRequest) {
+    const context = await this.buildToolContext(request.sessionId);
+    const call = todayToolCall(request.mutation);
+    return this.todayCommands.execute(
+      {
+        ownerId: context.prisma.ownerId,
+        conversationId: request.sessionId,
+        requestId: request.requestId,
+        call,
+        policy: {
+          ownerId: context.prisma.ownerId,
+          simulation: context.simulation,
+          capabilities: [call.name],
+          loadGoogleStatus: () =>
+            Promise.reject(new Error('Local command cannot require Google.')),
+        },
+      },
+      async () => {
+        const target = await this.todayTargets.resolve(
+          context.prisma.ownerId,
+          request.mutation,
+        );
+        return target ? freezeLocalTargets(target) : [];
+      },
+      (commandId, targets) =>
+        this.compensations.record(
+          {
+            ...context,
+            ...(requiresLocalTargets(call)
+              ? { frozenLocalTargets: readLocalTargets(call, targets) }
+              : {}),
+          },
+          call,
+          commandId,
+        ),
+      () => 'Simulation : aucune modification effectuée.',
     );
   }
 

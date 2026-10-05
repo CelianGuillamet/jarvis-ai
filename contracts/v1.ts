@@ -719,3 +719,13 @@ export const TodayMutationRequestSchema = z
   })
   .strict();
 export type TodayMutationRequest = z.infer<typeof TodayMutationRequestSchema>;
+
+export const TodayCommandResponseSchema = z
+  .object({
+    commandId: z.uuid(),
+    state: z.enum(['completed', 'executing', 'unknown', 'failed']),
+    text: z.string(),
+    simulation: z.boolean(),
+  })
+  .strict();
+export type TodayCommandResponse = z.infer<typeof TodayCommandResponseSchema>;
