@@ -40,7 +40,8 @@ function mutate(input) {
     case 'note.edit': if (!note) throw new Error('Unknown fixture note'); note.title = mutation.title; note.text = mutation.text; break;
     default: throw new Error('Unsupported fixture mutation');
   }
-  const result = contracts.TodayCommandResponseSchema.parse({ commandId: randomUUID(), state: 'completed', simulation: true, text: 'Action locale de vérification enregistrée.', });
+  // These actions really update the disposable fixture, unlike a production dry run.
+  const result = contracts.TodayCommandResponseSchema.parse({ commandId: randomUUID(), state: 'completed', simulation: false, text: 'Action locale de vérification enregistrée.', });
   results.set(requestId, result);
   return result;
 }

@@ -37,3 +37,12 @@ Mutations tâches/notes, calendrier, revue/envoi Inbox simulés, historique et
 récupération ; clavier/focus, lecteur écran, contrastes, réduction des mouvements ;
 mobile/tablette/desktop, rechargement, panne et scopes révoqués. Le banc doit encore
 être enrichi pour Inbox, confirmations et historique avant ces contrôles.
+
+## Vérifications supplémentaires
+
+Création de note confirmée dans le vrai navigateur : titre « Note navigateur »
+affiché après sauvegarde. Le fournisseur jetable signale désormais correctement
+une modification locale réelle plutôt qu’une simulation sans effet.
+Panne HTTP503 simulée : Actualiser affiche une seule alerte globale et le bouton
+« Réessayer la connexion ». Après remise en service et clic sur ce bouton, la
+note reste visible. Ceci vérifie la panne API, pas encore le mode réseau offline.
