@@ -1,3 +1,5 @@
+import { ActivityService } from './services/activity.service';
+import { ActivityQuerySchema, ActivityResponseSchema } from '../contracts/v1';
 import { ConversationHistoryService } from './services/conversation-history.service';
 import type { ConversationHistoryQuery } from '../contracts/v1';
 import {
@@ -27,6 +29,7 @@ export class JarvisController {
     private readonly jarvis: JarvisService,
     private readonly conversations: ConversationService,
     private readonly history: ConversationHistoryService,
+    private readonly activity: ActivityService,
   ) {}
 
   @Post('chat')
@@ -65,6 +68,20 @@ export class JarvisController {
       body.actionId,
       () => this.jarvis.confirm(body.actionId, conversationId),
     );
+  }
+
+  @Get('activity')
+  @ResponseContract(ActivityResponseSchema)
+  async activityPage(
+    @Req() request: AuthenticatedRequest,
+    @Query(new RequestContract(ActivityQuerySchema))
+    query: ConversationHistoryQuery,
+  ) {
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      query.sessionId,
+    );
+    return this.activity.list(request.identity.userId, conversationId, query);
   }
 
   @Get('history')

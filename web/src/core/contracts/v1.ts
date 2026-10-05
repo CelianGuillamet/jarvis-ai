@@ -761,3 +761,33 @@ export type InboxReplyDraftSaveRequest = z.infer<
   typeof InboxReplyDraftSaveRequestSchema
 >;
 export type InboxReplyDraft = z.infer<typeof InboxReplyDraftSchema>;
+
+export const ActivityQuerySchema = ConversationHistoryQuerySchema;
+export const ActivityResponseSchema = z.strictObject({
+  conversationId: z.string().min(1),
+  fetchedAt: z.iso.datetime(),
+  nextCursor: z.string().nullable(),
+  commands: z.array(
+    z.strictObject({
+      id: z.string().min(1),
+      operation: z.string().min(1),
+      source: z.enum(['confirmation', 'chat', 'inbox', 'direct']),
+      state: z.enum([
+        'proposed',
+        'waiting',
+        'executing',
+        'completed',
+        'failed',
+        'cancelled',
+        'expired',
+        'unknown',
+      ]),
+      outcomeCode: z.string().nullable(),
+      createdAt: z.iso.datetime(),
+      updatedAt: z.iso.datetime(),
+      expiresAt: z.iso.datetime(),
+      undoRecorded: z.boolean(),
+    }),
+  ),
+});
+export type ActivityResponse = z.infer<typeof ActivityResponseSchema>;

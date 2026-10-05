@@ -98,7 +98,7 @@ const examplePrompts = [
           </button>
           <!-- Empty state -->
           <div
-            v-if="!chat.messages.length"
+            v-if="!chat.messages.length && chat.historyLoaded && !chat.historyError"
             class="flex h-full flex-col items-center justify-center"
           >
             <div class="mx-auto max-w-sm text-center">

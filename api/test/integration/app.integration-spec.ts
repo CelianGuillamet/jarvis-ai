@@ -815,6 +815,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         'POST /inbox-zero/reply-draft',
         'GET /inbox-zero/session',
         'GET /jarvis/history',
+        'GET /jarvis/activity',
         'GET /jarvis/status',
         'GET /today',
         'POST /account/preferences',
@@ -1018,6 +1019,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/account/preferences',
       '/today',
       '/jarvis/history',
+      '/jarvis/activity',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
@@ -1377,6 +1379,7 @@ describe('API against disposable migrated PostgreSQL', () => {
     for (const path of [
       '/today',
       '/jarvis/history',
+      '/jarvis/activity',
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',

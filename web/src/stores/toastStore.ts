@@ -23,6 +23,7 @@ export const useToastStore = defineStore('toast', () => {
     tone?: ToastTone;
     ttlMs?: number;
   }) => {
+    if (input.tone === 'danger' && app.apiUnavailable) return '';
     const now = Date.now();
     const tone = input.tone ?? 'info';
     const detail = input.detail;

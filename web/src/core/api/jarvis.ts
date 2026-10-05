@@ -1,4 +1,5 @@
 import {
+  ActivityResponseSchema,
   InboxReplyDraftResponseSchema,
   InboxReplyDraftSaveRequestSchema,
   TodayQuerySchema,
@@ -149,6 +150,13 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
         ),
         JarvisChatResponseSchema,
       ),
+    activity: (input: ConversationHistoryQuery, signal?: AbortSignal) => {
+      const query = checked(input, ConversationHistoryQuerySchema);
+      const params = new URLSearchParams({ limit: String(query.limit) });
+      if (query.sessionId) params.set("sessionId", query.sessionId);
+      if (query.cursor) params.set("cursor", query.cursor);
+      return validated(http.get<unknown>(`/jarvis/activity?${params}`, signal ? { signal } : {}), ActivityResponseSchema);
+    },
     history: (input: ConversationHistoryQuery, signal?: AbortSignal) => {
       const query = checked(input, ConversationHistoryQuerySchema);
       const params = new URLSearchParams();

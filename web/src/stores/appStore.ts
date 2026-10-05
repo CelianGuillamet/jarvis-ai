@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, ref, watch } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 
 import { env } from "@/core/config/env";
 import { createJarvisApi } from "@/core/api/jarvis";
@@ -17,6 +17,10 @@ export type ThemeMode = "dark" | "light";
 export const useAppStore = defineStore("app", () => {
   // Installation configuration never comes from editable browser storage.
   const sessionId = ref(env.defaultSessionId);
+  const apiUnavailable = ref(false);
+  const onUnavailable = () => { apiUnavailable.value = true; };
+  window.addEventListener("jarvis:api-unavailable", onUnavailable);
+  onScopeDispose(() => window.removeEventListener("jarvis:api-unavailable", onUnavailable));
   const accountEpoch = ref(0);
   const invalidateAccount = () => { accountEpoch.value += 1; };
   const apiBaseUrl = ref(env.apiBaseUrl);
@@ -47,6 +51,7 @@ export const useAppStore = defineStore("app", () => {
   );
 
   return {
+    apiUnavailable,
     accountEpoch,
     invalidateAccount,
     sessionId,

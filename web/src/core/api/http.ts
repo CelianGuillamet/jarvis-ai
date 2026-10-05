@@ -149,6 +149,8 @@ export function createHttpClient(options: HttpClientOptions = {}) {
         if (input.signal?.aborted) throw error;
         throw new TimeoutError();
       }
+      if (error instanceof TypeError || (error instanceof HttpError && error.status >= 500))
+        window.dispatchEvent(new Event("jarvis:api-unavailable"));
       throw error;
     } finally {
       window.clearTimeout(timeout);
