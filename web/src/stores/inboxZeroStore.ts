@@ -1,7 +1,11 @@
-import type { InboxZeroApplyRequest, InboxZeroApplyResponse } from '@/core/contracts/v1';
+import type {
+  InboxZeroApplyRequest,
+  InboxZeroApplyResponse,
+  InboxReplyDraft,
+} from '@/core/contracts/v1';
 import { InboxZeroApplyResultSchema } from '@/core/contracts/v1';
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import type {
   InboxZeroActionType,
@@ -40,6 +44,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   const app = useAppStore();
   const toast = useToastStore();
 
+  let sessionGeneration = 0;
   let messageLoadToken = 0;
   let draftLoadToken = 0;
 
@@ -59,6 +64,9 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   const messagePanel = ref<InboxZeroMessageResponse | null>(null);
   const draft = ref<InboxZeroDraftReplyResponse | null>(null);
   const replyText = ref('');
+  const savedDraft = ref<InboxReplyDraft | null>(null);
+  const draftSaveBusy = ref(false);
+  const draftSaveError = ref('');
   const replyReview = ref<{
     messageId: string;
     conversationId: string;
@@ -155,6 +163,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   };
 
   const scan = async (options?: { refresh?: boolean; query?: string }) => {
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const res = await app.jarvis.inboxZeroScan({
@@ -163,8 +172,10 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
         ...(options?.query ? { query: options.query } : {}),
         limit: 40,
       });
+      if (generation !== sessionGeneration) return;
       applyScanResponse(res);
     } catch (error) {
+      if (generation !== sessionGeneration) return;
       if (error instanceof TimeoutError) {
         toast.push({
           title: 'Scan trop lent',
@@ -179,48 +190,65 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
         });
       }
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
   };
 
   const loadSession = async () => {
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const res = await app.jarvis.inboxZeroSession(app.sessionId);
+      if (generation !== sessionGeneration) return;
       applyScanResponse(res);
     } catch (error) {
+      if (generation !== sessionGeneration) return;
       toast.push({
         title: 'Erreur reprise',
         detail: error instanceof Error ? error.message : 'Erreur inconnue.',
         tone: 'danger',
       });
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
   };
 
   const setStep = async (step: InboxZeroStep) => {
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const res = await app.jarvis.inboxZeroSetStep({
         sessionId: app.sessionId,
         step,
       });
+      if (generation !== sessionGeneration) return;
       applyScanResponse(res);
       clearSelection();
     } catch (error) {
+      if (generation !== sessionGeneration) return;
       toast.push({
         title: 'Erreur étape',
         detail: error instanceof Error ? error.message : 'Erreur inconnue.',
         tone: 'danger',
       });
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
   };
 
   const openMessage = async (messageId: string) => {
+    if (
+      messagePanel.value &&
+      messagePanel.value.message.id !== messageId &&
+      replyText.value &&
+      replyText.value !== savedDraft.value?.text
+    ) {
+      draftSaveError.value = 'Enregistrez le brouillon avant de changer de message.';
+      return;
+    }
     const token = ++messageLoadToken;
+    savedDraft.value = null;
+    draftSaveError.value = '';
     draftLoadToken += 1;
     setCursor(messageId);
     detailBusy.value = true;
@@ -228,9 +256,14 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     replyReview.value = null;
     replyText.value = '';
     try {
-      const res = await app.jarvis.inboxZeroMessage(app.sessionId, messageId);
+      const [res, persisted] = await Promise.all([
+        app.jarvis.inboxZeroMessage(app.sessionId, messageId),
+        app.jarvis.inboxReplyDraft(app.sessionId, messageId),
+      ]);
       if (token !== messageLoadToken) return;
       messagePanel.value = res;
+      savedDraft.value = persisted.draft;
+      replyText.value = persisted.draft?.text ?? '';
     } catch (error) {
       if (token !== messageLoadToken) return;
       toast.push({
@@ -243,7 +276,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     }
   };
 
-  const closeMessage = () => {
+  const dismissMessage = () => {
     messageLoadToken += 1;
     draftLoadToken += 1;
     messagePanel.value = null;
@@ -251,6 +284,39 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     replyReview.value = null;
     replyText.value = '';
     reminderText.value = '';
+  };
+
+  const closeMessage = () => {
+    if (replyText.value && replyText.value !== savedDraft.value?.text) {
+      draftSaveError.value = 'Enregistrez le brouillon avant de fermer le message.';
+      return;
+    }
+    dismissMessage();
+  };
+
+  const saveReplyDraft = async () => {
+    const messageId = messagePanel.value?.message.id;
+    if (!messageId || draftSaveBusy.value || busy.value) return;
+    const token = messageLoadToken;
+    draftSaveBusy.value = true;
+    draftSaveError.value = '';
+    try {
+      const result = await app.jarvis.saveInboxReplyDraft({
+        sessionId: session.value?.sessionId ?? app.sessionId,
+        messageId,
+        text: replyText.value,
+        version: savedDraft.value?.version ?? 0,
+      });
+      if (token === messageLoadToken) savedDraft.value = result.draft;
+    } catch (error) {
+      if (token === messageLoadToken)
+        draftSaveError.value =
+          error instanceof Error
+            ? error.message
+            : 'Brouillon non enregistré. Conservez votre texte.';
+    } finally {
+      if (token === messageLoadToken) draftSaveBusy.value = false;
+    }
   };
 
   const createDraftReply = async (messageId: string) => {
@@ -290,6 +356,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     if (!messageIds.length) return false;
 
     actionError.value = '';
+    const generation = sessionGeneration;
     busy.value = true;
     try {
       const visibleBefore = filteredItems.value.map((i) => i.messageId);
@@ -315,12 +382,13 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
             })
           : undefined;
       const res = await app.jarvis.inboxZeroApply({
-        sessionId: app.sessionId,
+        sessionId: conversationId ?? app.sessionId,
         action,
         messageIds,
         ...(extra ?? {}),
         ...(requestId ? { requestId } : {}),
       });
+      if (generation !== sessionGeneration) return false;
       if (requestId && conversationId && res.results.length === 1 && res.results[0]?.ok)
         await completeReplyRequest(conversationId, messageIds[0]!, requestId);
       const changed = new Set(res.results.map((result) => result.messageId));
@@ -354,6 +422,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       clearSelection();
       return res.results.length === messageIds.length && res.results.every((result) => result.ok);
     } catch (error) {
+      if (generation !== sessionGeneration) return false;
       actionError.value =
         error instanceof Error
           ? error.message
@@ -365,7 +434,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       });
       return false;
     } finally {
-      busy.value = false;
+      if (generation === sessionGeneration) busy.value = false;
     }
   };
 
@@ -456,6 +525,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     )
       return;
     selectedIds.value = [messageId];
+    const token = messageLoadToken;
     const completed = await apply('send_reply', {
       replyText: review.text,
       reviewedReply: { to: review.to, subject: review.subject },
@@ -463,10 +533,26 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     });
     if (
       completed &&
+      token === messageLoadToken &&
       messagePanel.value?.message.id === messageId &&
       replyText.value.trim() === text
-    )
-      closeMessage();
+    ) {
+      if (savedDraft.value) {
+        try {
+          await app.jarvis.saveInboxReplyDraft({
+            sessionId: review.conversationId,
+            messageId,
+            text: '',
+            version: savedDraft.value.version,
+          });
+        } catch {
+          draftSaveError.value =
+            'Réponse envoyée ; le brouillon enregistré n’a pas pu être effacé. Aucun nouvel envoi nécessaire.';
+          return;
+        }
+      }
+      if (token === messageLoadToken) dismissMessage();
+    }
   };
 
   const createReminder = async (messageId: string) => {
@@ -480,6 +566,31 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     });
     closeMessage();
   };
+
+  watch(
+    () => app.sessionId,
+    () => {
+      sessionGeneration++;
+      messageLoadToken++;
+      draftLoadToken++;
+      busy.value = false;
+      detailBusy.value = false;
+      draftBusy.value = false;
+      draftSaveBusy.value = false;
+      session.value = null;
+      items.value = [];
+      recentActions.value = [];
+      actionResults.value = [];
+      selectedIds.value = [];
+      cursorId.value = null;
+      messagePanel.value = null;
+      savedDraft.value = null;
+      replyReview.value = null;
+      replyText.value = '';
+      actionError.value = '';
+      draftSaveError.value = '';
+    },
+  );
 
   return {
     session,
@@ -495,6 +606,10 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     messagePanel,
     draft,
     replyText,
+    savedDraft,
+    draftSaveBusy,
+    draftSaveError,
+    saveReplyDraft,
     replyReview,
     reviewReply,
     reminderWhen,

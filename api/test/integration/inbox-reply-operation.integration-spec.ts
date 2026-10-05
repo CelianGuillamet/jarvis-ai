@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationService } from '../../src/auth/conversation.service';
 import {
@@ -138,6 +139,44 @@ describe('Durable Inbox reply steps', () => {
     ).toBe('unknown');
     expect(steps.send).toHaveBeenCalledTimes(1);
     expect(steps.labels).not.toHaveBeenCalled();
+  });
+
+  it('resumes a historical sent receipt but never authorizes a historical pending send', async () => {
+    for (const sendState of ['sent', 'pending']) {
+      const input = await fixture(`historical-${sendState}`);
+      const intent = {
+        conversationId: input.conversationId,
+        accountId: input.accountId,
+        accountSubject: input.accountSubject,
+        messageId: input.messageId,
+        replyText: input.replyText,
+        archiveAfter: input.archiveAfter,
+      };
+      await prisma.inboxReplyOperation.create({
+        data: {
+          ownerId: input.ownerId,
+          conversationId: input.conversationId,
+          requestId: input.requestId,
+          intent,
+          digest: createHash('sha256')
+            .update(JSON.stringify(intent))
+            .digest('hex'),
+          sendState,
+          ...(sendState === 'sent'
+            ? { providerMessageId: 'historical-receipt' }
+            : {}),
+        },
+      });
+      const steps = callbacks();
+      if (sendState === 'sent') {
+        expect((await service.execute(input, steps)).outcome).toBe('completed');
+        expect(steps.labels).toHaveBeenCalledTimes(1);
+      } else
+        await expect(service.execute(input, steps)).rejects.toThrow(
+          'autre réponse',
+        );
+      expect(steps.send).not.toHaveBeenCalled();
+    }
   });
 
   it('rejects changed intent and cross-owner conversation access before effects', async () => {

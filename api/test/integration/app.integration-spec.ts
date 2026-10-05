@@ -750,6 +750,8 @@ describe('API against disposable migrated PostgreSQL', () => {
         'GET /auth/google/callback',
         'GET /auth/google/status',
         'GET /inbox-zero/message',
+        'GET /inbox-zero/reply-draft',
+        'POST /inbox-zero/reply-draft',
         'GET /inbox-zero/session',
         'GET /jarvis/history',
         'GET /jarvis/status',
@@ -958,6 +960,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
+      '/inbox-zero/reply-draft',
       '/auth/google',
       '/auth/google/status',
       '/auth/google/callback',
@@ -977,6 +980,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/jarvis/status/refresh',
       '/inbox-zero/scan',
       '/inbox-zero/step',
+      '/inbox-zero/reply-draft',
       '/inbox-zero/apply',
       '/inbox-zero/draft-reply',
     ]) {
@@ -1315,13 +1319,14 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/jarvis/status',
       '/inbox-zero/session',
       '/inbox-zero/message',
+      '/inbox-zero/reply-draft',
       '/auth/google',
       '/auth/google/status',
     ]) {
       await request(baseUrl)
         .get(path)
         .query(
-          path === '/inbox-zero/message'
+          path === '/inbox-zero/message' || path === '/inbox-zero/reply-draft'
             ? { sessionId: first, messageId: 'fixture-message' }
             : { sessionId: first },
         )
@@ -1364,6 +1369,10 @@ describe('API against disposable migrated PostgreSQL', () => {
         { action: 'archive', messageIds: ['fixture-message'] },
       ],
       ['/inbox-zero/draft-reply', { messageId: 'fixture-message' }],
+      [
+        '/inbox-zero/reply-draft',
+        { messageId: 'fixture-message', text: 'Draft', version: 0 },
+      ],
     ] as const) {
       await request(baseUrl)
         .post(path)

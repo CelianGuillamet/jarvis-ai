@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { InboxReplyOperation } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { REQUEST_LIMITS } from '../http/request-limits';
@@ -94,7 +95,19 @@ export class InboxReplyOperationService {
     let row = await this.prisma.inboxReplyOperation.findUniqueOrThrow({
       where,
     });
-    if (row.digest !== digest)
+    // Historical receipts can resume labels/local bookkeeping, never a send.
+    // Their immutable envelope predates recipient review and is left intact.
+    const historicalSentIntent =
+      row.sendState === 'sent' &&
+      isDeepStrictEqual(row.intent, {
+        conversationId: intent.conversationId,
+        accountId: intent.accountId,
+        accountSubject: intent.accountSubject,
+        messageId: intent.messageId,
+        replyText: intent.replyText,
+        archiveAfter: intent.archiveAfter,
+      });
+    if (row.digest !== digest && !historicalSentIntent)
       throw new ConflictException('Cette tentative désigne une autre réponse.');
 
     const claim = await this.prisma.inboxReplyOperation.updateMany({

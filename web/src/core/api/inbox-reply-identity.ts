@@ -20,7 +20,12 @@ export async function replyRequestId(intent: ReplyIntent): Promise<string> {
   return navigator.locks.request(key, () => {
     const saved = localStorage.getItem(key);
     if (saved) {
-      const entry = JSON.parse(saved) as { requestId?: unknown; digest?: unknown };
+      const entry = JSON.parse(saved) as { requestId?: unknown; digest?: unknown; settled?: unknown };
+      if (entry.digest !== digest && entry.settled === true) {
+        const requestId = crypto.randomUUID();
+        localStorage.setItem(key, JSON.stringify({ requestId, digest }));
+        return requestId;
+      }
       if (typeof entry.requestId !== 'string' || entry.digest !== digest)
         throw new Error('Une réponse précédente reste à vérifier. Reprends son texte sans créer un nouvel envoi.');
       return entry.requestId;
@@ -37,6 +42,6 @@ export async function completeReplyRequest(conversationId: string, messageId: st
   await navigator.locks.request(key, () => {
     const saved = localStorage.getItem(key);
     if (saved && (JSON.parse(saved) as { requestId?: unknown }).requestId === requestId)
-      localStorage.removeItem(key);
+      localStorage.setItem(key, JSON.stringify({ ...JSON.parse(saved), settled: true }));
   });
 }

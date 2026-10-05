@@ -56,9 +56,10 @@ const setStep = async (step: InboxZeroStep) => {
 };
 
 const onKeydown = (event: KeyboardEvent) => {
-  const target = event.target as HTMLElement | null;
+  if (event.defaultPrevented) return;
+  const target = event.target instanceof Element ? event.target : null;
   const tag = (target?.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+  if (['input', 'textarea', 'select', 'button', 'a'].includes(tag) || target?.closest('button, a, [role=button]') || target?.closest('[contenteditable=true]')) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
 
   if (event.key === 'Escape') {
@@ -140,7 +141,7 @@ onBeforeUnmount(() => {
     <aside v-if="inbox.actionResults.length" aria-label="Résultats des actions" class="max-h-40 shrink-0 overflow-auto rounded-xl border border-border p-3">
       <h2 class="font-medium">Résultats par message</h2>
       <ul class="mt-2 space-y-2 text-sm"><li v-for="result in inbox.actionResults" :key="result.messageId">
-        <span>{{ result.messageId }} : </span>
+        <span>{{ inbox.items.find(item => item.messageId === result.messageId)?.subject || 'Message traité' }} : </span>
         <span v-if="result.outcome === 'unknown'">Résultat incertain. Vérifiez l’état avant de reprendre.</span>
         <span v-else-if="result.outcome === 'partial'">Réponse envoyée ; étapes restantes à reprendre sans nouvel envoi.</span>
         <span v-else-if="result.outcome === 'simulated'">Simulation, aucune modification.</span>
@@ -516,6 +517,9 @@ onBeforeUnmount(() => {
                   Draft
                 </BaseButton>
               </div>
+              <p v-if="inbox.draftSaveError" role="alert" class="mt-3">{{ inbox.draftSaveError }}</p>
+              <p v-if="inbox.savedDraft" class="mt-3 text-sm text-muted-foreground">{{ inbox.savedDraft.text === inbox.replyText ? 'Brouillon enregistré' : 'Modifications non enregistrées' }}</p>
+              <BaseButton class="mt-3" variant="secondary" :loading="inbox.draftSaveBusy" :disabled="inbox.busy" @click="inbox.saveReplyDraft">Enregistrer le brouillon</BaseButton>
               <BaseTextarea
                 v-model="inbox.replyText"
                 class="mt-3"

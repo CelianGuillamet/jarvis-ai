@@ -504,6 +504,7 @@ model Conversation {
   createdAt DateTime @default(now())
   commands Command[]
   inboxReplies InboxReplyOperation[]
+  inboxDrafts InboxReplyDraft[]
   turns ConversationTurn[]
 
   @@index([ownerId, createdAt])
@@ -708,4 +709,16 @@ model CommandCompensation {
   changes Json
   consumedAt DateTime?
   createdAt DateTime @default(now())
+}
+
+model InboxReplyDraft {
+  ownerId String
+  conversationId String
+  conversation Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  messageId String
+  text String
+  version Int
+  updatedAt DateTime @updatedAt
+
+  @@id([ownerId, conversationId, messageId])
 }

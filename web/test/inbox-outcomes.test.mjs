@@ -84,3 +84,31 @@ test('recovers validated per-message outcomes from the persisted action journal'
   assert.equal(calls, 0);
   assert.match(inbox.actionError, /incertain/);
 });
+
+test('saves draft revisions and keeps text when another editor conflicts', async () => {
+  const { inbox, app } = fixture('unknown');
+  let payload;
+  app.jarvis.saveInboxReplyDraft = async input => { payload = input; return { draft: { messageId: input.messageId, text: input.text, version: 1, updatedAt: new Date().toISOString() } }; };
+  await inbox.saveReplyDraft();
+  assert.equal(payload.version, 0);
+  assert.equal(inbox.savedDraft.text, 'My response');
+  inbox.replyText = 'Unsaved change';
+  app.jarvis.saveInboxReplyDraft = async () => { throw new Error('Concurrent edit'); };
+  await inbox.saveReplyDraft();
+  assert.equal(inbox.replyText, 'Unsaved change');
+  assert.equal(inbox.savedDraft.version, 1);
+  assert.equal(inbox.draftSaveError, 'Concurrent edit');
+  inbox.closeMessage();
+  assert.ok(inbox.messagePanel);
+});
+
+test('restores a saved draft when opening the message in a fresh editor', async () => {
+  const { inbox, app } = fixture('unknown');
+  inbox.messagePanel = null; inbox.replyText = '';
+  app.jarvis.inboxZeroMessage = async () => ({ message: { id: 'message' }, item: null, reply: { to: 'sender@example.invalid', subject: 'Re: Subject' } });
+  app.jarvis.inboxReplyDraft = async () => ({ draft: { messageId: 'message', text: 'Saved before reconnect', version: 3, updatedAt: new Date().toISOString() } });
+  await inbox.openMessage('message');
+  assert.equal(inbox.replyText, 'Saved before reconnect');
+  assert.equal(inbox.savedDraft.version, 3);
+  inbox.closeMessage(); assert.equal(inbox.messagePanel, null);
+});

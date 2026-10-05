@@ -742,3 +742,17 @@ export type TodayQuery = z.infer<typeof TodayQuerySchema>;
 export const TodayPageResponseSchema = TodayLocalSnapshotSchema.extend({
   conversationId: z.uuid(),
 }).strict();
+
+export const InboxReplyDraftSchema = z.strictObject({
+  messageId: identifier,
+  text: text.max(REQUEST_LIMITS.replyChars),
+  version: z.number().int().min(1).max(1000000000),
+  updatedAt: z.iso.datetime(),
+});
+export const InboxReplyDraftResponseSchema = z.strictObject({ draft: InboxReplyDraftSchema.nullable() });
+export const InboxReplyDraftSaveRequestSchema = MessageQuerySchema.extend({
+  text: text.max(REQUEST_LIMITS.replyChars),
+  version: z.number().int().min(0).max(999999999),
+}).strict();
+export type InboxReplyDraftSaveRequest = z.infer<typeof InboxReplyDraftSaveRequestSchema>;
+export type InboxReplyDraft = z.infer<typeof InboxReplyDraftSchema>;

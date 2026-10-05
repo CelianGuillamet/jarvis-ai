@@ -1,3 +1,9 @@
+import { InboxReplyDraftService } from './inbox-reply-draft.service';
+import {
+  InboxReplyDraftResponseSchema,
+  InboxReplyDraftSaveRequestSchema,
+  type InboxReplyDraftSaveRequest,
+} from '../contracts/v1';
 import {
   ConversationQuerySchema,
   MessageQuerySchema,
@@ -38,6 +44,7 @@ export class InboxZeroController {
   constructor(
     private readonly inboxZero: InboxZeroService,
     private readonly conversations: ConversationService,
+    private readonly drafts: InboxReplyDraftService,
   ) {}
 
   @Post('scan')
@@ -112,6 +119,37 @@ export class InboxZeroController {
       await this.conversations.resolve(request.identity.userId, sessionId),
       messageId.trim(),
     );
+  }
+
+  @Get('reply-draft')
+  @ResponseContract(InboxReplyDraftResponseSchema)
+  async savedDraft(
+    @Req() request: AuthenticatedRequest,
+    @Query(new RequestContract(MessageQuerySchema)) query: MessageQueryDto,
+  ) {
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      query.sessionId,
+    );
+    return this.drafts.read(
+      request.identity.userId,
+      conversationId,
+      query.messageId,
+    );
+  }
+
+  @Post('reply-draft')
+  @ResponseContract(InboxReplyDraftResponseSchema)
+  async saveDraft(
+    @Req() request: AuthenticatedRequest,
+    @Body(new RequestContract(InboxReplyDraftSaveRequestSchema))
+    body: InboxReplyDraftSaveRequest,
+  ) {
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      body.sessionId,
+    );
+    return this.drafts.save(request.identity.userId, conversationId, body);
   }
 
   @Post('draft-reply')
