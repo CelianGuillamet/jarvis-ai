@@ -51,15 +51,32 @@ export class AccountController {
       const account = await this.prisma.user.findUniqueOrThrow({
         where: { id: request.identity.userId },
         select: {
-          id: true, name: true, email: true, emailVerified: true, image: true,
-          createdAt: true, updatedAt: true, ...preferenceFields,
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          image: true,
+          createdAt: true,
+          updatedAt: true,
+          ...preferenceFields,
         },
       });
-      const { displayTimezone, theme, onboardingCompleted, createdAt, updatedAt, ...profile } = account;
+      const {
+        displayTimezone,
+        theme,
+        onboardingCompleted,
+        createdAt,
+        updatedAt,
+        ...profile
+      } = account;
       return {
         formatVersion: 1 as const,
         exportedAt: new Date().toISOString(),
-        profile: { ...profile, createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString() },
+        profile: {
+          ...profile,
+          createdAt: createdAt.toISOString(),
+          updatedAt: updatedAt.toISOString(),
+        },
         preferences: { displayTimezone, theme, onboardingCompleted },
       };
     } catch {

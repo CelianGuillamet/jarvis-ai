@@ -62,3 +62,7 @@ la migration SQL spécifique après revue des contraintes et courses d’exécut
 Export profil : projection User explicite. Pages locales tâches/notes/shopping/calendar : ownerId de l’identité signée, curseur UUID strict, take51/items50. Mémoire : jointure SQL paramétrée JarvisMemoryFact.sessionId vers Conversation.id, ownerId obligatoire sans liste de conversations non bornée. Inventaire HTTP privé et matrice de sécurité mis à jour.
 
 Ces pages lisent l’état courant à chaque requête : elles ne garantissent pas encore un snapshot cohérent multi-pages/multi-collections sous mutations concurrentes. La cohérence de l’export complet reste à implémenter et tester avant livraison. Historique, Inbox et autres modèles retenus doivent être couverts. Aucun test PostgreSQL d’export encore exécuté.
+
+## Inventaire complet et copies historiques
+
+Tous les modèles Prisma ont une portée de propriété et une disposition export explicites dans api/src/privacy/data-inventory.ts. Le test de couverture compare les noms au schéma pour échouer dès qu’un modèle futur est oublié. Les métadonnées auth restent distinctes des secrets non exportables. Les archives LegacyOwnershipRecord.original et LegacyOwnershipBatch.manifest peuvent contenir des copies de données utilisateur : leur purge ciblée fait partie de l’effacement, en préservant les copies des autres propriétaires. Cet inventaire ne constitue pas encore une implémentation d’effacement.

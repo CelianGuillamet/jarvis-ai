@@ -30,8 +30,14 @@ describe('Account preferences', () => {
     const { controller, findUniqueOrThrow } = fixture();
     const date = new Date('2026-10-05T12:00:00Z');
     findUniqueOrThrow.mockResolvedValue({
-      id: 'authenticated-owner', name: 'Local fixture', email: 'fixture@example.test',
-      emailVerified: true, image: null, createdAt: date, updatedAt: date, ...preferences,
+      id: 'authenticated-owner',
+      name: 'Local fixture',
+      email: 'fixture@example.test',
+      emailVerified: true,
+      image: null,
+      createdAt: date,
+      updatedAt: date,
+      ...preferences,
     });
     const result = await controller.exportProfile(request);
     expect(result.profile.id).toBe('authenticated-owner');
@@ -39,16 +45,32 @@ describe('Account preferences', () => {
     expect(result.preferences).toEqual(preferences);
     expect(findUniqueOrThrow).toHaveBeenCalledWith({
       where: { id: 'authenticated-owner' },
-      select: { id:true, name:true, email:true, emailVerified:true, image:true,
-        createdAt:true, updatedAt:true, displayTimezone:true, theme:true, onboardingCompleted:true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        emailVerified: true,
+        image: true,
+        createdAt: true,
+        updatedAt: true,
+        displayTimezone: true,
+        theme: true,
+        onboardingCompleted: true,
+      },
     });
-    expect(JSON.stringify(result)).not.toMatch(/password|accessToken|refreshToken/);
+    expect(JSON.stringify(result)).not.toMatch(
+      /password|accessToken|refreshToken/,
+    );
   });
 
   it('does not leak storage errors from profile export', async () => {
     const { controller, findUniqueOrThrow } = fixture();
-    findUniqueOrThrow.mockRejectedValue(new Error('private database credentials'));
-    await expect(controller.exportProfile(request)).rejects.toThrow(ServiceUnavailableException);
+    findUniqueOrThrow.mockRejectedValue(
+      new Error('private database credentials'),
+    );
+    await expect(controller.exportProfile(request)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
   });
 
   it('reads only the authenticated account and preference fields', async () => {
