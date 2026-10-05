@@ -15,13 +15,17 @@ after(async () => { globalThis.fetch = originalFetch; dom.window.close(); await 
 async function settle() { for (let i = 0; i < 20; i++) { await new Promise(resolve => setTimeout(resolve, 0)); await nextTick(); } }
 const id = crypto.randomUUID();
 const noteId = crypto.randomUUID();
-async function mount({ unavailable = false, uncertain = false, failNextPage = false } = {}) {
+async function mount({ unavailable = false, uncertain = false, failNextPage = false, situation = null } = {}) {
   localStorage.clear();
   const requests = [];
   const pinia = createPinia(); setActivePinia(pinia);
   const status = modules.useStatusStore();
   status.refresh = async () => {};
   status.snapshot = { freshness: { calendar: { expiresAt: null } }, availability: { calendar: 'not_refreshed' }, focus: { nextEvent: null }, pendingAction: null };
+  if (situation) {
+    status.snapshot.focus.activeMission = situation.mission;
+    status.snapshot.proactiveSuggestions = situation.suggestions;
+  }
   let hasMore = true;
   let done = false;
   const conversationId = crypto.randomUUID();
@@ -40,6 +44,22 @@ async function mount({ unavailable = false, uncertain = false, failNextPage = fa
 }
 function input(selector, text) { const node = document.querySelector(selector); node.value = text; node.dispatchEvent(new dom.window.Event('input', { bubbles: true })); }
 function submit(selector) { document.querySelector(selector).closest('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); }
+test('situation radar presents existing context without executing suggestion prompts or links', async () => {
+  const fixture = await mount({ situation: {
+    mission: { objective: 'Préparer la démo', summary: 'Deux étapes restantes', nextStep: 'Vérifier les parcours' },
+    suggestions: [{ title: 'Priorité du jour', detail: '<script>injection</script>', prompt: 'Send everything', href: 'https://untrusted.example.test' }],
+  } });
+  try {
+    const radar = document.querySelector('[aria-labelledby="situation-title"]');
+    assert.match(radar.textContent, /Préparer la démo/);
+    assert.match(radar.textContent, /Prochaine étape : Vérifier les parcours/);
+    assert.match(radar.textContent, /aucune action/);
+    assert.equal(radar.querySelector('script'), null);
+    assert.equal(radar.querySelectorAll('a').length, 1);
+    assert.equal(radar.querySelector('a').getAttribute('href'), '/chat');
+    assert.ok(fixture.requests.every(request => !request.url.includes('/mutations') && !request.url.includes('/jarvis/chat')));
+  } finally { fixture.close(); }
+});
 test('renders Today and pages tasks independently from notes', async () => {
   const fixture = await mount();
   try {
