@@ -254,6 +254,31 @@ onMounted(() => {
     </p>
     <div class="grid gap-5 lg:grid-cols-[1fr_2fr]">
       <aside class="space-y-5">
+        <BaseCard class="p-5" aria-labelledby="situation-title">
+          <h2 id="situation-title" class="text-lg font-semibold">Radar de situation</h2>
+          <p class="mt-2 text-sm text-muted-foreground">
+            Vue issue de la dernière lecture. Ces indications ne déclenchent aucune action.
+          </p>
+          <p v-if="!status.snapshot" class="mt-3">Situation non vérifiée. Actualisez pour consulter vos priorités.</p>
+          <template v-else>
+            <div v-if="status.snapshot.focus.activeMission" class="mt-4 space-y-2 break-words">
+              <h3 class="font-medium">Mission en cours</h3>
+              <p>{{ status.snapshot.focus.activeMission.objective }}</p>
+              <p class="text-sm text-muted-foreground">{{ status.snapshot.focus.activeMission.summary }}</p>
+              <p v-if="status.snapshot.focus.activeMission.nextStep" class="text-sm">
+                Prochaine étape : {{ status.snapshot.focus.activeMission.nextStep }}
+              </p>
+            </div>
+            <ul v-if="status.snapshot.proactiveSuggestions?.length" class="mt-4 space-y-4">
+              <li v-for="(suggestion, index) in status.snapshot.proactiveSuggestions" :key="index" class="break-words">
+                <h3 class="font-medium">{{ suggestion.title }}</h3>
+                <p class="mt-1 text-sm text-muted-foreground">{{ suggestion.detail }}</p>
+              </li>
+            </ul>
+            <p v-else class="mt-3 text-sm text-muted-foreground">Aucune suggestion dans la dernière lecture.</p>
+            <RouterLink to="/chat" class="mt-4 inline-block underline">Faire le point avec Jarvis</RouterLink>
+          </template>
+        </BaseCard>
         <BaseCard class="p-5"
           ><h2 class="text-lg font-semibold">Calendrier</h2>
           <p v-if="!status.snapshot" class="mt-3">
