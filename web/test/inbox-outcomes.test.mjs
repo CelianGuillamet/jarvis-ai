@@ -112,3 +112,12 @@ test('restores a saved draft when opening the message in a fresh editor', async 
   assert.equal(inbox.savedDraft.version, 3);
   inbox.closeMessage(); assert.equal(inbox.messagePanel, null);
 });
+
+test('restores only confirmed archived messages through the typed action', async () => {
+  const { inbox, app } = fixture('completed');
+  inbox.recentActions = [{ id:'archive', actionType:'archive', payload:{ results:[{ messageId:'one', ok:true, outcome:'completed' }, { messageId:'two', ok:false, outcome:'unknown' }] } }];
+  let sent;
+  app.jarvis.inboxZeroApply = async input => { sent=input; return { session:inbox.session, items:[], recentActions:[], results:[{ messageId:'one',ok:true,outcome:'completed' }] }; };
+  await inbox.restoreArchivedAction('archive');
+  assert.equal(sent.action,'restore_inbox'); assert.deepEqual(sent.messageIds,['one']);
+});

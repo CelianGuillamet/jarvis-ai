@@ -20,6 +20,7 @@ export type InboxZeroStep = (typeof INBOX_ZERO_STEPS)[number];
 
 export const INBOX_ZERO_ACTION_TYPES = [
   'archive',
+  'restore_inbox',
   'mark_read',
   'mark_read_archive',
   'trash',

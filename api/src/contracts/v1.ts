@@ -326,6 +326,7 @@ export const InboxZeroStepSchema = z.enum([
 ]);
 export const InboxZeroActionTypeSchema = z.enum([
   'archive',
+  'restore_inbox',
   'mark_read',
   'mark_read_archive',
   'trash',
@@ -749,10 +750,14 @@ export const InboxReplyDraftSchema = z.strictObject({
   version: z.number().int().min(1).max(1000000000),
   updatedAt: z.iso.datetime(),
 });
-export const InboxReplyDraftResponseSchema = z.strictObject({ draft: InboxReplyDraftSchema.nullable() });
+export const InboxReplyDraftResponseSchema = z.strictObject({
+  draft: InboxReplyDraftSchema.nullable(),
+});
 export const InboxReplyDraftSaveRequestSchema = MessageQuerySchema.extend({
   text: text.max(REQUEST_LIMITS.replyChars),
   version: z.number().int().min(0).max(999999999),
 }).strict();
-export type InboxReplyDraftSaveRequest = z.infer<typeof InboxReplyDraftSaveRequestSchema>;
+export type InboxReplyDraftSaveRequest = z.infer<
+  typeof InboxReplyDraftSaveRequestSchema
+>;
 export type InboxReplyDraft = z.infer<typeof InboxReplyDraftSchema>;

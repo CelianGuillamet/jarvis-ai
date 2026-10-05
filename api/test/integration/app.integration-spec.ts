@@ -355,6 +355,41 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Origin', 'http://localhost:5173')
       .send({ sessionId })
       .expect(201);
+    const draftPayload = {
+      sessionId,
+      messageId: 'fixture-message',
+      text: 'Saved reply',
+      version: 0,
+    };
+    await request(baseUrl)
+      .post('/inbox-zero/reply-draft')
+      .set('Cookie', cookie)
+      .set('Origin', 'https://foreign.invalid')
+      .send(draftPayload)
+      .expect(403);
+    const saved = await request(baseUrl)
+      .post('/inbox-zero/reply-draft')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send(draftPayload)
+      .expect(201);
+    expect((saved.body as { draft: { version: number } }).draft.version).toBe(
+      1,
+    );
+    const loaded = await request(baseUrl)
+      .get('/inbox-zero/reply-draft')
+      .set('Cookie', cookie)
+      .query({ sessionId, messageId: 'fixture-message' })
+      .expect(200);
+    expect((loaded.body as { draft: { text: string } }).draft.text).toBe(
+      'Saved reply',
+    );
+    await request(baseUrl)
+      .post('/inbox-zero/reply-draft')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ ...draftPayload, text: 'Stale overwrite' })
+      .expect(409);
     const payload = {
       sessionId,
       action: 'send_reply',
@@ -424,6 +459,32 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(gmail.sendMessage.mock.calls[before][1].to).toBe(
       'sender@example.invalid',
     );
+    const restored = await request(baseUrl)
+      .post('/inbox-zero/apply')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({
+        sessionId,
+        action: 'restore_inbox',
+        messageIds: ['fixture-message'],
+      })
+      .expect(201);
+    expect(
+      (restored.body as { results: { outcome: string }[] }).results[0].outcome,
+    ).toBe('completed');
+    expect(gmail.modifyLabels).toHaveBeenLastCalledWith(
+      sessionId,
+      'fixture-message',
+      ['INBOX'],
+      [],
+    );
+    expect(
+      (
+        await prisma.inboxZeroItem.findFirstOrThrow({
+          where: { sessionId, messageId: 'fixture-message' },
+        })
+      ).status,
+    ).toBe('pending');
     const labelsBefore = gmail.modifyLabels.mock.calls.length;
     gmail.sendMessage.mockRejectedValueOnce(new Error('Send timeout'));
     for (let attempt = 0; attempt < 2; attempt++) {

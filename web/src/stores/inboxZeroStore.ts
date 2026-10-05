@@ -75,6 +75,12 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     subject: string;
   } | null>(null);
 
+  const replyOutcome = computed(
+    () =>
+      actionResults.value.find((result) => result.messageId === messagePanel.value?.message.id)
+        ?.outcome ?? null,
+  );
+
   const reminderWhen = ref('demain 9h');
   const reminderText = ref('');
 
@@ -237,6 +243,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
   };
 
   const openMessage = async (messageId: string) => {
+    if (messagePanel.value?.message.id === messageId) return;
     if (
       messagePanel.value &&
       messagePanel.value.message.id !== messageId &&
@@ -247,6 +254,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       return;
     }
     const token = ++messageLoadToken;
+    messagePanel.value = null;
     savedDraft.value = null;
     draftSaveError.value = '';
     draftLoadToken += 1;
@@ -257,8 +265,8 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     replyText.value = '';
     try {
       const [res, persisted] = await Promise.all([
-        app.jarvis.inboxZeroMessage(app.sessionId, messageId),
-        app.jarvis.inboxReplyDraft(app.sessionId, messageId),
+        app.jarvis.inboxZeroMessage(session.value?.sessionId ?? app.sessionId, messageId),
+        app.jarvis.inboxReplyDraft(session.value?.sessionId ?? app.sessionId, messageId),
       ]);
       if (token !== messageLoadToken) return;
       messagePanel.value = res;
@@ -438,6 +446,19 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     }
   };
 
+  const restoreArchivedAction = async (actionId: string) => {
+    if (busy.value) return;
+    const action = recentActions.value.find((action) => action.id === actionId);
+    if (!action || !['archive', 'mark_read_archive'].includes(action.actionType)) return;
+    const candidates = action.payload?.results;
+    if (!Array.isArray(candidates)) return;
+    selectedIds.value = candidates.flatMap((candidate) => {
+      const parsed = InboxZeroApplyResultSchema.safeParse(candidate);
+      return parsed.success && parsed.data.outcome === 'completed' ? [parsed.data.messageId] : [];
+    });
+    await apply('restore_inbox');
+  };
+
   const openCursorMessage = async () => {
     if (!cursorId.value) return;
     await openMessage(cursorId.value);
@@ -596,6 +617,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     session,
     items,
     recentActions,
+    restoreArchivedAction,
     actionResults,
     actionError,
     busy,
@@ -611,6 +633,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     draftSaveError,
     saveReplyDraft,
     replyReview,
+    replyOutcome,
     reviewReply,
     reminderWhen,
     reminderText,

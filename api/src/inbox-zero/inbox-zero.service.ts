@@ -692,6 +692,20 @@ export class InboxZeroService {
                 itemPatch.labelsJson = JSON.stringify(nextLabels);
                 itemPatch.status = 'processed';
                 itemPatch.lastActionAt = now;
+              } else if (effectiveAction === 'restore_inbox') {
+                await this.withGoogleGuard(() =>
+                  this.gmail.modifyLabels(
+                    sessionId,
+                    row.messageId,
+                    ['INBOX'],
+                    [],
+                  ),
+                );
+                itemPatch.labelsJson = JSON.stringify(
+                  applyLabels(labels, ['INBOX'], []),
+                );
+                itemPatch.status = 'pending';
+                itemPatch.lastActionAt = now;
               } else if (effectiveAction === 'mark_read') {
                 const nextLabels = applyLabels(labels, [], ['UNREAD']);
                 await this.withGoogleGuard(() =>

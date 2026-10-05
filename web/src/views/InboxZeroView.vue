@@ -432,6 +432,7 @@ onBeforeUnmount(() => {
                   {{ preferences.formatDate(a.createdAt, true) }}
                 </span>
               </div>
+              <BaseButton v-if="['archive', 'mark_read_archive'].includes(a.actionType) && a.status === 'completed' && a.payload?.archiveAfter !== false" class="mt-2" variant="secondary" size="sm" :loading="inbox.busy" @click="inbox.restoreArchivedAction(a.id)">Remettre dans la boîte de réception</BaseButton>
               <div v-if="a.errorMessage" class="mt-1 text-red-300/80">
                 {{ a.errorMessage }}
               </div>
@@ -512,6 +513,7 @@ onBeforeUnmount(() => {
                   variant="secondary"
                   size="sm"
                   :loading="inbox.draftBusy"
+                  :disabled="inbox.busy || inbox.replyOutcome === 'partial' || inbox.replyOutcome === 'unknown'"
                   @click="inbox.createDraftReply(inbox.messagePanel.message.id)"
                 >
                   Draft
@@ -522,6 +524,7 @@ onBeforeUnmount(() => {
               <BaseButton class="mt-3" variant="secondary" :loading="inbox.draftSaveBusy" :disabled="inbox.busy" @click="inbox.saveReplyDraft">Enregistrer le brouillon</BaseButton>
               <BaseTextarea
                 v-model="inbox.replyText"
+                :disabled="inbox.busy || inbox.replyOutcome === 'partial' || inbox.replyOutcome === 'unknown'"
                 class="mt-3"
                 label="Message"
                 placeholder="Ta réponse…"
@@ -530,7 +533,7 @@ onBeforeUnmount(() => {
                 <p>À : {{ inbox.replyReview.to }}</p><p>Sujet : {{ inbox.replyReview.subject }}</p>
                 <p class="my-3 whitespace-pre-wrap break-words">{{ inbox.replyReview.text }}</p>
                 <p class="mb-3 text-sm text-muted-foreground">Cette réponse sera envoyée, puis le message sera marqué lu et archivé.</p>
-                <BaseButton :loading="inbox.busy" @click="inbox.sendReply(inbox.messagePanel.message.id)">Confirmer l’envoi et archiver</BaseButton>
+                <BaseButton :loading="inbox.busy" :disabled="inbox.replyOutcome === 'unknown'" @click="inbox.sendReply(inbox.messagePanel.message.id)">{{ inbox.replyOutcome === 'partial' ? 'Reprendre les étapes restantes sans renvoyer' : 'Confirmer l’envoi et archiver' }}</BaseButton>
               </div>
               <div class="mt-3 flex justify-end">
                 <BaseButton
@@ -560,12 +563,6 @@ onBeforeUnmount(() => {
                   label="Texte (optionnel)"
                   placeholder="Relancer…"
                 />
-              </div>
-              <div v-if="inbox.replyReview && inbox.replyReview.messageId === inbox.messagePanel.message.id && inbox.replyReview.text === inbox.replyText.trim()" class="mt-3 rounded-lg border border-border p-3" aria-label="Revue avant envoi">
-                <p>À : {{ inbox.replyReview.to }}</p><p>Sujet : {{ inbox.replyReview.subject }}</p>
-                <p class="my-3 whitespace-pre-wrap break-words">{{ inbox.replyReview.text }}</p>
-                <p class="mb-3 text-sm text-muted-foreground">Cette réponse sera envoyée, puis le message sera marqué lu et archivé.</p>
-                <BaseButton :loading="inbox.busy" @click="inbox.sendReply(inbox.messagePanel.message.id)">Confirmer l’envoi et archiver</BaseButton>
               </div>
               <div class="mt-3 flex justify-end">
                 <BaseButton
