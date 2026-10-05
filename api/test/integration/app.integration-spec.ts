@@ -1376,6 +1376,21 @@ describe('API against disposable migrated PostgreSQL', () => {
     expect(
       (status.body as { metrics: { openTodos: number } }).metrics.openTodos,
     ).toBe(1);
+    const activity = await request(baseUrl)
+      .get('/jarvis/activity')
+      .query({ sessionId: second, limit: 1 })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(activity.body).toMatchObject({
+      conversationId: second,
+      commands: [],
+      nextCursor: null,
+    });
+    await request(baseUrl)
+      .get('/jarvis/activity')
+      .query({ sessionId: second, cursor: 'missing-command', limit: 1 })
+      .set('Cookie', cookie)
+      .expect(404);
     for (const path of [
       '/today',
       '/jarvis/history',
