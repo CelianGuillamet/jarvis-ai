@@ -36,7 +36,8 @@
     --card-foreground: 228 20% 10%;
     --muted: 220 14% 95%;
     --muted-foreground: 228 8% 44%;
-    --primary: 199 96% 42%;
+    /* White button text stays above 4.5:1, including the 110% hover brightness. */
+    --primary: 199 96% 30%;
     --primary-foreground: 0 0% 100%;
     --border: 220 14% 88%;
     --ring: 199 96% 42%;
