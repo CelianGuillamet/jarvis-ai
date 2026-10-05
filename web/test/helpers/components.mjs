@@ -17,6 +17,7 @@ export async function loadAccountComponents() {
       export { default as SettingsView } from './src/views/SettingsView.vue';
       export { usePreferencesStore } from './src/stores/preferencesStore.ts';
       export { useStatusStore } from './src/stores/statusStore.ts';
+      export { useInboxZeroStore } from './src/stores/inboxZeroStore.ts';
       export { useAppStore } from './src/stores/appStore.ts';
       export { useChatStore } from './src/stores/chatStore.ts';
     `,

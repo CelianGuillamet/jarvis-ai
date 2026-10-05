@@ -1,4 +1,4 @@
-import type { InboxZeroApplyRequest } from '@/core/contracts/v1';
+import type { InboxZeroApplyRequest, InboxZeroApplyResponse } from '@/core/contracts/v1';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
@@ -44,6 +44,8 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
 
   const session = ref<InboxZeroSessionView | null>(null);
   const items = ref<InboxZeroItemView[]>([]);
+  const actionResults = ref<InboxZeroApplyResponse['results']>([]);
+  const actionError = ref('');
   const recentActions = ref<InboxZeroScanResponse['recentActions']>([]);
 
   const busy = ref(false);
@@ -120,7 +122,10 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     selectedIds.value = uniqueStrings(filteredItems.value.map((i) => i.messageId));
   };
 
-  const applyScanResponse = (res: InboxZeroScanResponse, options?: { cursorHintIndex?: number }) => {
+  const applyScanResponse = (
+    res: InboxZeroScanResponse,
+    options?: { cursorHintIndex?: number },
+  ) => {
     session.value = res.session;
     items.value = res.items ?? [];
     recentActions.value = res.recentActions ?? [];
@@ -144,7 +149,7 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       if (error instanceof TimeoutError) {
         toast.push({
           title: 'Scan trop lent',
-          detail: "Le scan Inbox Zero a expiré. Réessaie ou augmente le timeout.",
+          detail: 'Le scan Inbox Zero a expiré. Réessaie ou augmente le timeout.',
           tone: 'warning',
         });
       } else {
@@ -253,13 +258,17 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
 
   const apply = async (
     action: InboxZeroActionType,
-    extra?: Pick<InboxZeroApplyRequest, 'replyText' | 'reminderWhen' | 'reminderText' | 'archiveAfter'>,
+    extra?: Pick<
+      InboxZeroApplyRequest,
+      'replyText' | 'reminderWhen' | 'reminderText' | 'archiveAfter'
+    >,
     options?: { cursorHintIndex?: number },
   ) => {
-    if (busy.value) return;
+    if (busy.value) return false;
     const messageIds = uniqueStrings(selectedIds.value);
-    if (!messageIds.length) return;
+    if (!messageIds.length) return false;
 
+    actionError.value = '';
     busy.value = true;
     try {
       const visibleBefore = filteredItems.value.map((i) => i.messageId);
@@ -274,10 +283,15 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
             : undefined);
 
       const conversationId = session.value?.sessionId;
-      const requestId = action === 'send_reply' ? await replyRequestId({
-        conversationId: conversationId ?? '', messageId: messageIds[0]!,
-        replyText: String(extra?.replyText ?? ''), archiveAfter: extra?.archiveAfter !== false,
-      }) : undefined;
+      const requestId =
+        action === 'send_reply'
+          ? await replyRequestId({
+              conversationId: conversationId ?? '',
+              messageId: messageIds[0]!,
+              replyText: String(extra?.replyText ?? ''),
+              archiveAfter: extra?.archiveAfter !== false,
+            })
+          : undefined;
       const res = await app.jarvis.inboxZeroApply({
         sessionId: app.sessionId,
         action,
@@ -287,6 +301,11 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       });
       if (requestId && conversationId && res.results.length === 1 && res.results[0]?.ok)
         await completeReplyRequest(conversationId, messageIds[0]!, requestId);
+      const changed = new Set(res.results.map((result) => result.messageId));
+      actionResults.value = [
+        ...res.results,
+        ...actionResults.value.filter((result) => !changed.has(result.messageId)),
+      ].slice(0, 100);
       applyScanResponse(res, cursorHintIndex !== undefined ? { cursorHintIndex } : undefined);
 
       const uncertain = res.results.filter((r) => r.outcome === 'unknown').length;
@@ -304,17 +323,25 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       } else {
         toast.push({
           title: simulated ? 'Simulation terminée' : 'Actions terminées',
-          detail: simulated ? `${simulated} action(s) simulée(s), sans modification.` : `${res.results.length} email(s) traités.`,
+          detail: simulated
+            ? `${simulated} action(s) simulée(s), sans modification.`
+            : `${res.results.length} email(s) traités.`,
           tone: 'success',
         });
       }
       clearSelection();
+      return res.results.length === messageIds.length && res.results.every((result) => result.ok);
     } catch (error) {
+      actionError.value =
+        error instanceof Error
+          ? error.message
+          : 'Résultat non confirmé. Vérifiez l’état avant de reprendre.';
       toast.push({
         title: 'Erreur action',
-        detail: error instanceof Error ? error.message : 'Erreur inconnue.',
+        detail: actionError.value,
         tone: 'danger',
       });
+      return false;
     } finally {
       busy.value = false;
     }
@@ -374,8 +401,11 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     const text = replyText.value.trim();
     if (!text) return;
     selectedIds.value = [messageId];
-    await apply('send_reply', { replyText: text, archiveAfter: true });
-    closeMessage();
+    const completed = await apply('send_reply', {
+      replyText: text,
+      archiveAfter: true,
+    });
+    if (completed && messagePanel.value?.message.id === messageId && replyText.value.trim() === text) closeMessage();
   };
 
   const createReminder = async (messageId: string) => {
@@ -394,6 +424,8 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     session,
     items,
     recentActions,
+    actionResults,
+    actionError,
     busy,
     detailBusy,
     draftBusy,

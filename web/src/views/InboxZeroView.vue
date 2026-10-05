@@ -136,6 +136,18 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="flex h-[calc(100dvh-2rem)] flex-col gap-3">
+    <p v-if="inbox.actionError" role="alert" class="shrink-0 rounded-xl border border-red-500/40 p-3">{{ inbox.actionError }} Votre réponse reste disponible ; vérifiez le résultat avant tout nouvel envoi.</p>
+    <aside v-if="inbox.actionResults.length" aria-label="Résultats des actions" class="max-h-40 shrink-0 overflow-auto rounded-xl border border-border p-3">
+      <h2 class="font-medium">Résultats par message</h2>
+      <ul class="mt-2 space-y-2 text-sm"><li v-for="result in inbox.actionResults" :key="result.messageId">
+        <span>{{ result.messageId }} : </span>
+        <span v-if="result.outcome === 'unknown'">Résultat incertain. Vérifiez l’état avant de reprendre.</span>
+        <span v-else-if="result.outcome === 'partial'">Réponse envoyée ; étapes restantes à reprendre sans nouvel envoi.</span>
+        <span v-else-if="result.outcome === 'simulated'">Simulation, aucune modification.</span>
+        <span v-else>Action terminée.</span>
+        <p v-if="result.error" class="text-muted-foreground">{{ result.error }}</p>
+      </li></ul>
+    </aside>
     <!-- Header -->
     <header class="shrink-0 rounded-2xl border border-border/50 bg-card/60 glass px-5 py-4 shadow-soft">
       <div class="flex flex-wrap items-center justify-between gap-3">
