@@ -17,7 +17,7 @@ type NavItem = {
 
 const items: NavItem[] = [
   { to: '/chat', label: 'Chat', hint: 'Dialogue & actions', icon: 'chat' },
-  { to: '/dashboard', label: 'Dashboard', hint: 'Focus & signaux', icon: 'dashboard' },
+  { to: '/dashboard', label: 'Aujourd’hui', hint: 'Tâches, notes et calendrier', icon: 'dashboard' },
   { to: '/inbox-zero', label: 'Inbox Zero', hint: 'Email triage', icon: 'inbox' },
   { to: '/settings', label: 'Settings', hint: 'Session & config', icon: 'settings' },
 ];

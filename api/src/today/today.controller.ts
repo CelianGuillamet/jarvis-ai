@@ -4,12 +4,12 @@ import type { AuthenticatedRequest } from '../auth/session.guard';
 import { RequestContract } from '../http/request-contract';
 import { ResponseContract } from '../http/response-contract';
 import {
-  ConversationQuerySchema,
-  TodayLocalSnapshotSchema,
+  TodayQuerySchema,
+  TodayPageResponseSchema,
   TodayMutationRequestSchema,
   TodayCommandResponseSchema,
 } from '../contracts/v1';
-import type { ConversationQuery, TodayMutationRequest } from '../contracts/v1';
+import type { TodayQuery, TodayMutationRequest } from '../contracts/v1';
 import { JarvisService } from '../jarvis/services/jarvis.service';
 import { TodayReadService } from './today-read.service';
 
@@ -22,14 +22,20 @@ export class TodayController {
   ) {}
 
   @Get()
-  @ResponseContract(TodayLocalSnapshotSchema)
+  @ResponseContract(TodayPageResponseSchema)
   async snapshot(
     @Req() request: AuthenticatedRequest,
-    @Query(new RequestContract(ConversationQuerySchema))
-    query: ConversationQuery,
+    @Query(new RequestContract(TodayQuerySchema))
+    query: TodayQuery,
   ) {
-    await this.conversations.resolve(request.identity.userId, query.sessionId);
-    return this.reads.snapshot(request.identity.userId);
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      query.sessionId,
+    );
+    return {
+      ...(await this.reads.snapshot(request.identity.userId, query)),
+      conversationId,
+    };
   }
 
   @Post('mutations')

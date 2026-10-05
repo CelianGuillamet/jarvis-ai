@@ -729,3 +729,13 @@ export const TodayCommandResponseSchema = z
   })
   .strict();
 export type TodayCommandResponse = z.infer<typeof TodayCommandResponseSchema>;
+
+export const TodayQuerySchema = ConversationQuerySchema.extend({
+  taskOffset: z.coerce.number().int().min(0).max(10000).default(0),
+  noteOffset: z.coerce.number().int().min(0).max(10000).default(0),
+}).strict();
+export type TodayQuery = z.infer<typeof TodayQuerySchema>;
+
+export const TodayPageResponseSchema = TodayLocalSnapshotSchema.extend({
+  conversationId: z.uuid(),
+}).strict();

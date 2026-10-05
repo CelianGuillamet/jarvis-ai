@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   TodayLocalSnapshotSchema,
   type TodayLocalSnapshot,
+  type TodayQuery,
 } from '../contracts/v1';
 import { dataUnavailable } from '../http/data-unavailable';
 
@@ -11,12 +12,19 @@ import { dataUnavailable } from '../http/data-unavailable';
 export class TodayReadService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async snapshot(ownerId: string): Promise<TodayLocalSnapshot> {
+  async snapshot(
+    ownerId: string,
+    page: Pick<TodayQuery, 'taskOffset' | 'noteOffset'> = {
+      taskOffset: 0,
+      noteOffset: 0,
+    },
+  ): Promise<TodayLocalSnapshot> {
     try {
       const [tasks, notes] = await this.prisma.$transaction([
         this.prisma.todo.findMany({
+          skip: page.taskOffset,
           where: { ownerId },
-          orderBy: [{ done: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 51,
           select: {
             id: true,
@@ -27,6 +35,7 @@ export class TodayReadService {
           },
         }),
         this.prisma.note.findMany({
+          skip: page.noteOffset,
           where: { ownerId },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 51,
