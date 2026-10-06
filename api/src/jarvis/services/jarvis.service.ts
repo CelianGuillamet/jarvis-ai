@@ -765,10 +765,8 @@ export class JarvisService {
       ]);
       const cleaned = out.trim();
       if (cleaned) return cleaned;
-    } catch (error) {
-      this.logger.warn(
-        `Synthese web LLM indisponible (${call.name}): ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Synthese web LLM indisponible.');
     }
 
     return this.summarizeWebResultFallback(userText, call, rawResult);
@@ -802,9 +800,7 @@ export class JarvisService {
     const blocks: string[] = [];
     for (const item of opened) {
       if (item.status === 'rejected') {
-        this.logger.warn(
-          `Lecture source web echouee: ${item.reason instanceof Error ? item.reason.message : String(item.reason)}`,
-        );
+        this.logger.warn('Lecture source web echouee.');
         continue;
       }
       const content = item.value.content.trim();
@@ -4120,10 +4116,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       if (error instanceof HttpException) throw error;
 
       const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
-      this.logger.error(
-        `Erreur Jarvis (session=${resolvedSessionId}): ${message}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Traitement Jarvis echoue.');
       if (auditContext) {
         await this.auditStore.recordFailure({
           sessionId: auditContext.sessionId,
@@ -4295,10 +4288,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
     } catch (error) {
       await this.pending.markUnknown(item.id, item.sessionId);
       const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
-      this.logger.error(
-        `Erreur confirm (session=${item.sessionId}): ${message}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Confirmation Jarvis echouee.');
       if (auditContext) {
         await this.auditStore.recordFailure({
           sessionId: auditContext.sessionId,

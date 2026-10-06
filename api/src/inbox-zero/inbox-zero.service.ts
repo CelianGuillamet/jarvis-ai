@@ -451,10 +451,8 @@ export class InboxZeroService {
     const to = extractEmailAddress(detail.from) || detail.from;
     const subject = buildReplySubject(detail.subject);
 
-    const draftText = await this.generateDraftReply(detail).catch((error) => {
-      this.logger.warn(
-        `Draft reply failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    const draftText = await this.generateDraftReply(detail).catch(() => {
+      this.logger.warn('Draft reply failed.');
       const safeSubject = compactText(detail.subject, 80);
       return [
         'Bonjour,',

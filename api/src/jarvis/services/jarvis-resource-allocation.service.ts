@@ -54,10 +54,8 @@ export class JarvisResourceAllocationService {
       });
 
       return this.mapAllocationRecord(allocation);
-    } catch (error) {
-      this.logger.error(
-        `Failed to allocate resource ${input.resourceName}: ${error}`,
-      );
+    } catch {
+      this.logger.error('Allocate resource failed.');
       return null;
     }
   }
@@ -80,9 +78,7 @@ export class JarvisResourceAllocationService {
       });
 
       if (!current) {
-        this.logger.warn(
-          `No active allocation found for ${resourceType}/${resourceName}`,
-        );
+        this.logger.warn('No active allocation found.');
         return null;
       }
 
@@ -97,10 +93,8 @@ export class JarvisResourceAllocationService {
       });
 
       return this.mapAllocationRecord(updated);
-    } catch (error) {
-      this.logger.error(
-        `Failed to record usage for ${resourceType}/${resourceName}: ${error}`,
-      );
+    } catch {
+      this.logger.error('Record resource usage failed.');
       return null;
     }
   }
@@ -143,8 +137,8 @@ export class JarvisResourceAllocationService {
       }
 
       return Array.from(capacityMap.values());
-    } catch (error) {
-      this.logger.error(`Failed to get capacity for ${sessionId}: ${error}`);
+    } catch {
+      this.logger.error('Get resource capacity failed.');
       return [];
     }
   }
@@ -159,10 +153,8 @@ export class JarvisResourceAllocationService {
         (c) => c.utilizationPercentage >= threshold,
       );
       return constrained || null;
-    } catch (error) {
-      this.logger.error(
-        `Failed to find constrained resource for ${sessionId}: ${error}`,
-      );
+    } catch {
+      this.logger.error('Find constrained resource failed.');
       return null;
     }
   }
@@ -196,10 +188,8 @@ export class JarvisResourceAllocationService {
       }
 
       return suggestions;
-    } catch (error) {
-      this.logger.error(
-        `Failed to suggest optimization for ${sessionId}: ${error}`,
-      );
+    } catch {
+      this.logger.error('Suggest resource optimization failed.');
       return [];
     }
   }

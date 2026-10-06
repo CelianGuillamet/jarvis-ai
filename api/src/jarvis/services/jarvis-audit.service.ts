@@ -101,10 +101,8 @@ export class JarvisAuditService {
           completedAt: new Date(),
         },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de marquer les actions pending comme remplacées pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de remplacer les actions pending.');
     }
   }
 
@@ -126,10 +124,8 @@ export class JarvisAuditService {
           completedAt: new Date(),
         },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de marquer l'action pending comme annulée pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn("Impossible d'annuler l'action pending.");
     }
   }
 
@@ -155,10 +151,8 @@ export class JarvisAuditService {
           status: 'pending',
         },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible d'enregistrer l'action pending ${input.pendingActionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn("Impossible d'enregistrer l'action pending.");
     }
   }
 
@@ -207,10 +201,8 @@ export class JarvisAuditService {
           completedAt,
         },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible d'enregistrer la completion d'action pour ${input.sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn("Impossible d'enregistrer la completion d'action.");
     }
   }
 
@@ -258,10 +250,8 @@ export class JarvisAuditService {
           completedAt,
         },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible d'enregistrer l'échec d'action pour ${input.sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn("Impossible d'enregistrer l'echec d'action.");
     }
   }
 
@@ -309,10 +299,8 @@ export class JarvisAuditService {
         createdAt: row.createdAt.toISOString(),
         completedAt: row.completedAt?.toISOString() ?? null,
       }));
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de lire l'audit Jarvis pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn("Impossible de lire l'audit Jarvis.");
       throw dataUnavailable();
     }
   }
