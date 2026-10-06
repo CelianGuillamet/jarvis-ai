@@ -1,3 +1,5 @@
+import { AccountErasureWorker } from '../../src/privacy/account-erasure.worker';
+import { GoogleErasureRevoker } from '../../src/privacy/google-erasure-revoker';
 import { AccountErasurePurgeService } from '../../src/privacy/account-erasure-purge.service';
 import { CommandJournalService } from '../../src/commands/command-journal.service';
 import { ConfigService } from '@nestjs/config';
@@ -386,5 +388,63 @@ describe('Durable account erasure requests', () => {
     expect(
       await store.saveRevocationProgress(requested.id, lease.claimToken, []),
     ).toBe(false);
+  });
+  it('resumes the real durable job after a mocked provider outage without restoring local data', async () => {
+    const target = await owner();
+    await prisma.note.create({
+      data: { ownerId: target.id, text: 'Erase despite outage' },
+    });
+    await prisma.account.create({
+      data: {
+        id: randomUUID(),
+        accountId: randomUUID(),
+        providerId: 'google',
+        userId: target.id,
+        refreshToken: 'integration-fake-refresh-token',
+      },
+    });
+    const requested = await store.request(target.id, {
+      receipt: target.receipt,
+      confirmEmail: target.email,
+    });
+    await prisma.accountErasureJob.updateMany({
+      where: { id: { not: requested.id } },
+      data: { nextAttemptAt: new Date(Date.now() + 3600000) },
+    });
+    const revoke = jest
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
+    const runner = new AccountErasureWorker(
+      store,
+      new AccountErasurePurgeService(prisma),
+      cipher,
+      { revoke } as unknown as GoogleErasureRevoker,
+    );
+    expect(await runner.runOnce()).toBe(true);
+    expect(await prisma.note.count({ where: { ownerId: target.id } })).toBe(0);
+    expect(await prisma.user.count({ where: { id: target.id } })).toBe(0);
+    const pending = await prisma.accountErasureJob.findUniqueOrThrow({
+      where: { id: requested.id },
+    });
+    expect(pending.state).toBe('local_deleted');
+    expect(pending.revocationStatus).toBe('pending');
+    expect(pending.claimToken).toBeNull();
+    expect(pending.encryptedTokens).not.toContain(
+      'integration-fake-refresh-token',
+    );
+    await prisma.accountErasureJob.update({
+      where: { id: requested.id },
+      data: { nextAttemptAt: new Date(0) },
+    });
+    expect(await runner.runOnce()).toBe(true);
+    const completed = await prisma.accountErasureJob.findUniqueOrThrow({
+      where: { id: requested.id },
+    });
+    expect(completed.state).toBe('completed');
+    expect(completed.revocationStatus).toBe('complete');
+    expect(completed.encryptedTokens).toBeNull();
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect((await store.status(target.receipt)).state).toBe('completed');
   });
 });

@@ -261,3 +261,20 @@ of manual revocation still need implementation.
 Purge commit dea377b passed 455 unit tests and 18 PostgreSQL suites / 136 tests
 (CI37477135674), including owner isolation and legacy-copy removal. New revocation
 progress PostgreSQL assertions await CI on the next commit.
+
+### Single-job runner — not mounted yet
+
+The runner coalesces overlapping ticks and claims one durable job. Local purge happens
+before network access. Each successful revocation is persisted before the next token;
+lease loss stops the runner. Each lease makes at most six bounded remote calls.
+Failures use exponential retry delays capped at one hour. After the seven-day receipt
+horizon, remaining credentials are discarded and manual revocation is reported.
+Unreadable credentials follow the same explicit manual path. Errors are logged without
+owner IDs, tokens or raw exception details. No timer or route enables this runner yet.
+Cache invalidation and the remaining retention/user-control work must land first.
+
+Eight unit scenarios cover ordered purge/revocation, outage, lost lease, bounded calls,
+expiry, decryption failure, sanitized purge failure and overlapping ticks. A new real
+PostgreSQL runner test uses a mocked revoker to verify local deletion during an outage
+and durable completion on the next claim; it awaits CI. Commit bebd592 passed all four
+CI checks and 18 PostgreSQL suites / 136 tests (run37477792226).
