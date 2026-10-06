@@ -35,6 +35,7 @@ function fixture() {
     betaInvite: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   };
   const prisma = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn(async (run: (db: typeof tx) => Promise<unknown>) =>
       run(tx),
     ),
@@ -46,7 +47,7 @@ function fixture() {
     { seal } as unknown as ErasureCredentialCipher,
     { decrypt } as unknown as TokenEncryptionService,
   );
-  return { tx, store, seal, decrypt };
+  return { tx, store, seal, decrypt, prisma };
 }
 
 describe('AccountErasureStore', () => {
@@ -132,5 +133,17 @@ describe('AccountErasureStore', () => {
     expect(tx.googleOAuthState.deleteMany).toHaveBeenCalledWith({
       where: { ownerId: 'owner-id' },
     });
+  });
+  it('bounds retry delays and reports a lost lease without changing another claim', async () => {
+    const { store, prisma } = fixture();
+    for (const delay of [0, -1, 1.5, 3601, Infinity]) {
+      await expect(store.retryLater(job.id, 'claim', delay)).rejects.toThrow(
+        RangeError,
+      );
+    }
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    expect(await store.retryLater(job.id, 'claim', 60)).toBe(true);
+    prisma.$executeRaw.mockResolvedValueOnce(0);
+    expect(await store.retryLater(job.id, 'obsolete-claim', 60)).toBe(false);
   });
 });

@@ -200,4 +200,24 @@ export class AccountErasureStore {
       FROM candidate c WHERE j."id" = c."id" RETURNING j.*`;
     return jobs[0] ?? null;
   }
+  /** A stale worker cannot reschedule a job claimed by its successor. */
+  async retryLater(
+    jobId: string,
+    claimToken: string,
+    delaySeconds: number,
+  ): Promise<boolean> {
+    if (
+      !Number.isInteger(delaySeconds) ||
+      delaySeconds < 1 ||
+      delaySeconds > 3600
+    ) {
+      throw new RangeError('Invalid erasure retry delay.');
+    }
+    const changed = await this.prisma.$executeRaw`
+      UPDATE "AccountErasureJob" SET "claimToken" = NULL, "claimedUntil" = NULL,
+        "nextAttemptAt" = clock_timestamp() + ${delaySeconds} * interval '1 second'
+      WHERE "id" = ${jobId} AND "claimToken" = ${claimToken}
+        AND "claimedUntil" > clock_timestamp() AND "state" IN ('queued', 'local_deleted')`;
+    return changed === 1;
+  }
 }

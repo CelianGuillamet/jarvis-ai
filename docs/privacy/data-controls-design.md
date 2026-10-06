@@ -209,3 +209,15 @@ controls must be completed before the ticket can merge.
 Local validation: 67 suites / 452 unit tests passed, types and lint passed. Four new
 PostgreSQL cases cover request replay/isolation, invalid confirmation rollback,
 receipt expiry and distinct concurrent worker leases; they await CI execution.
+
+The request commit `5f82fda` passed 18 PostgreSQL suites / 133 tests in CI
+(run 37363867687), including the four durable request cases. Its second Web job
+(run 37363991213) was cancelled without step logs; the other Web job passed on the
+same head. The ticket remains incomplete.
+
+Follow-up work adds bounded retry scheduling conditioned on a live matching lease,
+and a transaction-local erasure exception for CommandTransition deletion. Updates
+remain forbidden; deletion requires the matching owner, a disabled account, a live
+lease and no unresolved command or Inbox send. The lease is checked again after
+locking the job. Tests for expired/superseded leases, foreign-owner protection,
+fake claims and transaction rollback await PostgreSQL CI on the new commit.
