@@ -50,6 +50,21 @@ describe('Account erasure HTTP boundary', () => {
     ).toThrow();
   });
 
+  it('rejects an account switch before calling the store, without treating the client ID as ownership', async () => {
+    const f = fixture();
+    await expect(
+      f.controller.request(
+        { identity: { userId: 'signed-owner' } } as AuthenticatedRequest,
+        {
+          receipt: 'a'.repeat(64),
+          confirmEmail: 'owner@example.test',
+          expectedAccountId: 'previous-owner',
+        },
+      ),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(f.store.request).not.toHaveBeenCalled();
+  });
+
   it('authenticates post-signout status with a header capability and quotas by IP', async () => {
     const f = fixture();
     const receipt = 'a'.repeat(64);

@@ -27,20 +27,43 @@ const secretKeys = new Set([
   'authsecret',
 ]);
 
-export function redactExportValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactExportValue);
+// User-authored text remains opaque, even when it happens to be valid JSON.
+const textKeys = new Set([
+  'text',
+  'inputText',
+  'userText',
+  'title',
+  'name',
+  'value',
+  'content',
+  'body',
+  'bodyText',
+  'subject',
+  'label',
+  'description',
+  'preferredName',
+  'summary',
+  'objective',
+  'nextStep',
+  'keySignals',
+]);
+
+export function redactExportValue(value: unknown, property = ''): unknown {
+  if (Array.isArray(value))
+    return value.map((child) => redactExportValue(child, property));
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value)
         .filter(
           ([key]) => !secretKeys.has(key.replace(/[-_]/g, '').toLowerCase()),
         )
-        .map(([key, child]) => [key, redactExportValue(child)]),
+        .map(([key, child]) => [key, redactExportValue(child, key)]),
     );
   }
   // Legacy payloads are JSON strings; parse those before applying the same policy.
   if (
     typeof value === 'string' &&
+    !textKeys.has(property) &&
     (value.trimStart().startsWith('{') || value.trimStart().startsWith('['))
   ) {
     try {
@@ -70,7 +93,7 @@ function ownership(model: ExportModel, ownerId: string): Prisma.Sql {
     case 'migration-owner':
       return Prisma.sql`r."assignedOwnerId" = ${ownerId}`;
     case 'account-email':
-      return Prisma.sql`EXISTS (SELECT 1 FROM "User" u WHERE u."id" = ${ownerId} AND u."email" = r."email")`;
+      return Prisma.sql`EXISTS (SELECT 1 FROM "User" u WHERE u."id" = ${ownerId} AND lower(btrim(u."email")) = r."email")`;
     default:
       throw new Error('Excluded credential tables cannot be exported');
   }

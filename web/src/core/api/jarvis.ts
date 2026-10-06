@@ -1,4 +1,7 @@
 import {
+  AccountErasureReceiptSchema,
+  AccountErasureRequestSchema,
+  AccountErasureStatusSchema,
   PrivacyDisclosureSchema,
   ActivityResponseSchema,
   InboxReplyDraftResponseSchema,
@@ -21,6 +24,7 @@ import {
   ConversationHistoryResponseSchema,
 } from "../contracts/v1";
 import type {
+  AccountErasureRequest,
   InboxReplyDraftSaveRequest,
   TodayMutationRequest,
   AccountPreferences,
@@ -80,6 +84,10 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
   const http = createHttpClient(options);
 
   return {
+    requestDeletion: (input: AccountErasureRequest) => validated(http.post<unknown>("/account/deletion", checked(input, AccountErasureRequestSchema)), AccountErasureStatusSchema),
+    deletionStatus: (receipt: string, signal?: AbortSignal) => validated(http.get<unknown>("/account/deletion/status", {
+      headers: { "x-erasure-receipt": checked(receipt, AccountErasureReceiptSchema) }, ...(signal ? { signal } : {}),
+    }), AccountErasureStatusSchema),
     privacy: () => validated(http.get<unknown>("/account/privacy"), PrivacyDisclosureSchema),
     inboxReplyDraft: (sessionId: string, messageId: string) =>
       validated(

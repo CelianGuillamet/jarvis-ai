@@ -79,10 +79,8 @@ export class AccountErasureStore {
         >`SELECT "email" FROM "User" WHERE "id" = ${ownerId} FOR UPDATE`;
         if (owners.length !== 1)
           throw new NotFoundException('Compte indisponible.');
-        if (
-          owners[0].email.trim().toLowerCase() !==
-          input.confirmEmail.trim().toLowerCase()
-        ) {
+        const ownerEmail = owners[0].email.trim().toLowerCase();
+        if (ownerEmail !== input.confirmEmail.trim().toLowerCase()) {
           throw new BadRequestException('Confirme l’adresse de ton compte.');
         }
         const existing = await tx.accountErasureJob.findUnique({
@@ -165,7 +163,7 @@ export class AccountErasureStore {
         await tx.googleOAuthState.deleteMany({ where: { ownerId } });
         // Admission is revoked too; restoring a backup must not silently re-admit.
         await tx.betaInvite.updateMany({
-          where: { email: owners[0].email },
+          where: { email: ownerEmail },
           data: { revokedAt: now },
         });
         return erasureStatus(job);

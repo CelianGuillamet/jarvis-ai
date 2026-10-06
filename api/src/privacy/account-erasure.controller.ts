@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ConflictException,
   Get,
   Header,
   HttpCode,
@@ -41,6 +42,14 @@ export class AccountErasureController {
     @Body(new RequestContract(AccountErasureRequestSchema))
     input: AccountErasureRequest,
   ) {
+    if (
+      input.expectedAccountId &&
+      input.expectedAccountId !== request.identity.userId
+    ) {
+      throw new ConflictException(
+        'Votre compte a changé. Rechargez cette page avant de supprimer.',
+      );
+    }
     try {
       return await this.store.request(request.identity.userId, input);
     } catch (error) {

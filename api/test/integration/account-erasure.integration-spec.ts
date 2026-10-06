@@ -1,3 +1,4 @@
+import { AccountSnapshotService } from '../../src/privacy/account-snapshot.service';
 import { AccountPrivateCacheService } from '../../src/privacy/account-private-cache.service';
 import { AccountErasureWorker } from '../../src/privacy/account-erasure.worker';
 import { GoogleErasureRevoker } from '../../src/privacy/google-erasure-revoker';
@@ -450,5 +451,61 @@ describe('Durable account erasure requests', () => {
     expect(completed.encryptedTokens).toBeNull();
     expect(revoke).toHaveBeenCalledTimes(2);
     expect((await store.status(target.receipt)).state).toBe('completed');
+  });
+  it('revokes and purges normalized beta admission even when the stored account email uses capitals', async () => {
+    const id = randomUUID();
+    const email = `mixed-${id}@EXAMPLE.INVALID`;
+    await prisma.user.create({ data: { id, email, name: 'Mixed email case' } });
+    await prisma.betaInvite.create({ data: { email: email.toLowerCase() } });
+    const requested = await store.request(id, {
+      confirmEmail: email.toLowerCase(),
+      receipt: randomBytes(32).toString('hex'),
+    });
+    expect(
+      (
+        await prisma.betaInvite.findUniqueOrThrow({
+          where: { email: email.toLowerCase() },
+        })
+      ).revokedAt,
+    ).not.toBeNull();
+    await prisma.accountErasureJob.updateMany({
+      where: { id: { not: requested.id } },
+      data: { nextAttemptAt: new Date(Date.now() + 3600000) },
+    });
+    const lease = await store.claimNext();
+    if (!lease?.claimToken || lease.id !== requested.id)
+      throw new Error('Expected owner lease');
+    await new AccountErasurePurgeService(prisma).purge(
+      requested.id,
+      lease.claimToken,
+    );
+    expect(
+      await prisma.betaInvite.count({ where: { email: email.toLowerCase() } }),
+    ).toBe(0);
+  });
+  it('exports user-authored JSON notes without confusing their content with system credentials', async () => {
+    const account = await owner();
+    const text =
+      '{\n  "password": "my saved note",\n  "accessToken": "user-chosen text"\n}';
+    await prisma.note.create({
+      data: { ownerId: account.id, title: 'JSON note', text },
+    });
+    const records: unknown[] = [];
+    await new AccountSnapshotService(prisma).stream(
+      account.id,
+      (record) => {
+        records.push(record);
+        return Promise.resolve();
+      },
+      new AbortController().signal,
+    );
+    const exported = records.find(
+      (record) =>
+        typeof record === 'object' &&
+        record !== null &&
+        'collection' in record &&
+        record.collection === 'Note',
+    );
+    expect(exported).toMatchObject({ data: { title: 'JSON note', text } });
   });
 });

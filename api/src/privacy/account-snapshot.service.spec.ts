@@ -66,6 +66,20 @@ describe('Coherent account download', () => {
     expect(redactExportValue('[JSON incomplet')).toBe('[JSON incomplet');
   });
 
+  it('preserves user-authored JSON text while redacting actual structured credential payloads', () => {
+    const text =
+      '{"password":"my saved note","accessToken":"user-authored text"}';
+    expect(redactExportValue({ text, inputText: text, value: text })).toEqual({
+      text,
+      inputText: text,
+      value: text,
+    });
+    const exported = redactExportValue({
+      argsJson: JSON.stringify({ text, refreshToken: 'platform-secret' }),
+    });
+    expect(exported).toEqual({ argsJson: JSON.stringify({ text }) });
+  });
+
   it('uses one repeatable-read transaction and parametrizes signed ownership for every table', async () => {
     const { service, tx, $transaction } = fixture();
     const write = jest.fn().mockResolvedValue(undefined);

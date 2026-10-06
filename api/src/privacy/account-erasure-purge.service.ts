@@ -70,7 +70,7 @@ function predicate(model: Model, ownerId: string): Prisma.Sql {
     case 'integration':
       return Prisma.sql`EXISTS (SELECT 1 FROM "IntegrationAccount" i WHERE i."id" = r."integrationAccountId" AND i."ownerId" = ${ownerId})`;
     case 'account-email':
-      return Prisma.sql`EXISTS (SELECT 1 FROM "User" u WHERE u."id" = ${ownerId} AND u."email" = r."email")`;
+      return Prisma.sql`EXISTS (SELECT 1 FROM "User" u WHERE u."id" = ${ownerId} AND lower(btrim(u."email")) = r."email")`;
     case 'migration-owner':
       return Prisma.sql`r."assignedOwnerId" = ${ownerId}`;
     default:

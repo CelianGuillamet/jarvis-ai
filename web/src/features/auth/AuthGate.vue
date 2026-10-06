@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { readErasureReceipt } from "@/features/privacy/erasure-receipt";
 import { onMounted, onUnmounted, ref } from "vue";
 import { env } from "@/core/config/env";
 import { joinUrl } from "@/core/api/http";
@@ -8,6 +9,8 @@ import { usePreferencesStore } from "@/stores/preferencesStore";
 import { SignInOptionsSchema } from "@/core/contracts/v1";
 import { AccountProfileSchema } from "@/core/api/account";
 
+const trackingHref = `${import.meta.env.BASE_URL || "/"}deletion-status`;
+const pendingErasure = ref(readErasureReceipt());
 const preferences = usePreferencesStore();
 const app = useAppStore();
 let refreshGeneration = 0;
@@ -112,6 +115,7 @@ async function signOut() {
 }
 
 function onSessionExpired() {
+  pendingErasure.value = readErasureReceipt();
   void refresh();
 }
 onUnmounted(() =>
@@ -140,6 +144,7 @@ onMounted(() => {
   </template>
   <main v-else class="auth-screen">
     <section class="auth-card" aria-labelledby="login-title">
+      <a v-if="pendingErasure" :href="trackingHref" class="block text-sm underline">Suivre votre demande de suppression</a>
       <p class="auth-eyebrow">JARVIS · BÊTA PRIVÉE</p>
       <h1 id="login-title">Votre quotidien, au même endroit.</h1>
       <p v-if="state === 'loading'" role="status">

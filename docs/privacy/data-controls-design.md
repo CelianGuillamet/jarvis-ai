@@ -353,3 +353,36 @@ Local API75suites492unit and Web90tests plus types/lint/build passed. The new HT
 disclosure assertion awaits CI. Retention fixture fix cb4d255 passed all four checks
 and19PostgreSQL suites141tests (37483030334); the completed fixture now includes its
 required response and no database constraint was weakened.
+
+### Export/deletion user controls and public receipt page
+
+Settings now offers a verified coherent export and an explicit email/checkbox deletion
+confirmation. A cryptographic32-byte receipt is stored in sessionStorage before the
+mutation, bound locally to the displayed account so another account never reuses it.
+Storage failure blocks submission. A receipt file can be downloaded for recovery after
+closing the tab. An accepted deletion clears account stores and performs a full
+navigation to /deletion-status; that named route alone bypasses AuthGate. Tracking uses
+the receipt header, never a URL token, and displays pending/manual Google revocation
+without claiming it succeeded. Session expiry also exposes the stored tracking link.
+
+The export reader handles split UTF-8 characters, verifies owner/header/version,
+record shape, count and the post-commit completion marker. Interrupted/incomplete,
+foreign-owner or malformed streams are rejected. Native file destinations stream
+without retaining the whole export and close only after verification; failure aborts
+the partial write. Other browsers use a memory download bounded to64MiB. Individual
+records are bounded to16MiB and capacity errors explain the limitation. Blob downloads
+are reported as launched, not as proven filesystem writes.
+
+The optional expectedAccountId is a concurrency precondition, never an ownership
+selector: a switched signed account returns409 before deletion admission. Invitations
+are matched by normalized email for revocation/export/purge. JSON-formatted user text
+is kept verbatim rather than mistaken for platform credentials; structured credential
+keys in metadata remain redacted. New real PostgreSQL cases for normalized admission
+and JSON note preservation await CI.
+
+Current local validation:75API suites494unit tests,106Web tests, types/lint/build passed.
+DOM scenarios cover confirmation, pre-transport receipt persistence, lost responses,
+post-expiry recovery and the real App public route making no signed-account request.
+Native save-picker/browser rendering have not been exercised by these DOM tests.
+Independent backup-ledger/restore replay and final browser/review evidence remain before
+this draft can merge. No deployment or real provider calls were performed.

@@ -40,6 +40,7 @@ export type AccountPreferences = z.infer<typeof AccountPreferencesSchema>;
 export const AccountErasureReceiptSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const AccountErasureRequestSchema = z
   .object({
+    expectedAccountId: z.string().min(1).max(500).optional(),
     confirmEmail: z.email().max(320),
     receipt: AccountErasureReceiptSchema,
   })

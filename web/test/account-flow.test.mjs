@@ -306,3 +306,18 @@ test("privacy settings reflect a remote configured model and explain retention",
     assert.match(details.textContent, /30 jours/);
   } finally { f.app.unmount(); }
 });
+
+
+test("a receipt prepared after mount remains reachable when deletion expires the signed session", async () => {
+  const f = fixture({ completed: true });
+  try {
+    await settle();
+    dom.window.sessionStorage.setItem('jarvis.erasure.receipt.v1', JSON.stringify({ accountId: 'owner', receipt: 'a'.repeat(64) }));
+    globalThis.fetch = async (url) => url.endsWith('/account/me')
+      ? new Response('{}', { status: 401 }) : new Response('{"google":true}');
+    dom.window.dispatchEvent(new dom.window.Event('jarvis:session-expired'));
+    await settle();
+    assert.equal(document.querySelector('#private-app'), null);
+    assert.ok(document.querySelector('a[href="/deletion-status"]'));
+  } finally { f.app.unmount(); dom.window.sessionStorage.removeItem('jarvis.erasure.receipt.v1'); }
+});

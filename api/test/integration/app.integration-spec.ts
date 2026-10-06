@@ -174,6 +174,20 @@ describe('API against disposable migrated PostgreSQL', () => {
       .set('Cookie', cookie)
       .send({ confirmEmail: email, receipt })
       .expect(403);
+    await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'http://localhost:5173')
+      .set('Cookie', cookie)
+      .send({
+        confirmEmail: email,
+        receipt,
+        expectedAccountId: 'integration-user',
+      })
+      .expect(409);
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: ownerId } }))
+        .disabled,
+    ).toBe(false);
     const accepted = await request(baseUrl)
       .post('/account/deletion')
       .set('Origin', 'http://localhost:5173')
