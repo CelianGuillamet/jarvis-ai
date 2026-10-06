@@ -1,3 +1,4 @@
+import { ErasureBackupReplayService } from './erasure-backup-replay.service';
 import {
   Injectable,
   Logger,
@@ -19,15 +20,14 @@ export class PrivacySchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly worker: AccountErasureWorker,
     private readonly retention: PrivacyRetentionService,
+    private readonly replay: ErasureBackupReplayService,
   ) {}
 
-  onModuleInit(): void {
-    // Disposable integration suites explicitly drive workers and must never initiate transport.
-    if (
-      this.config.get('NODE_ENV') === 'test' ||
-      this.config.get('PRIVACY_WORKER_ENABLED') === 'false'
-    )
-      return;
+  async onModuleInit(): Promise<void> {
+    // Integration suites explicitly drive isolated ledger/replay and must not touch host data.
+    if (this.config.get('NODE_ENV') === 'test') return;
+    await this.replay.reconcile();
+    if (this.config.get('PRIVACY_WORKER_ENABLED') === 'false') return;
     this.timer = setInterval(() => {
       void this.tick();
     }, 15000);

@@ -1,3 +1,4 @@
+import { ErasureBackupLedger } from './erasure-backup-ledger';
 import {
   BadRequestException,
   ConflictException,
@@ -64,6 +65,7 @@ export class AccountErasureStore {
     private readonly prisma: PrismaService,
     private readonly cipher: ErasureCredentialCipher,
     private readonly googleCipher: TokenEncryptionService,
+    private readonly ledger: ErasureBackupLedger,
   ) {}
 
   async request(
@@ -92,6 +94,7 @@ export class AccountErasureStore {
             throw new ConflictException(
               'Une demande de suppression existe déjà.',
             );
+          await this.recordAdmission(ownerId, receiptDigest, existing);
           return erasureStatus(existing);
         }
         try {
@@ -166,6 +169,7 @@ export class AccountErasureStore {
           where: { email: ownerEmail },
           data: { revokedAt: now },
         });
+        await this.recordAdmission(ownerId, receiptDigest, job);
         return erasureStatus(job);
       },
       {
@@ -173,6 +177,61 @@ export class AccountErasureStore {
         timeout: 15000,
       },
     );
+  }
+
+  private recordAdmission(
+    ownerId: string,
+    receiptDigest: string,
+    job: StatusSource,
+  ) {
+    return this.ledger.record({
+      version: 1,
+      kind: 'admitted',
+      jobId: job.id,
+      ownerId,
+      receiptDigest,
+      requestedAt: job.requestedAt.toISOString(),
+      receiptExpiresAt: job.receiptExpiresAt.toISOString(),
+      retainedUntil: new Date(
+        job.requestedAt.getTime() + 30 * DAY_MS,
+      ).toISOString(),
+      localDeletedAt: null,
+    });
+  }
+
+  async recordLocalDeletion(
+    jobId: string,
+    claimToken: string,
+  ): Promise<boolean> {
+    const jobs = await this.prisma.$queryRaw<
+      Array<
+        Pick<
+          AccountErasureJob,
+          | 'id'
+          | 'ownerId'
+          | 'receiptDigest'
+          | 'requestedAt'
+          | 'receiptExpiresAt'
+          | 'retainedUntil'
+        > & { localDeletedAt: Date }
+      >
+    >`
+      SELECT "id", "ownerId", "receiptDigest", "requestedAt", "receiptExpiresAt", "retainedUntil", "localDeletedAt" FROM "AccountErasureJob" WHERE "id" = ${jobId} AND "claimToken" = ${claimToken}
+        AND "claimedUntil" > clock_timestamp() AND "state" = 'local_deleted' AND "localDeletedAt" IS NOT NULL`;
+    if (jobs.length !== 1) return false;
+    const job = jobs[0];
+    await this.ledger.record({
+      version: 1,
+      kind: 'deleted',
+      jobId: job.id,
+      ownerId: job.ownerId,
+      receiptDigest: job.receiptDigest,
+      requestedAt: job.requestedAt.toISOString(),
+      receiptExpiresAt: job.receiptExpiresAt.toISOString(),
+      retainedUntil: job.retainedUntil.toISOString(),
+      localDeletedAt: job.localDeletedAt.toISOString(),
+    });
+    return true;
   }
 
   async status(receipt: string): Promise<AccountErasureStatus> {

@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   AccountErasureStatusSchema,
   PrivacyDisclosureSchema,
@@ -45,6 +48,8 @@ const scopes =
   'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
 
 describe('API against disposable migrated PostgreSQL', () => {
+  let ledgerDirectory: string;
+  const previousLedgerDirectory = process.env.PRIVACY_LEDGER_DIR;
   let app: INestApplication<Server>;
   let prisma: PrismaService;
   let baseUrl: string;
@@ -69,6 +74,8 @@ describe('API against disposable migrated PostgreSQL', () => {
     .mockResolvedValue('{"type":"final","text":"Fixture response"}');
 
   beforeAll(async () => {
+    ledgerDirectory = await mkdtemp(join(tmpdir(), 'jarvis-http-ledger-'));
+    process.env.PRIVACY_LEDGER_DIR = ledgerDirectory;
     // Existing services construct model adapters internally; stub both adapters at
     // their public boundary until JAR-024 moves provider construction into DI.
     jest.spyOn(OllamaProvider.prototype, 'chat').mockImplementation(model);
@@ -124,6 +131,10 @@ describe('API against disposable migrated PostgreSQL', () => {
 
   afterAll(async () => {
     await app?.close();
+    if (previousLedgerDirectory === undefined)
+      delete process.env.PRIVACY_LEDGER_DIR;
+    else process.env.PRIVACY_LEDGER_DIR = previousLedgerDirectory;
+    await rm(ledgerDirectory, { recursive: true, force: true });
     jest.spyOn(OllamaProvider.prototype, 'chat').mockRestore();
     jest.spyOn(OpenAIProvider.prototype, 'chat').mockRestore();
   });

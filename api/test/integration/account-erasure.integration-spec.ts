@@ -1,3 +1,7 @@
+import { ErasureBackupLedger } from '../../src/privacy/erasure-backup-ledger';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { AccountSnapshotService } from '../../src/privacy/account-snapshot.service';
 import { AccountPrivateCacheService } from '../../src/privacy/account-private-cache.service';
 import { AccountErasureWorker } from '../../src/privacy/account-erasure.worker';
@@ -19,13 +23,27 @@ describe('Durable account erasure requests', () => {
   const cipher = new ErasureCredentialCipher(
     new ConfigService({ AUTH_SECRET: 'integration-erasure-secret'.repeat(3) }),
   );
-  const store = new AccountErasureStore(
-    prisma,
-    cipher,
-    {} as TokenEncryptionService,
-  );
-  beforeAll(() => prisma.$connect());
-  afterAll(() => prisma.$disconnect());
+  let store: AccountErasureStore;
+  let directory: string;
+  beforeAll(async () => {
+    await prisma.$connect();
+    directory = await mkdtemp(join(tmpdir(), 'jarvis-erasure-ledger-'));
+    store = new AccountErasureStore(
+      prisma,
+      cipher,
+      {} as TokenEncryptionService,
+      new ErasureBackupLedger(
+        new ConfigService({
+          PRIVACY_LEDGER_DIR: directory,
+          AUTH_SECRET: 'integration-erasure-secret'.repeat(3),
+        }),
+      ),
+    );
+  });
+  afterAll(async () => {
+    await prisma.$disconnect();
+    await rm(directory, { recursive: true, force: true });
+  });
 
   async function owner() {
     const id = `erasure-${randomUUID()}`;

@@ -20,6 +20,7 @@ function fixture() {
   };
   const store = {
     claimNext: jest.fn().mockResolvedValue(job),
+    recordLocalDeletion: jest.fn().mockResolvedValue(true),
     retryLater: jest.fn().mockResolvedValue(true),
     saveRevocationProgress: jest.fn().mockResolvedValue(true),
   };

@@ -36,6 +36,7 @@ export class AccountErasureWorker {
         await this.privateCache.forgetOwner(job.ownerId);
         // Remote availability must never prevent local removal of private data.
         if (!(await this.purge.purge(job.id, claim))) return true;
+        if (!(await this.store.recordLocalDeletion(job.id, claim))) return true;
         const manual =
           job.revocationStatus === 'manual_required' ||
           job.blockerCode === 'GOOGLE_KEY_UNAVAILABLE';

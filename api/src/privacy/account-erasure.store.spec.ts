@@ -1,3 +1,4 @@
+import { ErasureBackupLedger } from './erasure-backup-ledger';
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -46,6 +47,9 @@ function fixture() {
     prisma as unknown as PrismaService,
     { seal } as unknown as ErasureCredentialCipher,
     { decrypt } as unknown as TokenEncryptionService,
+    {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ErasureBackupLedger,
   );
   return { tx, store, seal, decrypt, prisma };
 }

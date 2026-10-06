@@ -1,3 +1,5 @@
+import { ErasureBackupReplayService } from './erasure-backup-replay.service';
+import { ErasureBackupLedger } from './erasure-backup-ledger';
 import { PrivacyDisclosureService } from './privacy-disclosure.service';
 import { PrivacyDisclosureController } from './privacy-disclosure.controller';
 import { PrivacySchedulerService } from './privacy-scheduler.service';
@@ -19,6 +21,8 @@ import { GoogleErasureRevoker } from './google-erasure-revoker';
   imports: [PrismaModule, AuthModule, GoogleAuthModule, JarvisModule],
   controllers: [AccountErasureController, PrivacyDisclosureController],
   providers: [
+    ErasureBackupReplayService,
+    ErasureBackupLedger,
     PrivacyDisclosureService,
     PrivacySchedulerService,
     PrivacyRetentionService,
