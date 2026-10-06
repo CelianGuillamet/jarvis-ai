@@ -221,3 +221,24 @@ remain forbidden; deletion requires the matching owner, a disabled account, a li
 lease and no unresolved command or Inbox send. The lease is checked again after
 locking the job. Tests for expired/superseded leases, foreign-owner protection,
 fake claims and transaction rollback await PostgreSQL CI on the new commit.
+
+### Local purge transaction — not yet connected to a worker
+
+The purge service locks a live job lease, repeats the unresolved-operation preflight,
+sets the transaction-local journal erasure claim and removes children before parents.
+It updates the job to `local_deleted` in the same transaction and aborts if its lease
+expires before completion. Replaying a locally completed purge is a no-op. It makes
+no provider calls inside the transaction. The shared legacy migration manifest loses
+only mappings for the erased owner; unrelated records and mappings remain.
+
+The deletion inventory names 45 models and explicitly treats the three others:
+AccountErasureJob remains as the temporary opaque receipt/backup tombstone;
+LegacyOwnershipBatch is shared and scrubbed by mapping; Verification has no owner
+relation and must receive independent bounded expiry cleanup. No ownership is guessed
+for anonymous verification records. This last retention cleanup is not implemented.
+
+On `acb7a8b`, CI run 37476445935 passed 453 unit tests and 18 suites / 135 PostgreSQL
+tests, including stale-worker fencing and scoped journal rollback. The new purge
+owner-isolation/legacy-copy/receipt replay PostgreSQL case awaits CI execution.
+Cache invalidation, provider revocation, the worker, retention, backup restore checks
+and user controls remain required before account deletion can be advertised or merged.

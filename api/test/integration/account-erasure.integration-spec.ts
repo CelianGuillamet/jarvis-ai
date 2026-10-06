@@ -1,3 +1,4 @@
+import { AccountErasurePurgeService } from '../../src/privacy/account-erasure-purge.service';
 import { CommandJournalService } from '../../src/commands/command-journal.service';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -234,5 +235,132 @@ describe('Durable account erasure requests', () => {
         where: { commandId: ownCommand.id },
       }),
     ).rejects.toThrow();
+  });
+  it('purges the owner and migration copies atomically while retaining another account and the receipt', async () => {
+    const target = await owner();
+    const other = await owner();
+    async function seed(account: typeof target) {
+      const conversation = await prisma.conversation.create({
+        data: { ownerId: account.id, clientKey: 'purge' },
+      });
+      const note = await prisma.note.create({
+        data: { ownerId: account.id, text: 'Private note' },
+      });
+      await prisma.jarvisMemoryFact.create({
+        data: {
+          sessionId: conversation.id,
+          layer: 'semantic',
+          key: 'fact',
+          label: 'Fact',
+          value: 'Private memory',
+        },
+      });
+      const habit = await prisma.habit.create({
+        data: { sessionId: conversation.id, name: 'Private habit' },
+      });
+      await prisma.habitLog.create({
+        data: { habitId: habit.id, date: '2026-10-06' },
+      });
+      const command = await new CommandJournalService(prisma).propose({
+        ownerId: account.id,
+        conversationId: conversation.id,
+        requestId: 'purge-command',
+        toolName: 'todo.delete',
+        toolVersion: '1',
+        arguments: { id: 'target' },
+        targets: [{ id: 'target' }],
+        expiresAt: new Date(Date.now() + 600000),
+      });
+      return { conversation, note, habit, command };
+    }
+    const own = await seed(target);
+    const foreign = await seed(other);
+    const batchId = randomUUID();
+    await prisma.legacyOwnershipBatch.create({
+      data: {
+        id: batchId,
+        digest: 'reviewed-digest',
+        manifest: {
+          version: 1,
+          mappings: [
+            { ownerId: target.id, id: own.note.id },
+            { ownerId: other.id, id: foreign.note.id },
+          ],
+        },
+      },
+    });
+    for (const [account, note] of [
+      [target, own.note],
+      [other, foreign.note],
+    ] as const) {
+      await prisma.legacyOwnershipRecord.create({
+        data: {
+          batchId,
+          tableName: 'Note',
+          recordId: note.id,
+          original: { text: note.text },
+          assignedOwnerId: account.id,
+        },
+      });
+    }
+    const requested = await store.request(target.id, {
+      receipt: target.receipt,
+      confirmEmail: target.email,
+    });
+    await prisma.accountErasureJob.updateMany({
+      where: { id: { not: requested.id } },
+      data: { nextAttemptAt: new Date(Date.now() + 3600000) },
+    });
+    const lease = await store.claimNext();
+    if (!lease?.claimToken || lease.id !== requested.id)
+      throw new Error('Expected purge lease');
+    const purge = new AccountErasurePurgeService(prisma);
+    expect(await purge.purge(requested.id, randomUUID())).toBe(false);
+    expect(await prisma.note.count({ where: { id: own.note.id } })).toBe(1);
+    expect(await purge.purge(requested.id, lease.claimToken)).toBe(true);
+    expect(await purge.purge(requested.id, lease.claimToken)).toBe(true);
+    expect(await prisma.user.count({ where: { id: target.id } })).toBe(0);
+    expect(await prisma.note.count({ where: { ownerId: target.id } })).toBe(0);
+    expect(
+      await prisma.jarvisMemoryFact.count({
+        where: { sessionId: own.conversation.id },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.habitLog.count({ where: { habitId: own.habit.id } }),
+    ).toBe(0);
+    expect(
+      await prisma.commandTransition.count({
+        where: { commandId: own.command.id },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.legacyOwnershipRecord.count({
+        where: { assignedOwnerId: target.id },
+      }),
+    ).toBe(0);
+    expect(await prisma.user.count({ where: { id: other.id } })).toBe(1);
+    expect(await prisma.note.count({ where: { id: foreign.note.id } })).toBe(1);
+    expect(
+      await prisma.jarvisMemoryFact.count({
+        where: { sessionId: foreign.conversation.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.commandTransition.count({
+        where: { commandId: foreign.command.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.legacyOwnershipRecord.count({
+        where: { assignedOwnerId: other.id },
+      }),
+    ).toBe(1);
+    const batch = await prisma.legacyOwnershipBatch.findUniqueOrThrow({
+      where: { id: batchId },
+    });
+    expect(JSON.stringify(batch.manifest)).not.toContain(target.id);
+    expect(JSON.stringify(batch.manifest)).toContain(other.id);
+    expect((await store.status(target.receipt)).state).toBe('local_deleted');
   });
 });
