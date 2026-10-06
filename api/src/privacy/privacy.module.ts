@@ -1,3 +1,5 @@
+import { PrivacyDisclosureService } from './privacy-disclosure.service';
+import { PrivacyDisclosureController } from './privacy-disclosure.controller';
 import { PrivacySchedulerService } from './privacy-scheduler.service';
 import { PrivacyRetentionService } from './privacy-retention.service';
 import { Module } from '@nestjs/common';
@@ -15,8 +17,9 @@ import { GoogleErasureRevoker } from './google-erasure-revoker';
 
 @Module({
   imports: [PrismaModule, AuthModule, GoogleAuthModule, JarvisModule],
-  controllers: [AccountErasureController],
+  controllers: [AccountErasureController, PrivacyDisclosureController],
   providers: [
+    PrivacyDisclosureService,
     PrivacySchedulerService,
     PrivacyRetentionService,
     AccountErasureStore,

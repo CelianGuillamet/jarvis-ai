@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AccountPrivacyCard from "@/features/privacy/AccountPrivacyCard.vue";
 import { computed, onMounted, ref, watch } from "vue";
 
 import { TimezoneSchema } from "@/core/contracts/v1";
@@ -152,6 +153,8 @@ const connectGoogle = () => {
         >Enregistrer les préférences</BaseButton
       >
     </BaseCard>
+
+    <AccountPrivacyCard />
 
     <!-- Google integration -->
     <BaseCard class="p-5">

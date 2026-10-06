@@ -1,4 +1,7 @@
-import { AccountErasureStatusSchema } from '../../src/contracts/v1';
+import {
+  AccountErasureStatusSchema,
+  PrivacyDisclosureSchema,
+} from '../../src/contracts/v1';
 import { AccountSnapshotService } from '../../src/privacy/account-snapshot.service';
 import { ConversationService } from '../../src/auth/conversation.service';
 import { ConfigService } from '@nestjs/config';
@@ -147,6 +150,18 @@ describe('API against disposable migrated PostgreSQL', () => {
     const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
     const receipt =
       randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+    const disclosure = await request(baseUrl)
+      .get('/account/privacy')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(PrivacyDisclosureSchema.safeParse(disclosure.body).success).toBe(
+      true,
+    );
+    expect(disclosure.headers['cache-control']).toBe('no-store');
+    expect(JSON.stringify(disclosure.body)).not.toContain(
+      process.env.AUTH_SECRET!,
+    );
+
     await request(baseUrl)
       .post('/account/deletion')
       .set('Origin', 'http://localhost:5173')
@@ -880,6 +895,7 @@ describe('API against disposable migrated PostgreSQL', () => {
     }
     expect(routes.sort()).toEqual(
       [
+        'GET /account/privacy',
         'GET /account/me',
         'GET /account/export/snapshot',
         'GET /account/export/profile',
@@ -1094,6 +1110,7 @@ describe('API against disposable migrated PostgreSQL', () => {
 
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
     for (const path of [
+      '/account/privacy',
       '/account/me',
       '/account/export/snapshot',
       '/account/export/profile',

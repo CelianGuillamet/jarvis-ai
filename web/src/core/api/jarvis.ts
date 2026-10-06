@@ -1,4 +1,5 @@
 import {
+  PrivacyDisclosureSchema,
   ActivityResponseSchema,
   InboxReplyDraftResponseSchema,
   InboxReplyDraftSaveRequestSchema,
@@ -79,6 +80,7 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
   const http = createHttpClient(options);
 
   return {
+    privacy: () => validated(http.get<unknown>("/account/privacy"), PrivacyDisclosureSchema),
     inboxReplyDraft: (sessionId: string, messageId: string) =>
       validated(
         http.get<unknown>(

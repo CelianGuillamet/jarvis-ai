@@ -336,3 +336,20 @@ Partial SQL indexes cover terminal-history and raw-content scans; ordinary expir
 indexes are reflected in Prisma. Three new real PostgreSQL retention cases await CI.
 Four scheduler scenarios and diagnostic minimization pass locally. Request-route commit
 85d615f passed all four CI checks and18suites138PostgreSQL tests (37480558200).
+
+### Configured-provider disclosure in Settings
+
+GET /account/privacy is authenticated and returns a strict projection of the configured
+model provider, endpoint hostname/transport, Google sign-in/tool setup, requested scopes,
+weather hosts, disabled web retrieval, processing availability and retention policy.
+Execution and disclosure share model selection. URL credentials, query strings and paths
+are never included. The Settings card explains transfers from the user's perspective,
+including that a local endpoint may itself forward requests elsewhere. It describes
+operator-managed backups as a policy obligation, not an implemented backup service.
+
+Five backend scenarios cover defaults, remote Ollama, OpenAI selection, fallback and
+separate Google setup; a real Vue DOM scenario covers remote model copy and retention.
+Local API75suites492unit and Web90tests plus types/lint/build passed. The new HTTP
+disclosure assertion awaits CI. Retention fixture fix cb4d255 passed all four checks
+and19PostgreSQL suites141tests (37483030334); the completed fixture now includes its
+required response and no database constraint was weakened.

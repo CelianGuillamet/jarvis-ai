@@ -43,6 +43,7 @@ function fixture({
   signedOut = false,
   connected = false,
   revocationPending = false,
+  privacyModel = { provider: "ollama", endpointHost: "localhost", transport: "loopback" },
 } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -72,6 +73,12 @@ function fixture({
         JSON.stringify({ connected: false, revocationPending }),
       );
     }
+    if (url.endsWith("/account/privacy")) return new Response(JSON.stringify({
+      model: privacyModel, google: { signInConfigured: true, toolsConfigured: false, requestedScopes: [] },
+      weatherHosts: ["api.open-meteo.com"], webRetrieval: "disabled", processingEnabled: true,
+      retention: { diagnosticDays: 14, conversationDays: 90, receiptDays: 7, maximumBackupDays: 30,
+        userData: "until-deleted", commandJournal: "until-account-deletion" }, backups: "operator-managed",
+    }));
     if (url.endsWith("/account/preferences")) {
       if (init.method === "POST") {
         if (failSave) return new Response("{}", { status: 503 });
@@ -279,4 +286,23 @@ test('session expiry removes previous account stores before a new account become
     assert.ok(document.querySelector('#private-app'));
     assert.deepEqual(chat.messages, []);
   } finally { mounted.app.unmount(); }
+});
+
+
+test("privacy settings reflect a remote configured model and explain retention", async () => {
+  const f = fixture({ privacyModel: { provider: "ollama", endpointHost: "models.example.test", transport: "network" } });
+  try {
+    await settle();
+    assert.match(document.body.textContent, /models.example.test/);
+    assert.match(document.body.textContent, /accessible par le réseau/);
+    assert.doesNotMatch(document.body.textContent, /serveur est local/);
+    assert.match(document.body.textContent, /recherche web est désactivée/);
+    const details = document.querySelector("details");
+    assert.ok(details);
+    details.open = true;
+    assert.match(details.textContent, /90 jours/);
+    assert.match(details.textContent, /14 jours/);
+    assert.match(details.textContent, /journal des commandes reste/);
+    assert.match(details.textContent, /30 jours/);
+  } finally { f.app.unmount(); }
 });

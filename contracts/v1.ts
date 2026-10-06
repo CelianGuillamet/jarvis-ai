@@ -921,3 +921,37 @@ export const ActivityResponseSchema = z.strictObject({
   ),
 });
 export type ActivityResponse = z.infer<typeof ActivityResponseSchema>;
+
+export const PrivacyDisclosureSchema = z
+  .object({
+    model: z
+      .object({
+        provider: z.enum(['ollama', 'openai']),
+        endpointHost: z.string().min(1).max(253),
+        transport: z.enum(['loopback', 'network']),
+      })
+      .strict(),
+    google: z
+      .object({
+        signInConfigured: z.boolean(),
+        toolsConfigured: z.boolean(),
+        requestedScopes: z.array(z.string().max(200)).max(20),
+      })
+      .strict(),
+    weatherHosts: z.array(z.string().min(1).max(253)).max(2),
+    webRetrieval: z.literal('disabled'),
+    processingEnabled: z.boolean(),
+    retention: z
+      .object({
+        diagnosticDays: z.literal(14),
+        conversationDays: z.literal(90),
+        receiptDays: z.literal(7),
+        maximumBackupDays: z.literal(30),
+        userData: z.literal('until-deleted'),
+        commandJournal: z.literal('until-account-deletion'),
+      })
+      .strict(),
+    backups: z.literal('operator-managed'),
+  })
+  .strict();
+export type PrivacyDisclosure = z.infer<typeof PrivacyDisclosureSchema>;

@@ -1,3 +1,4 @@
+import { selectedModelProvider } from '../providers/model-selection';
 import { PrivateCacheFence } from './private-cache-fence';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
@@ -592,7 +593,7 @@ export class JarvisService {
     ).toLowerCase();
     const openAiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
     const shouldUseOpenAi =
-      llmProvider === 'openai' || (!!openAiKey && llmProvider !== 'ollama');
+      selectedModelProvider(llmProvider, openAiKey) === 'openai';
 
     if (shouldUseOpenAi && openAiKey) {
       this.llm = new OpenAIProvider(
@@ -607,7 +608,7 @@ export class JarvisService {
         `LLM provider: openai (${this.config.get<string>('OPENAI_MODEL_PRIMARY') || 'gpt-5-nano'} -> ${this.config.get<string>('OPENAI_MODEL_FALLBACK') || 'gpt-5-mini'})`,
       );
     } else {
-      if (shouldUseOpenAi && !openAiKey) {
+      if (llmProvider === 'openai' && !openAiKey) {
         this.logger.warn(
           'LLM_PROVIDER=openai mais OPENAI_API_KEY est vide. Fallback vers Ollama.',
         );
