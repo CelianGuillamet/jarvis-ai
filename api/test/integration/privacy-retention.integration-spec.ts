@@ -83,6 +83,7 @@ describe('Bounded privacy retention', () => {
         kind: 'chat',
         inputText: 'Old private text',
         state: 'completed',
+        response: { text: 'Old private reply' },
         createdAt: old,
         updatedAt: old,
       },
