@@ -124,4 +124,26 @@ describe('Bounded passive status cache', () => {
     expect(result).toMatchObject({ data: null, availability: 'unavailable' });
     expect(result.fetchedAt).not.toBeNull();
   });
+  it('refuses late publication after a conversation generation expires', async () => {
+    const cache = new StatusResourceCache<string[]>();
+    let valid = true;
+    let finish!: (value: string[]) => void;
+    const result = cache.read(
+      'owner',
+      'revision',
+      true,
+      () =>
+        new Promise<string[]>((resolve) => {
+          finish = resolve;
+        }),
+      () => valid,
+    );
+    valid = false;
+    finish(['Private late response']);
+    expect((await result).data).toBeNull();
+    expect(
+      (await cache.read('owner', 'revision', false, () => Promise.resolve([])))
+        .data,
+    ).toBeNull();
+  });
 });

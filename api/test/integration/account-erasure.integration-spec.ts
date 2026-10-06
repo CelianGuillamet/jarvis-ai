@@ -1,3 +1,4 @@
+import { AccountPrivateCacheService } from '../../src/privacy/account-private-cache.service';
 import { AccountErasureWorker } from '../../src/privacy/account-erasure.worker';
 import { GoogleErasureRevoker } from '../../src/privacy/google-erasure-revoker';
 import { AccountErasurePurgeService } from '../../src/privacy/account-erasure-purge.service';
@@ -420,6 +421,9 @@ describe('Durable account erasure requests', () => {
       new AccountErasurePurgeService(prisma),
       cipher,
       { revoke } as unknown as GoogleErasureRevoker,
+      {
+        forgetOwner: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AccountPrivateCacheService,
     );
     expect(await runner.runOnce()).toBe(true);
     expect(await prisma.note.count({ where: { ownerId: target.id } })).toBe(0);

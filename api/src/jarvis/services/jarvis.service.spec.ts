@@ -237,6 +237,7 @@ function makeService(options: ServiceOptions = {}) {
 
   const baseProfile = createHumanProfile('tu', 'normal');
   const humanProfileStore = {
+    forget: jest.fn(),
     get: jest.fn().mockResolvedValue(baseProfile),
     updateFromUserText: jest.fn().mockResolvedValue(baseProfile),
   };
@@ -404,6 +405,7 @@ function makeService(options: ServiceOptions = {}) {
 
   return {
     service,
+    humanProfileStore,
     llmChat,
     pending,
     memoryStore,
@@ -416,6 +418,41 @@ function makeService(options: ServiceOptions = {}) {
 }
 
 describe('JarvisService', () => {
+  it('does not restore private working memory when a model reply arrives after erasure', async () => {
+    const { service, llmChat, humanProfileStore } = makeService();
+    llmChat.mockResolvedValue(
+      JSON.stringify({ type: 'final', text: 'Une réponse' }),
+    );
+    await service.chat('Explique la photosynthèse', 'other-conversation');
+    expect(service['recentMemory'].has('other-conversation')).toBe(true);
+    let started!: () => void;
+    let finish!: (value: string) => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    llmChat.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+          started();
+        }),
+    );
+    const pending = service.chat(
+      'Explique la photosynthèse',
+      'erased-conversation',
+    );
+    await ready;
+    service.forgetConversation('erased-conversation');
+    finish(JSON.stringify({ type: 'final', text: 'Réponse privée différée' }));
+    await pending;
+    expect(service['recentMemory'].has('erased-conversation')).toBe(false);
+    expect(service['convo'].has('erased-conversation')).toBe(false);
+    expect(service['recentMemory'].has('other-conversation')).toBe(true);
+    expect(humanProfileStore.forget).toHaveBeenCalledWith(
+      'erased-conversation',
+    );
+  });
+
   it('reads passive status without invoking any model or provider transport', async () => {
     const { service, llmChat, calendar } = makeService();
     const mail = jest.spyOn(service['gmail'], 'listMessages');

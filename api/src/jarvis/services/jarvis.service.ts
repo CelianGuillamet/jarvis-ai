@@ -1,3 +1,4 @@
+import { PrivateCacheFence } from './private-cache-fence';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
 import { todayToolCall } from '../../today/today-tool-call';
@@ -459,6 +460,7 @@ export class JarvisService {
   private readonly memoryTtlMs: number;
 
   private readonly convo = new Map<string, ConversationState>();
+  private readonly privateCacheFence: PrivateCacheFence;
   private readonly recentMemory = new Map<string, SessionMemoryTurn[]>();
   private readonly statusGmail = new StatusResourceCache<
     Awaited<ReturnType<GmailProvider['listMessages']>>
@@ -535,6 +537,10 @@ export class JarvisService {
       Number.isFinite(memorySessionsRaw) && memorySessionsRaw > 0
         ? Math.floor(memorySessionsRaw)
         : this.convoMaxSessions;
+
+    this.privateCacheFence = new PrivateCacheFence(
+      Math.max(1, this.convoMaxSessions, this.memoryMaxSessions),
+    );
 
     const memoryCharsRaw = Number(
       this.config.get('JARVIS_MEMORY_MAX_CHARS') ?? 700,
@@ -1040,6 +1046,32 @@ export class JarvisService {
     };
   }
 
+  forgetConversation(sessionId: string): void {
+    this.privateCacheFence.forget(sessionId);
+    this.clearPrivateConversationCaches(sessionId);
+  }
+
+  private clearPrivateConversationCaches(sessionId: string): void {
+    this.convo.delete(sessionId);
+    this.recentMemory.delete(sessionId);
+    this.humanProfileStore.forget(sessionId);
+    const matches = (key: string) => {
+      const scope: unknown = JSON.parse(key);
+      return Array.isArray(scope) && scope[1] === sessionId;
+    };
+    this.statusGmail.invalidateWhere(matches);
+    this.statusCalendar.invalidateWhere(matches);
+  }
+
+  private withPrivateConversation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return this.privateCacheFence.run(sessionId, operation, () =>
+      this.clearPrivateConversationCaches(sessionId),
+    );
+  }
+
   private getState(sessionId: string) {
     this.cleanupConvo();
     const st = this.convo.get(sessionId);
@@ -1052,6 +1084,7 @@ export class JarvisService {
   }
 
   private setState(sessionId: string, st: ConversationState) {
+    if (!this.privateCacheFence.canPublish(sessionId)) return;
     this.cleanupConvo();
     this.convo.set(sessionId, st);
   }
@@ -1113,6 +1146,7 @@ export class JarvisService {
     sessionId: string,
     turn: Omit<SessionMemoryTurn, 'createdAt'>,
   ) {
+    if (!this.privateCacheFence.canPublish(sessionId)) return;
     this.cleanupRecentMemory();
     const history = this.recentMemory.get(sessionId) ?? [];
     history.push({
@@ -1882,6 +1916,13 @@ export class JarvisService {
   }
 
   async status(sessionId?: string, refreshProviders = false) {
+    const resolved = this.resolveSessionId(sessionId);
+    return this.withPrivateConversation(resolved, () =>
+      this.statusInContext(resolved, refreshProviders),
+    );
+  }
+
+  private async statusInContext(sessionId?: string, refreshProviders = false) {
     const resolvedSessionId = this.resolveSessionId(sessionId);
     const prisma = await this.prisma.forConversation(resolvedSessionId);
     const profile = await this.getHumanProfile(resolvedSessionId);
@@ -1938,25 +1979,37 @@ export class JarvisService {
     const revision = revisionOf(googleToken);
     let statusGoogleToken = googleToken;
 
+    const canPublish = () =>
+      this.privateCacheFence.canPublish(resolvedSessionId);
     let [gmailResource, calendarResource] = await Promise.all([
-      this.statusGmail.read(cacheKey, revision, refreshProviders, async () =>
-        (
-          await this.gmail.listMessages(resolvedSessionId, {
-            q: 'is:unread',
-            maxResults: 5,
-          })
-        ).slice(0, 5),
+      this.statusGmail.read(
+        cacheKey,
+        revision,
+        refreshProviders,
+        async () =>
+          (
+            await this.gmail.listMessages(resolvedSessionId, {
+              q: 'is:unread',
+              maxResults: 5,
+            })
+          ).slice(0, 5),
+        canPublish,
       ),
-      this.statusCalendar.read(cacheKey, revision, refreshProviders, async () =>
-        (
-          await this.calendar.listEventsInterval(
-            resolvedSessionId,
-            todayRange.startIso,
-            todayRange.endIso,
-            this.tz,
-            12,
-          )
-        ).slice(0, 12),
+      this.statusCalendar.read(
+        cacheKey,
+        revision,
+        refreshProviders,
+        async () =>
+          (
+            await this.calendar.listEventsInterval(
+              resolvedSessionId,
+              todayRange.startIso,
+              todayRange.endIso,
+              this.tz,
+              12,
+            )
+          ).slice(0, 12),
+        canPublish,
       ),
     ]);
     if (refreshProviders) {
@@ -1967,11 +2020,19 @@ export class JarvisService {
         // A disconnect/account/credential change during transport invalidates
         // both cached and just-returned data before it reaches the browser.
         [gmailResource, calendarResource] = await Promise.all([
-          this.statusGmail.read(cacheKey, latestRevision, false, () =>
-            Promise.resolve([]),
+          this.statusGmail.read(
+            cacheKey,
+            latestRevision,
+            false,
+            () => Promise.resolve([]),
+            canPublish,
           ),
-          this.statusCalendar.read(cacheKey, latestRevision, false, () =>
-            Promise.resolve([]),
+          this.statusCalendar.read(
+            cacheKey,
+            latestRevision,
+            false,
+            () => Promise.resolve([]),
+            canPublish,
           ),
         ]);
       }
@@ -3361,6 +3422,13 @@ export class JarvisService {
   }
 
   async chat(userText: string, sessionId?: string) {
+    const resolved = this.resolveSessionId(sessionId);
+    return this.withPrivateConversation(resolved, () =>
+      this.chatInContext(userText, resolved),
+    );
+  }
+
+  private async chatInContext(userText: string, sessionId?: string) {
     const resolvedSessionId = this.resolveSessionId(sessionId);
     const tz = this.tz;
     const profile = await this.refreshHumanProfile(resolvedSessionId, userText);
@@ -4090,6 +4158,12 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
   // Backup: route /confirm
   async confirm(actionId: string, sessionId?: string) {
+    return this.withPrivateConversation(this.resolveSessionId(sessionId), () =>
+      this.confirmInContext(actionId, sessionId),
+    );
+  }
+
+  private async confirmInContext(actionId: string, sessionId?: string) {
     const expectedSessionId = sessionId?.trim() || undefined;
     if (this.requireConfirmSessionMatch && !expectedSessionId) {
       throw new BadRequestException(

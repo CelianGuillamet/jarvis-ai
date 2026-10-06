@@ -278,3 +278,21 @@ expiry, decryption failure, sanitized purge failure and overlapping ticks. A new
 PostgreSQL runner test uses a mocked revoker to verify local deletion during an outage
 and durable completion on the next claim; it awaits CI. Commit bebd592 passed all four
 CI checks and 18 PostgreSQL suites / 136 tests (run37477792226).
+
+### Private cache invalidation
+
+Chat, status and confirmation calls run inside a bounded per-conversation generation
+context. Invalidating a conversation deletes its generation and drops working state,
+recent turns, the human profile and both provider status keys. In-flight work cannot
+publish later turns/state; nested confirmation reuses its original context, including
+an invalidated one. Provider status publication checks the generation again after
+transport. Contexts retain only bounded conversation identifiers and opaque objects.
+
+The worker now calls owner cache invalidation before local purge. Conversation IDs
+are read by owner in ordered pages of 100, without an unbounded list. Database failure
+aborts that step instead of proceeding to purge with private caches intact. The runner
+still has no timer or mounted request/status routes. Remaining work includes activation,
+retention/verification cleanup, backup restore replay and user-facing controls/disclosures.
+Tests cover late model replies, nested invalidation, capacity eviction, late provider
+refresh and bounded owner-only pages. Commit4f905ba passed all four CI checks, including
+the real PostgreSQL mocked-outage worker flow; new cache changes await their own CI.

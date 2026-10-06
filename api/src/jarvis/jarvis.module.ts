@@ -63,5 +63,6 @@ import { JarvisFinanceService } from './services/jarvis-finance.service';
     JarvisFinanceService,
   ],
   controllers: [JarvisController, TodayController],
+  exports: [JarvisService],
 })
 export class JarvisModule {}

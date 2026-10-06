@@ -1,3 +1,4 @@
+import { AccountPrivateCacheService } from './account-private-cache.service';
 import { Logger } from '@nestjs/common';
 import { AccountErasureWorker } from './account-erasure.worker';
 import { AccountErasureStore } from './account-erasure.store';
@@ -8,6 +9,7 @@ import { GoogleErasureRevoker } from './google-erasure-revoker';
 function fixture() {
   const job = {
     id: 'job',
+    ownerId: 'owner',
     claimToken: 'claim',
     attempts: 1,
     revocationStatus: 'pending',
@@ -26,13 +28,15 @@ function fixture() {
     open: jest.fn().mockReturnValue(['first-token', 'second-token']),
   };
   const revoker = { revoke: jest.fn().mockResolvedValue(true) };
+  const privateCache = { forgetOwner: jest.fn().mockResolvedValue(undefined) };
   const worker = new AccountErasureWorker(
     store as unknown as AccountErasureStore,
     purge as unknown as AccountErasurePurgeService,
     cipher as unknown as ErasureCredentialCipher,
     revoker as unknown as GoogleErasureRevoker,
+    privateCache as unknown as AccountPrivateCacheService,
   );
-  return { job, store, purge, cipher, revoker, worker };
+  return { job, store, purge, cipher, revoker, worker, privateCache };
 }
 
 describe('Durable erasure runner', () => {
@@ -41,6 +45,10 @@ describe('Durable erasure runner', () => {
   it('purges locally before provider calls and saves each acknowledged credential', async () => {
     const f = fixture();
     expect(await f.worker.runOnce()).toBe(true);
+    expect(f.privateCache.forgetOwner).toHaveBeenCalledWith('owner');
+    expect(f.privateCache.forgetOwner.mock.invocationCallOrder[0]).toBeLessThan(
+      f.purge.purge.mock.invocationCallOrder[0],
+    );
     expect(f.purge.purge.mock.invocationCallOrder[0]).toBeLessThan(
       f.revoker.revoke.mock.invocationCallOrder[0],
     );

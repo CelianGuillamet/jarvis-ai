@@ -1,3 +1,4 @@
+import { AccountPrivateCacheService } from './account-private-cache.service';
 import { Injectable, Logger } from '@nestjs/common';
 import { AccountErasureStore } from './account-erasure.store';
 import { AccountErasurePurgeService } from './account-erasure-purge.service';
@@ -15,6 +16,7 @@ export class AccountErasureWorker {
     private readonly purge: AccountErasurePurgeService,
     private readonly cipher: ErasureCredentialCipher,
     private readonly revoker: GoogleErasureRevoker,
+    private readonly privateCache: AccountPrivateCacheService,
   ) {}
 
   async runOnce(): Promise<boolean> {
@@ -31,6 +33,7 @@ export class AccountErasureWorker {
           Math.min(3600, 15 * 2 ** Math.min(job.attempts, 8)),
         );
       try {
+        await this.privateCache.forgetOwner(job.ownerId);
         // Remote availability must never prevent local removal of private data.
         if (!(await this.purge.purge(job.id, claim))) return true;
         const manual =
