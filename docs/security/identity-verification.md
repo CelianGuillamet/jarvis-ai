@@ -11,6 +11,8 @@ The local gate uses the real Nest guards, Better Auth signed cookies and disposa
 | GET `/account/preferences`, POST `/account/preferences` | Signed-in owner only; rejects anonymous requests, identity overrides, invalid timezones and untrusted mutation origins. |
 | GET `/account/me` | Spoofed owner query/header still returns only the signed-in account. |
 | GET `/account/export/profile`, GET `/account/export/data` | Authenticated owner only; explicit credential-free projections, strictly validated collection/cursor, pages bounded to 50. PostgreSQL export isolation checks remain in progress under JAR-039. |
+| POST `/account/deletion` | Signed owner only; strict email/receipt input, rejects owner overrides, anonymous calls and untrusted origins. Invalidates sessions atomically with the durable job. New HTTP PostgreSQL scenario awaits CI. |
+| GET `/account/deletion/status` | Session-independent capability read, 256-bit receipt in header only, IP quota, no identity/credentials returned, no-store responses. Missing/incorrect/expired receipt returns404. |
 | GET `/account/export/snapshot` | Authenticated owner only; read-only repeatable-read snapshot across explicit model projections, NDJSON streamed by cursors; client abort cancels export, complete marker follows successful transaction. PostgreSQL coherence/isolation tests pending JAR-039 CI. |
 | GET `/jarvis/history`, `/jarvis/status`, `/inbox-zero/session`, `/inbox-zero/message`, `/auth/google/status`, `/auth/google` | A known foreign canonical conversation returns 404 before accessing its data or authorization flow. |
 | POST `/jarvis/chat`, `/jarvis/confirm` | Foreign conversation refused; a real foreign pending-action ID paired with the attacker's own conversation is not consumed. |

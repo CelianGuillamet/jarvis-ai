@@ -1,3 +1,4 @@
+import { AccountErasureStatusSchema } from '../../src/contracts/v1';
 import { AccountSnapshotService } from '../../src/privacy/account-snapshot.service';
 import { ConversationService } from '../../src/auth/conversation.service';
 import { ConfigService } from '@nestjs/config';
@@ -122,6 +123,77 @@ describe('API against disposable migrated PostgreSQL', () => {
     await app?.close();
     jest.spyOn(OllamaProvider.prototype, 'chat').mockRestore();
     jest.spyOn(OpenAIProvider.prototype, 'chat').mockRestore();
+  });
+
+  it('creates an identity-scoped deletion request and allows only its capability to track it after signout', async () => {
+    const ownerId = `http-erasure-${randomUUID()}`;
+    const email = `${ownerId}@example.invalid`;
+    const token = randomUUID();
+    await prisma.betaInvite.create({ data: { email } });
+    await prisma.user.create({
+      data: { id: ownerId, email, name: 'Erasure HTTP', emailVerified: true },
+    });
+    await prisma.session.create({
+      data: {
+        id: randomUUID(),
+        token,
+        userId: ownerId,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const receipt =
+      randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+    await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'http://localhost:5173')
+      .set('Cookie', cookie)
+      .send({ confirmEmail: email, receipt, ownerId: 'integration-user' })
+      .expect(400);
+    await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'https://untrusted.invalid')
+      .set('Cookie', cookie)
+      .send({ confirmEmail: email, receipt })
+      .expect(403);
+    const accepted = await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'http://localhost:5173')
+      .set('Cookie', cookie)
+      .send({ confirmEmail: email, receipt })
+      .expect(202);
+    expect(AccountErasureStatusSchema.safeParse(accepted.body).success).toBe(
+      true,
+    );
+    expect(accepted.headers['cache-control']).toBe('no-store');
+    expect(await prisma.session.count({ where: { userId: ownerId } })).toBe(0);
+    await request(baseUrl).get('/account/me').set('Cookie', cookie).expect(401);
+    expect(
+      (
+        await prisma.user.findUniqueOrThrow({
+          where: { id: 'integration-user' },
+        })
+      ).disabled,
+    ).toBe(false);
+    await request(baseUrl).get('/account/deletion/status').expect(404);
+    await request(baseUrl)
+      .get('/account/deletion/status')
+      .set('x-erasure-receipt', 'b'.repeat(64))
+      .expect(404);
+    const status = await request(baseUrl)
+      .get('/account/deletion/status')
+      .set('x-erasure-receipt', receipt)
+      .expect(200);
+    expect(AccountErasureStatusSchema.safeParse(status.body).success).toBe(
+      true,
+    );
+    expect(status.headers['cache-control']).toBe('no-store');
+    expect(JSON.stringify(status.body)).not.toContain(ownerId);
+    expect(JSON.stringify(status.body)).not.toContain(email);
+    expect(JSON.stringify(status.body)).not.toContain(receipt);
   });
 
   it('bounds DTOs and throttles verified accounts across conversation changes', async () => {
@@ -824,6 +896,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         'GET /jarvis/activity',
         'GET /jarvis/status',
         'GET /today',
+        'POST /account/deletion',
         'POST /account/preferences',
         'POST /auth/google/disconnect',
         'POST /inbox-zero/apply',
@@ -1044,6 +1117,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         .expect(401);
     }
     for (const path of [
+      '/account/deletion',
       '/account/preferences',
       '/auth/google/disconnect',
       '/jarvis/chat',

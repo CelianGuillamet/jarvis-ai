@@ -296,3 +296,19 @@ retention/verification cleanup, backup restore replay and user-facing controls/d
 Tests cover late model replies, nested invalidation, capacity eviction, late provider
 refresh and bounded owner-only pages. Commit4f905ba passed all four CI checks, including
 the real PostgreSQL mocked-outage worker flow; new cache changes await their own CI.
+
+### Request and receipt HTTP routes
+
+POST /account/deletion uses the existing signed-session guard and mutation-origin
+checks. A strict body accepts only the confirmation email and client-generated
+256-bit hexadecimal receipt. Accepted requests return202; the owner is never accepted
+from client input. GET /account/deletion/status uses the receipt in x-erasure-receipt,
+not a URL parameter or signed login session. It has an IP fixed-window quota and
+no-store/no-referrer headers. Invalid/missing receipts return404; unexpected database
+errors are sanitized. The response contains only the explicit public job status.
+
+PrivacyModule is imported from the application root, avoiding an Auth/Jarvis cycle.
+The worker is injectable but has no timer yet. These routes do not establish a
+finished deletion product until scheduler, retention, backup replay and user controls
+are implemented and verified. Seven controller cases passed locally; the new real
+HTTP/PostgreSQL signed-owner/origin/session invalidation/capability case awaits CI.
