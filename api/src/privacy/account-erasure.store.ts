@@ -220,4 +220,34 @@ export class AccountErasureStore {
         AND "claimedUntil" > clock_timestamp() AND "state" IN ('queued', 'local_deleted')`;
     return changed === 1;
   }
+  /** Persist every acknowledged token so retries never re-revoke a completed token. */
+  async saveRevocationProgress(
+    jobId: string,
+    claimToken: string,
+    remainingTokens: string[],
+    manualRequired = false,
+  ): Promise<boolean> {
+    if (remainingTokens.some((token) => !token))
+      throw new Error('Invalid revocation credential');
+    const remaining = [...new Set(remainingTokens)];
+    const encrypted = remaining.length
+      ? this.cipher.seal(jobId, remaining)
+      : null;
+    const status = remaining.length
+      ? 'pending'
+      : manualRequired
+        ? 'manual_required'
+        : 'complete';
+    const changed = await this.prisma.$executeRaw`
+      UPDATE "AccountErasureJob" SET "encryptedTokens" = ${encrypted}, "revocationStatus" = CASE WHEN ${remaining.length} = 0 AND "blockerCode" = 'GOOGLE_KEY_UNAVAILABLE'
+          THEN 'manual_required' ELSE ${status} END,
+        "state" = CASE WHEN ${remaining.length} = 0 THEN 'completed' ELSE 'local_deleted' END,
+        "completedAt" = CASE WHEN ${remaining.length} = 0 THEN clock_timestamp() ELSE NULL END,
+        "claimToken" = CASE WHEN ${remaining.length} = 0 THEN NULL ELSE "claimToken" END,
+        "claimedUntil" = CASE WHEN ${remaining.length} = 0 THEN NULL ELSE "claimedUntil" END
+      WHERE "id" = ${jobId} AND "claimToken" = ${claimToken}
+        AND "claimedUntil" > clock_timestamp() AND "state" = 'local_deleted'
+        AND "localDeletedAt" IS NOT NULL`;
+    return changed === 1;
+  }
 }

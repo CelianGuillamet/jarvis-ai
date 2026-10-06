@@ -362,5 +362,29 @@ describe('Durable account erasure requests', () => {
     expect(JSON.stringify(batch.manifest)).not.toContain(target.id);
     expect(JSON.stringify(batch.manifest)).toContain(other.id);
     expect((await store.status(target.receipt)).state).toBe('local_deleted');
+    expect(
+      await store.saveRevocationProgress(requested.id, randomUUID(), []),
+    ).toBe(false);
+    expect(
+      await store.saveRevocationProgress(requested.id, lease.claimToken, [
+        'remaining-token',
+      ]),
+    ).toBe(true);
+    const progress = await prisma.accountErasureJob.findUniqueOrThrow({
+      where: { id: requested.id },
+    });
+    expect(progress.state).toBe('local_deleted');
+    expect(progress.revocationStatus).toBe('pending');
+    expect(progress.encryptedTokens).not.toContain('remaining-token');
+    expect(cipher.open(requested.id, progress.encryptedTokens!)).toEqual([
+      'remaining-token',
+    ]);
+    expect(
+      await store.saveRevocationProgress(requested.id, lease.claimToken, []),
+    ).toBe(true);
+    expect((await store.status(target.receipt)).state).toBe('completed');
+    expect(
+      await store.saveRevocationProgress(requested.id, lease.claimToken, []),
+    ).toBe(false);
   });
 });

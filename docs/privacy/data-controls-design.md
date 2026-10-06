@@ -242,3 +242,22 @@ tests, including stale-worker fencing and scoped journal rollback. The new purge
 owner-isolation/legacy-copy/receipt replay PostgreSQL case awaits CI execution.
 Cache invalidation, provider revocation, the worker, retention, backup restore checks
 and user controls remain required before account deletion can be advertised or merged.
+
+### Revocation adapter and durable progress
+
+Google's documented revocation endpoint is used via POST form data, with a five-second
+abort deadline, redirects rejected and provider response bodies discarded. Reference:
+https://developers.google.com/identity/protocols/oauth2/web-server#tokenrevoke
+Only HTTP200 is treated as acknowledgement. Other statuses and network failures
+remain retryable; tests use mocked fetch and perform no actual provider requests.
+
+Revocation progress replaces the encrypted list of remaining credentials under the
+live job lease. Completion requires prior local purge, drops encrypted credentials
+and releases the lease atomically. An unrecoverable-key marker remains manual_required
+even if all other captured tokens were acknowledged. A stale worker cannot finish
+the job. The worker, its deadline/expiry policy, cache invalidation and user disclosure
+of manual revocation still need implementation.
+
+Purge commit dea377b passed 455 unit tests and 18 PostgreSQL suites / 136 tests
+(CI37477135674), including owner isolation and legacy-copy removal. New revocation
+progress PostgreSQL assertions await CI on the next commit.
