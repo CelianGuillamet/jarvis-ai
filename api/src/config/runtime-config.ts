@@ -52,6 +52,7 @@ export function validateRuntimeConfig(input: Record<string, unknown>) {
       errors.push(key);
     }
   };
+  enumeration('PRIVACY_WORKER_ENABLED', ['true', 'false'], 'true');
   enumeration('NODE_ENV', ['development', 'test', 'production'], 'development');
   enumeration('LLM_PROVIDER', ['ollama', 'openai'], 'ollama');
   enumeration('JARVIS_DEFAULT_SPEECH_MODE', ['tu', 'vous']);

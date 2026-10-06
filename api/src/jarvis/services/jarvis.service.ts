@@ -1582,12 +1582,19 @@ export class JarvisService {
     result?: string;
   }) {
     try {
-      await this.prisma.jarvisLog.create({ data });
-    } catch (error) {
-      this.logger.error(
-        'Impossible d’écrire le log Jarvis',
-        error instanceof Error ? error.stack : String(error),
-      );
+      await this.prisma.jarvisLog.create({
+        data: {
+          sessionId: data.sessionId,
+          toolName: data.toolName,
+          simulation: data.simulation,
+          userText: '',
+          modelRaw: '',
+          toolArgs: null,
+          result: null,
+        },
+      });
+    } catch {
+      this.logger.warn('Impossible d’écrire le log technique Jarvis.');
     }
   }
 

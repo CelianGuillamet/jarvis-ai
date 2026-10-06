@@ -31,7 +31,8 @@ la suppression normale. Un simple user.delete ne peut donc pas réaliser un oubl
 ## Politique proposée à implémenter et vérifier
 
 Données choisies par l’utilisateur (tâches, notes, mémoire explicite) : jusqu’à
-suppression. Historique conversationnel et résultats terminaux : 90 jours.
+suppression. Historique conversationnel terminé : 90 jours. Le journal de commandes
+et ses preuves de reprise/déduplication restent jusqu’à la suppression du compte.
 Journaux techniques minimisés : 14 jours, sans contenu brut ni secret. OAuth state
 et sessions : expiration existante, nettoyage des entrées expirées. Les opérations
 non terminales ou de résultat inconnu ne doivent jamais être purgées au milieu
@@ -312,3 +313,26 @@ The worker is injectable but has no timer yet. These routes do not establish a
 finished deletion product until scheduler, retention, backup replay and user controls
 are implemented and verified. Seven controller cases passed locally; the new real
 HTTP/PostgreSQL signed-owner/origin/session invalidation/capability case awaits CI.
+
+### Activated scheduler and bounded retention
+
+The application now mounts a fifteen-second coalesced scheduler. It drives retention
+and one erasure job, sanitizes failures, continues erasure if retention fails and waits
+for in-flight work on shutdown. NODE_ENV=test disables autonomous execution so disposable
+suites explicitly control work and never initiate provider traffic. The validated
+PRIVACY_WORKER_ENABLED=false setting pauses both tasks for maintenance; retention is
+not enforced while paused. The default is true.
+
+Each cleanup rule locks and removes at most500 rows per tick. Diagnostics older than
+14days and legacy rows containing raw content are discarded. New diagnostics retain
+only conversation/tool/simulation metadata, never input/model text, arguments or results.
+Completed/failed conversation turns expire after90days; started turns and command
+journals remain. Expired sessions, anonymous verifications, pending actions and Google
+OAuth state are removed. Expired revocation credentials are discarded only when no
+live lease owns them; status becomes manual_required. Receipt/tombstone removal still
+requires independent backup-ledger protection and is not implemented by this batch.
+
+Partial SQL indexes cover terminal-history and raw-content scans; ordinary expiration
+indexes are reflected in Prisma. Three new real PostgreSQL retention cases await CI.
+Four scheduler scenarios and diagnostic minimization pass locally. Request-route commit
+85d615f passed all four CI checks and18suites138PostgreSQL tests (37480558200).

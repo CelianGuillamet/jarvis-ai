@@ -59,6 +59,7 @@ model PendingAction {
   argsJson  String
   createdAt DateTime @default(now())
   expiresAt DateTime
+  @@index([expiresAt, id], map: "PendingAction_expiry_idx")
 }
 
 model JarvisLog {
@@ -73,6 +74,7 @@ model JarvisLog {
   createdAt  DateTime @default(now())
 
   @@index([sessionId])
+  @@index([createdAt, id], map: "JarvisLog_retention_idx")
 }
 
 model GoogleOAuthToken {
@@ -626,6 +628,7 @@ model GoogleOAuthState {
 
   @@index([expiresAt])
   @@index([ownerId])
+  @@index([expiresAt, digest], map: "GoogleOAuthState_expiry_idx")
 }
 
 // Operator-only rollback evidence. No application route exposes these snapshots.
@@ -662,6 +665,7 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([expiresAt, id], map: "Session_expiry_idx")
 }
 
 model Account {
@@ -693,6 +697,7 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
+  @@index([expiresAt, id], map: "Verification_expiry_idx")
 }
 
 model BetaInvite {

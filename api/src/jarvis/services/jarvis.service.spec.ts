@@ -418,6 +418,30 @@ function makeService(options: ServiceOptions = {}) {
 }
 
 describe('JarvisService', () => {
+  it('stores diagnostic metadata without raw input, model output, arguments or results', async () => {
+    const { service, prisma } = makeService();
+    await service['logSafe']({
+      sessionId: 'private-conversation',
+      userText: 'private email',
+      modelRaw: 'private model content',
+      simulation: false,
+      toolName: 'todo.create',
+      toolArgs: '{"password":"secret"}',
+      result: 'private result',
+    });
+    expect(prisma.jarvisLog.create).toHaveBeenCalledWith({
+      data: {
+        sessionId: 'private-conversation',
+        toolName: 'todo.create',
+        simulation: false,
+        userText: '',
+        modelRaw: '',
+        toolArgs: null,
+        result: null,
+      },
+    });
+  });
+
   it('does not restore private working memory when a model reply arrives after erasure', async () => {
     const { service, llmChat, humanProfileStore } = makeService();
     llmChat.mockResolvedValue(

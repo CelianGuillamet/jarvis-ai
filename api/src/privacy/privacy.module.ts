@@ -1,3 +1,5 @@
+import { PrivacySchedulerService } from './privacy-scheduler.service';
+import { PrivacyRetentionService } from './privacy-retention.service';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
@@ -15,6 +17,8 @@ import { GoogleErasureRevoker } from './google-erasure-revoker';
   imports: [PrismaModule, AuthModule, GoogleAuthModule, JarvisModule],
   controllers: [AccountErasureController],
   providers: [
+    PrivacySchedulerService,
+    PrivacyRetentionService,
     AccountErasureStore,
     AccountErasurePurgeService,
     AccountPrivateCacheService,
