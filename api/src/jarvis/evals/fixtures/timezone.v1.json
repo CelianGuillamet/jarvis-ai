@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "name": "timezone",
+  "origin": "synthetic",
+  "redacted": true,
+  "tz": "Europe/Paris",
+  "cases": [
+    {
+      "id": "tomorrow-after-autumn-change",
+      "status": "pass",
+      "now": "2026-10-24T12:00:00+02:00",
+      "text": "demain 9h",
+      "start": "2026-10-25T09:00:00+01:00"
+    },
+    {
+      "id": "tomorrow-after-spring-change",
+      "status": "pass",
+      "now": "2026-03-28T12:00:00+01:00",
+      "text": "demain 9h",
+      "start": "2026-03-29T09:00:00+02:00"
+    },
+    {
+      "id": "explicit-summer-date",
+      "status": "pass",
+      "now": "2026-06-10T08:00:00+02:00",
+      "text": "le 15 juillet a 14h",
+      "start": "2026-07-15T14:00:00+02:00"
+    },
+    {
+      "id": "explicit-winter-date-rolls-year",
+      "status": "pass",
+      "now": "2026-06-10T08:00:00+02:00",
+      "text": "le 15 janvier a 14h",
+      "start": "2027-01-15T14:00:00+01:00"
+    },
+    {
+      "id": "time-range-same-day",
+      "status": "pass",
+      "now": "2026-10-24T12:00:00+02:00",
+      "text": "de 9h a 10h30",
+      "start": "2026-10-24T09:00:00+02:00",
+      "end": "2026-10-24T10:30:00+02:00"
+    },
+    {
+      "id": "late-evening-tomorrow",
+      "status": "pass",
+      "now": "2026-06-10T23:30:00+02:00",
+      "text": "demain 9h",
+      "start": "2026-06-11T09:00:00+02:00"
+    }
+  ]
+}

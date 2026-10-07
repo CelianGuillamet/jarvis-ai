@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "name": "intent-routing.fr",
+  "origin": "synthetic",
+  "redacted": true,
+  "cases": [
+    {
+      "id": "todo-list",
+      "status": "pass",
+      "utterance": "Liste mes todos",
+      "expect": { "tool": "todo.list", "args": { "show": "open" } }
+    },
+    {
+      "id": "todo-delete-ref",
+      "status": "pass",
+      "utterance": "Supprime le todo 3",
+      "expect": { "tool": "todo.bulk_delete", "args": { "refs": [3] } }
+    },
+    {
+      "id": "todo-done-ref",
+      "status": "pass",
+      "utterance": "Marque le todo 2 comme fait",
+      "expect": { "tool": "todo.bulk_done", "args": { "refs": [2] } }
+    },
+    {
+      "id": "note-list",
+      "status": "pass",
+      "utterance": "Liste mes notes",
+      "expect": { "tool": "note.list" }
+    },
+    {
+      "id": "memory-remember",
+      "status": "pass",
+      "utterance": "Retiens que je préfère les réunions le matin",
+      "expect": {
+        "tool": "memory.remember",
+        "args": { "text": "je préfère les réunions le matin" }
+      }
+    },
+    {
+      "id": "memory-list",
+      "status": "pass",
+      "utterance": "Que sais-tu de moi ?",
+      "expect": { "tool": "memory.list" }
+    },
+    {
+      "id": "memory-forget",
+      "status": "pass",
+      "utterance": "Oublie que je préfère le matin",
+      "expect": {
+        "tool": "memory.forget",
+        "args": { "query": "je préfère le matin" }
+      }
+    },
+    {
+      "id": "weather-tomorrow",
+      "status": "pass",
+      "utterance": "Quelle est la météo à Lyon demain",
+      "expect": {
+        "tool": "weather.forecast",
+        "args": { "location": "lyon", "day": "tomorrow" }
+      }
+    },
+    {
+      "id": "gmail-unread",
+      "status": "pass",
+      "utterance": "Montre mes mails non lus",
+      "expect": { "tool": "gmail.list", "args": { "unreadOnly": true } }
+    },
+    {
+      "id": "gmail-archive",
+      "status": "pass",
+      "utterance": "Archive le mail 3",
+      "expect": { "tool": "gmail.archive" }
+    },
+    {
+      "id": "action-history",
+      "status": "pass",
+      "utterance": "Qu'as-tu fait récemment ?",
+      "expect": { "tool": "action.history" }
+    },
+    {
+      "id": "mission-plan",
+      "status": "pass",
+      "utterance": "Prépare un plan de mission pour lancer le produit",
+      "expect": {
+        "tool": "mission.plan",
+        "args": { "objective": "lancer le produit" }
+      }
+    },
+    {
+      "id": "briefing",
+      "status": "pass",
+      "utterance": "Donne-moi mon briefing du jour",
+      "expect": { "tool": "daily.briefing" }
+    },
+    {
+      "id": "undo-last",
+      "status": "pass",
+      "utterance": "annule la dernière action",
+      "expect": { "tool": "undo.last_action" }
+    },
+    {
+      "id": "habits-phrase-reads-workflows",
+      "status": "pass",
+      "utterance": "mes habitudes ?",
+      "expect": { "tool": "workflow.list" }
+    },
+    {
+      "id": "shopping-add-with-list-noun",
+      "status": "known_gap",
+      "gap": "The noun 'liste' is read as a list request; the add intent is lost. Fails safe (read-only).",
+      "utterance": "Ajoute acheter du pain à ma liste de courses",
+      "expect": { "tool": "shopping.add" }
+    },
+    {
+      "id": "todo-clear-with-list-noun",
+      "status": "known_gap",
+      "gap": "'Vide ma liste de todos' is read as a list request. Fails safe (read-only).",
+      "utterance": "Vide ma liste de todos",
+      "expect": { "tool": "todo.clear_all" }
+    }
+  ]
+}
