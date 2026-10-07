@@ -45,8 +45,8 @@ export class JarvisDelegationService {
         },
       });
       return this.map(row);
-    } catch (error) {
-      this.logger.error(`Failed to delegate for ${sessionId}: ${error}`);
+    } catch {
+      this.logger.error('Delegate task failed.');
       return null;
     }
   }
@@ -73,8 +73,8 @@ export class JarvisDelegationService {
         take: options?.limit ?? 20,
       });
       return rows.map((r) => this.map(r));
-    } catch (error) {
-      this.logger.warn(`Failed to list delegations for ${sessionId}: ${error}`);
+    } catch {
+      this.logger.warn('List delegations failed.');
       return [];
     }
   }
@@ -95,10 +95,8 @@ export class JarvisDelegationService {
         },
       });
       return this.map(row);
-    } catch (error) {
-      this.logger.error(
-        `Failed to escalate delegation ${delegationId}: ${error}`,
-      );
+    } catch {
+      this.logger.error('Escalate delegation failed.');
       return null;
     }
   }
@@ -118,10 +116,8 @@ export class JarvisDelegationService {
         },
       });
       return this.map(row);
-    } catch (error) {
-      this.logger.error(
-        `Failed to resolve delegation ${delegationId}: ${error}`,
-      );
+    } catch {
+      this.logger.error('Resolve delegation failed.');
       return null;
     }
   }

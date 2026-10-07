@@ -40,8 +40,8 @@ export class JarvisReminderService {
         },
       });
       return this.map(r);
-    } catch (err) {
-      this.logger.error(`create reminder failed for ${sessionId}: ${err}`);
+    } catch {
+      this.logger.error('Create reminder failed.');
       return null;
     }
   }

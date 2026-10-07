@@ -77,6 +77,45 @@ describe('Bounded passive status cache', () => {
     ).toBeNull();
   });
 
+  it('purges one account key and discards its pending refresh without affecting another', async () => {
+    const cache = new StatusResourceCache<string[]>(4, 100, 2, () => now);
+    await cache.read('other-owner', 'v1', true, () =>
+      Promise.resolve(['Other data']),
+    );
+    let finish!: (data: string[]) => void;
+    const pending = cache.read(
+      'deleted-owner',
+      'v1',
+      true,
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    cache.invalidate('deleted-owner');
+    finish(['Deleted private data']);
+    expect((await pending).data).toBeNull();
+    expect(
+      (
+        await cache.read('deleted-owner', 'v1', false, () =>
+          Promise.resolve([]),
+        )
+      ).data,
+    ).toBeNull();
+    expect(
+      (await cache.read('other-owner', 'v1', false, () => Promise.resolve([])))
+        .data,
+    ).toEqual(['Other data']);
+    // The old pending refresh releases its capacity when it settles.
+    expect(
+      (
+        await cache.read('new-owner', 'v1', true, () =>
+          Promise.resolve(['New data']),
+        )
+      ).data,
+    ).toEqual(['New data']);
+  });
+
   it('preserves provider failures as unavailable rather than a valid empty collection', async () => {
     const cache = new StatusResourceCache<string[]>(2, 100, 2, () => now);
     const result = await cache.read('a', 'v1', true, () =>
@@ -84,5 +123,27 @@ describe('Bounded passive status cache', () => {
     );
     expect(result).toMatchObject({ data: null, availability: 'unavailable' });
     expect(result.fetchedAt).not.toBeNull();
+  });
+  it('refuses late publication after a conversation generation expires', async () => {
+    const cache = new StatusResourceCache<string[]>();
+    let valid = true;
+    let finish!: (value: string[]) => void;
+    const result = cache.read(
+      'owner',
+      'revision',
+      true,
+      () =>
+        new Promise<string[]>((resolve) => {
+          finish = resolve;
+        }),
+      () => valid,
+    );
+    valid = false;
+    finish(['Private late response']);
+    expect((await result).data).toBeNull();
+    expect(
+      (await cache.read('owner', 'revision', false, () => Promise.resolve([])))
+        .data,
+    ).toBeNull();
   });
 });

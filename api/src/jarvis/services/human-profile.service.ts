@@ -35,6 +35,10 @@ export class HumanProfileService implements OnModuleDestroy {
   private readonly minPersistIntervalMs: number;
 
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly loads = new Map<
+    string,
+    { token: object; promise: Promise<HumanProfile> }
+  >();
   private readonly flushTimer: NodeJS.Timeout | null;
 
   constructor(
@@ -141,7 +145,7 @@ export class HumanProfileService implements OnModuleDestroy {
   private async loadFromStore(
     sessionId: string,
     defaults: HumanDefaults,
-  ): Promise<HumanProfile> {
+  ): Promise<HumanProfile | null> {
     if (!this.persistEnabled) {
       return createHumanProfile(defaults.speechMode, defaults.verbosity);
     }
@@ -161,26 +165,62 @@ export class HumanProfileService implements OnModuleDestroy {
         return createHumanProfile(defaults.speechMode, defaults.verbosity);
       }
       return this.rowToProfile(row, defaults);
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de lire le profil humain pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return createHumanProfile(defaults.speechMode, defaults.verbosity);
+    } catch {
+      this.logger.warn('Impossible de lire le profil humain.');
+      // Do not cache defaults after a failed read: a later write could overwrite
+      // the stored preferences that we could not retrieve.
+      return null;
     }
   }
 
   async get(sessionId: string, defaults: HumanDefaults): Promise<HumanProfile> {
     this.cleanupCache();
-    const cached = this.cache.get(sessionId);
-    if (cached) return cached.profile;
-
-    const loaded = await this.loadFromStore(sessionId, defaults);
-    this.cache.set(sessionId, {
-      profile: loaded,
-      dirty: false,
-      lastPersistedAt: Date.now(),
+    const pending = this.loads.get(sessionId);
+    if (pending) return pending.promise;
+    const fallback = () =>
+      createHumanProfile(defaults.speechMode, defaults.verbosity);
+    if (this.loads.size >= this.maxSessions) return fallback();
+    const token = {};
+    const load = (async () => {
+      try {
+        const active = await this.prisma.conversation.findFirst({
+          where: { id: sessionId, owner: { disabled: false } },
+          select: { id: true },
+        });
+        if (this.loads.get(sessionId)?.token !== token) return fallback();
+        if (!active) {
+          this.cache.delete(sessionId);
+          return fallback();
+        }
+        const cached = this.cache.get(sessionId);
+        if (cached) return cached.profile;
+        const loaded = await this.loadFromStore(sessionId, defaults);
+        if (!loaded || this.loads.get(sessionId)?.token !== token)
+          return fallback();
+        this.cache.set(sessionId, {
+          profile: loaded,
+          dirty: false,
+          lastPersistedAt: Date.now(),
+        });
+        return loaded;
+      } catch {
+        this.logger.warn(
+          'Impossible de vérifier le propriétaire du profil humain.',
+        );
+        return fallback();
+      }
+    })().finally(() => {
+      if (this.loads.get(sessionId)?.token === token)
+        this.loads.delete(sessionId);
     });
-    return loaded;
+    this.loads.set(sessionId, { token, promise: load });
+    return load;
+  }
+
+  /** Also invalidates in-flight loads; they must not republish private data. */
+  forget(sessionId: string): void {
+    this.cache.delete(sessionId);
+    this.loads.delete(sessionId);
   }
 
   private async persistEntry(
@@ -188,7 +228,12 @@ export class HumanProfileService implements OnModuleDestroy {
     entry: CacheEntry,
     force: boolean,
   ) {
-    if (!this.persistEnabled || !entry.dirty) return;
+    if (
+      !this.persistEnabled ||
+      !entry.dirty ||
+      this.cache.get(sessionId) !== entry
+    )
+      return;
     const now = Date.now();
     if (!force && now - entry.lastPersistedAt < this.minPersistIntervalMs)
       return;
@@ -213,10 +258,8 @@ export class HumanProfileService implements OnModuleDestroy {
 
       entry.dirty = false;
       entry.lastPersistedAt = now;
-    } catch (error) {
-      this.logger.warn(
-        `Impossible d'écrire le profil humain pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible d’écrire le profil humain.');
     }
   }
 
@@ -226,6 +269,9 @@ export class HumanProfileService implements OnModuleDestroy {
     defaults: HumanDefaults,
   ): Promise<HumanProfile> {
     const current = await this.get(sessionId, defaults);
+    if (this.cache.get(sessionId)?.profile !== current) {
+      return createHumanProfile(defaults.speechMode, defaults.verbosity);
+    }
     const next = updateHumanProfile(current, userText);
 
     const entry: CacheEntry = {

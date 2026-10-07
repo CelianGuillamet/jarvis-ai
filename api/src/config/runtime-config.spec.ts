@@ -20,6 +20,9 @@ describe('runtime configuration', () => {
     { JARVIS_TZ: 'invalid-zone' },
     { LLM_PROVIDER: 'openai' },
     { GOOGLE_CLIENT_ID: 'incomplete' },
+    { PRIVACY_LEDGER_DIR: 'relative-directory' },
+    { PRIVACY_LEDGER_KEYS: '{}' },
+    { PRIVACY_LEDGER_ACTIVE_KEY: 'missing-key' },
     { NODE_ENV: 'production' },
     { OPENAI_BASE_URL: 'https://user:password@example.com/' },
   ])('rejects invalid settings %j', (input) => {
@@ -33,6 +36,7 @@ describe('runtime configuration', () => {
         ...valid,
         DATABASE_URL: 'sensitive-db-value',
         AUTH_BASE_URL: 'sensitive-auth-value',
+        PRIVACY_LEDGER_KEYS: 'sensitive-ledger-key',
       });
     } catch (error) {
       expect(String(error)).toContain('DATABASE_URL');
@@ -46,6 +50,7 @@ describe('runtime configuration', () => {
       validateRuntimeConfig({
         ...valid,
         NODE_ENV: 'production',
+        PRIVACY_LEDGER_DIR: '/tmp/fixture-ledger',
         AUTH_BASE_URL: 'https://api.example.invalid',
         APP_ORIGIN: 'https://app.example.invalid',
       }).NODE_ENV,

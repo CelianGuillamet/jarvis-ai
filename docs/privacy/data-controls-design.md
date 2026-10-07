@@ -1,0 +1,472 @@
+# JAR-039 — Contrôle des données : conception et état final
+
+Statut final : export, suppression, révocation Google, rétention bornée, disclosure
+des fournisseurs et ledger de sauvegarde indépendant sont implémentés et testés.
+Vérification locale sur le commit final (branche `codex/jar-039-data-controls`),
+commande par commande, exécutée dans cette session : 512 tests unitaires API et 106
+tests Web passent (`npm --prefix api test -- --runInBand`, `npm --prefix web test`),
+typecheck/lint/build des deux projets et `build:prototype` passent, et les 149 tests
+PostgreSQL de `npm --prefix api run test:integration` passent (20 suites, y compris
+`erasure-backup-replay.integration-spec.ts` et `privacy-retention.integration-spec.ts`
+avec ses nouveaux cas d'expiration des tours `started`, y compris pour un compte
+désactivé). Ces commandes ont été
+réellement exécutées, pas seulement annoncées. Les preuves CI GitHub des commits
+précédents sont listées chronologiquement ci-dessous ; celles du commit final sont
+visibles dans l'historique des checks de la PR #31. Limites restantes à la fusion :
+voir la section « Limites restantes » en fin de document. La suite chronologique
+ci-dessous est le journal de conception conservé tel qu'écrit pendant le
+développement ; les phrases « non livré », « pas encore implémenté » ou « non
+raccordé » qu'il contient décrivent l'état au moment où elles ont été écrites, pas
+l'état final.
+
+## Architecture existante vérifiée
+
+AccountController utilise exclusivement request.identity.userId pour le profil et
+les préférences. Les sessions sont vérifiées sans cache de désactivation du compte.
+Les données métiers sont liées au propriétaire ; plusieurs clés étrangères sont
+RESTRICT. Les historiques et commandes sont liés par owner/conversation composites.
+CommandTransition est append-only : un trigger BEFORE UPDATE OR DELETE rejette
+la suppression normale. Un simple user.delete ne peut donc pas réaliser un oubli.
+
+## Contrat de livraison
+
+- Export authentifié du propriétaire courant, versionné, collections paginées et
+  bornées, snapshot cohérent ; aucune clé API, cookie, hash, jeton OAuth ou secret.
+- Suppression avec confirmation explicite de l’identité courante ; aucun ownerId
+  fourni par le client. Désactiver les nouveaux accès avant traitement, refuser
+  les opérations dangereuses encore en exécution, purger les références en mémoire
+  et révoquer les autorisations fournisseur sans exécuter une commande métier.
+- Suppression transactionnelle de toutes les tables retenues, dans l’ordre des
+  dépendances. Prévoir une voie SQL dédiée pour le journal append-only, bornée au
+  propriétaire et utilisable uniquement dans la transaction d’effacement ; ne
+  jamais désactiver globalement les triggers.
+- Disposer de preuves PostgreSQL : second utilisateur intact, commandes/historique/
+  brouillons/secrets effacés, session inutilisable, crash et concurrence maîtrisés.
+- Exporter avant effacement uniquement sur demande ; ne pas créer une copie
+  conservée implicitement pour les besoins de diagnostic.
+
+## Politique proposée à implémenter et vérifier
+
+Données choisies par l’utilisateur (tâches, notes, mémoire explicite) : jusqu’à
+suppression. Historique conversationnel terminé : 90 jours. Le journal de commandes
+et ses preuves de reprise/déduplication restent jusqu’à la suppression du compte.
+Journaux techniques minimisés : 14 jours, sans contenu brut ni secret. OAuth state
+et sessions : expiration existante, nettoyage des entrées expirées. Les opérations
+non terminales ou de résultat inconnu ne doivent jamais être purgées au milieu
+ d’une reprise. La politique doit être appliquée par des traitements bornés et
+ testés, pas seulement annoncée dans l’interface.
+
+Aucune sauvegarde de production n’est configurée ni aucun déploiement autorisé.
+Documenter que les sauvegardes gérées par l’opérateur ont un délai d’expiration
+séparé ; lors d’une restauration, réappliquer les demandes de suppression avant
+réouverture. Ne pas promettre l’effacement immédiat de copies non maîtrisées.
+
+## Transparence des fournisseurs
+
+Afficher les fournisseurs réellement configurés et les catégories transférées :
+Google pour les fonctionnalités autorisées, modèle local/distant selon configuration,
+recherche Web uniquement si activée. Ne pas présenter un fournisseur distant comme
+local. Afficher les contrôles d’export/effacement et limites de sauvegarde dans les
+réglages de compte, sans exposer les paramètres sensibles de l’installation.
+
+## Prochaine étape
+
+Inventorier chaque modèle retenu et chaque cache/provider ; définir contrats
+canoniques et tests d’accès/export ; implémenter le cycle durable d’effacement et
+la migration SQL spécifique après revue des contraintes et courses d’exécution.
+
+## Implémentation engagée
+
+Export profil : projection User explicite. Pages locales tâches/notes/shopping/calendar : ownerId de l’identité signée, curseur UUID strict, take51/items50. Mémoire : jointure SQL paramétrée JarvisMemoryFact.sessionId vers Conversation.id, ownerId obligatoire sans liste de conversations non bornée. Inventaire HTTP privé et matrice de sécurité mis à jour.
+
+Ces pages lisent l’état courant à chaque requête : elles ne garantissent pas encore un snapshot cohérent multi-pages/multi-collections sous mutations concurrentes. La cohérence de l’export complet reste à implémenter et tester avant livraison. Historique, Inbox et autres modèles retenus doivent être couverts. Les tests PostgreSQL de ces exports sont désormais validés par la CI sur le commit 2e0cd93.
+
+## Inventaire complet et copies historiques
+
+Tous les modèles Prisma ont une portée de propriété et une disposition export explicites dans api/src/privacy/data-inventory.ts. Le test de couverture compare les noms au schéma pour échouer dès qu’un modèle futur est oublié. Les métadonnées auth restent distinctes des secrets non exportables. Les archives LegacyOwnershipRecord.original et LegacyOwnershipBatch.manifest peuvent contenir des copies de données utilisateur : leur purge ciblée fait partie de l’effacement, en préservant les copies des autres propriétaires. Cet inventaire ne constitue pas encore une implémentation d’effacement.
+
+
+## Téléchargement cohérent engagé
+
+GET /account/export/snapshot produit un fichier NDJSON sans copie persistée.
+Une transaction PostgreSQL REPEATABLE READ en lecture seule couvre tous les modèles
+exportables de l’inventaire. Des curseurs SQL lisent 50 lignes à la fois ; le flux
+HTTP attend le consommateur, et une déconnexion interrompt le traitement. Les
+projections de colonnes sont des listes statiques, pas une sérialisation automatique
+de futurs champs Prisma. OAuth/Verification et manifests de migration sont exclus ;
+les métadonnées Session/Account excluent les identifiants secrets. Les clés de secrets
+dans les objets et payloads JSON hérités sont filtrées récursivement. Les archives
+originales de tables de credentials sont omises.
+
+Le premier enregistrement est `header` (version, date, compte), puis viennent les
+`record` (collection, data). Le dernier `complete` donne le nombre total de lignes,
+uniquement après réussite de la transaction. Sans ce marqueur, le téléchargement
+est incomplet et doit être rejeté ; une panne après envoi des headers produit
+`incomplete`, sans détail interne. La transaction est bornée à 60 secondes : une
+expiration exige un nouveau téléchargement, aucune copie partielle n’est annoncée
+complète. Les anciennes pages restent des lectures de l’état courant.
+
+Tests unitaires : isolation demandée, couverture de projections, redaction,
+annulation et absence de marqueur complet si commit échoue. Tests PostgreSQL ajoutés
+pour isolation entre comptes, pagination et mutations concurrentes pendant le
+snapshot. Ils ont été validés en CI (voir preuves ci-dessous) ; Docker local
+répond HTTP 500, et le runner de base jetable local a échoué avant les tests. La suppression, rétention et interface restent à faire.
+
+
+## Preuves CI et frontière de suppression
+
+Sur 2e0cd93, les quatre contrôles de PR31 sont SUCCESS (runs 37356557497 et
+37356524670). Le log API de 37356524670 contient PASS app.integration-spec.ts
+et 16 suites / 117 tests PostgreSQL. Le test ajouté exécute le téléchargement
+réel, vérifie son marqueur complet, exclut le jeton de session et les données
+d’un autre compte, puis modifie et insère des notes après le début de la
+transaction : le snapshot conserve les 51 notes originales. L’indisponibilité
+Docker locale reste une limitation locale, sans empêcher cette preuve CI.
+
+Avant toute suppression, la simple désactivation de User ne suffit pas : une
+requête déjà authentifiée peut encore commencer un effet fournisseur. Il faut
+synchroniser la désactivation avec les transitions Command -> executing et
+InboxReplyOperation -> sending au niveau PostgreSQL, par verrouillage du compte
+et refus des nouveaux départs lorsque disabled=true. Les états executing/unknown,
+sending/unknown et les suites Inbox encore incomplètes exigent une réconciliation
+avant purge. Une désactivation durable doit précéder le travail d’effacement ;
+ce cycle, sa reprise après crash et son journal minimal restent à implémenter.
+
+StatusResourceCache dispose maintenant d’une invalidation ciblée qui retire
+l’entrée et empêche un refresh en vol de republier son résultat. Le test préserve
+le cache d’un autre compte et vérifie la libération de capacité après fin du
+refresh. Cette primitive n’est pas encore raccordée au cycle d’effacement ; les
+maps convo/recentMemory de JarvisService doivent aussi être vidées pour chaque
+conversation appartenant au compte. Aucune suppression de compte n’est livrée.
+
+
+## Préparation SQL de l’effacement engagée
+
+La migration account_execution_fence ajoute un compteur interne executionEpoch
+sur User. Les propositions Command/Inbox et départs executing/sending doivent
+incrémenter ce compteur sur un compte actif dans la même transaction que la
+transition. Cette écriture sérialise la préparation de suppression et invalide
+une transaction REPEATABLE READ qui aurait lu le compte avant un nouveau départ.
+Les transitions de résultat restent permises après révocation pour enregistrer
+une réception et conserver la possibilité de réconciliation.
+
+prepare_account_erasure verrouille le compte, refuse les Command executing/unknown,
+Inbox sending/unknown et les envois sent dont localComplete est faux, puis
+désactive le compte. Cette fonction est réservée à la préparation d’effacement ;
+la révocation administrative directe reste possible même en cas d’opération
+incertaine. Aucun trigger global ne bloque cette révocation. Aucun effacement de
+journal append-only ni suppression de données n’est encore implémenté.
+
+Huit tests PostgreSQL couvrent refus des nouveaux départs, conservation des
+résultats inconnus, propriétaire distinct, course désactivation/exécution avec
+observation d’un vrai verrou SQL, ancien snapshot, Inbox et révocation immédiate.
+Ils doivent encore être exécutés par la CI de cette migration. La prochaine
+étape est d’appeler cette préparation dans la transaction créant le travail
+d’effacement durable et invalidant sessions/OAuth state, avant la purge et la
+révocation fournisseur avec reprise après crash.
+
+
+## Écritures différées des modèles historiques
+
+JarvisHumanProfile possède son propre cache et un timer flushDirty, distinct des
+caches de statut. La plupart des tables sessionId historiques ne possèdent pas
+de clé étrangère Conversation. Une requête ou un flush déjà engagé pourrait donc
+réinsérer une ligne après purge. La migration owner_write_fence protège INSERT et
+UPDATE de 36 tables de données : propriétaire direct, conversation, habit parent
+ou integration parent. La même écriture du compteur User exige un propriétaire
+actif et sérialise la préparation d’effacement. Une conversation disparue ne peut
+plus recevoir de nouvelles données historiques. DELETE reste disponible pour la
+purge. Les transitions et résultats Command/Inbox restent séparés pour enregistrer
+les réceptions après révocation, sans autoriser un nouveau départ.
+
+Quatre tests PostgreSQL supplémentaires couvrent les quatre collections locales,
+le flush HumanProfile/mémoire, une conversation déjà supprimée et les relations
+HabitLog/GoogleOAuthToken. La CI de cette migration doit les valider. Le cache
+HumanProfile doit également être invalidé lors de l’effacement durable : le refus
+SQL de réinsertion ne dispense pas de retirer ses références en mémoire.
+
+
+## Profil humain : invalidation et données indisponibles
+
+HumanProfileService vérifie désormais un propriétaire actif même pour une lecture
+cachée. Les chargements simultanés sont dédupliqués et bornés. forget(conversationId)
+retire cache et jeton de chargement ; une réponse SQL retardée ne peut republier
+son profil ni provoquer une sauvegarde via updateFromUserText. Une lecture en
+échec ne crée plus de profil par défaut sauvegardable qui écraserait des
+préférences existantes. Les warnings de cette couche omettent les identifiants
+et détails bruts d’erreur. Ces protections restent à raccorder au travail
+d’effacement durable ; la suppression du compte n’est toujours pas livrée.
+
+Sur 984b6d7, quatre CI sont SUCCESS ; le log API 37358942525 donne 17 suites /
+129 tests PostgreSQL, dont les 12 cas execution/write-fence. La vérification locale
+HumanProfile passe 65 suites / 444 tests unitaires, types, lint et build. Six cas
+spécifiques couvrent les lectures en vol, mises à jour, défauts après erreur,
+propriétaire désactivé et limites de concurrence. Vérifier le prochain head CI
+après publication de cette couche.
+
+### Durable erasure request — implementation in progress
+
+`AccountErasureJob` retains an opaque owner identifier independently of the user
+row. A request locks the account, checks its email confirmation, runs the execution
+preflight, and atomically creates the job while invalidating sessions, Google OAuth
+states and beta admission. Repeating the same client-generated 256-bit receipt
+returns the same job; only its SHA-256 digest is stored. The public status projection
+contains no email, owner identifier, receipt digest or revocation credentials.
+Receipts expire after seven days; the proposed backup tombstone horizon is thirty
+days. This does not yet establish a verified backup retention or restore procedure.
+
+Revocation credentials use the existing AES-GCM implementation with a key derived
+from AUTH_SECRET and authenticated job-specific context. Changing AUTH_SECRET
+before pending credentials are consumed requires handling unreadable credentials
+as manual revocation; automatic key rotation support is not implemented here.
+Worker leases use database time and SKIP LOCKED. Neither the request route nor a
+purge worker is mounted yet: this intermediate code does not provide usable account
+deletion. Purge, lease-fenced completion, revocation retries, retention and user
+controls must be completed before the ticket can merge.
+
+Local validation: 67 suites / 452 unit tests passed, types and lint passed. Four new
+PostgreSQL cases cover request replay/isolation, invalid confirmation rollback,
+receipt expiry and distinct concurrent worker leases; they await CI execution.
+
+The request commit `5f82fda` passed 18 PostgreSQL suites / 133 tests in CI
+(run 37363867687), including the four durable request cases. Its second Web job
+(run 37363991213) was cancelled without step logs; the other Web job passed on the
+same head. The ticket remains incomplete.
+
+Follow-up work adds bounded retry scheduling conditioned on a live matching lease,
+and a transaction-local erasure exception for CommandTransition deletion. Updates
+remain forbidden; deletion requires the matching owner, a disabled account, a live
+lease and no unresolved command or Inbox send. The lease is checked again after
+locking the job. Tests for expired/superseded leases, foreign-owner protection,
+fake claims and transaction rollback await PostgreSQL CI on the new commit.
+
+### Local purge transaction — not yet connected to a worker
+
+The purge service locks a live job lease, repeats the unresolved-operation preflight,
+sets the transaction-local journal erasure claim and removes children before parents.
+It updates the job to `local_deleted` in the same transaction and aborts if its lease
+expires before completion. Replaying a locally completed purge is a no-op. It makes
+no provider calls inside the transaction. The shared legacy migration manifest loses
+only mappings for the erased owner; unrelated records and mappings remain.
+
+The deletion inventory names 45 models and explicitly treats the three others:
+AccountErasureJob remains as the temporary opaque receipt/backup tombstone;
+LegacyOwnershipBatch is shared and scrubbed by mapping; Verification has no owner
+relation and must receive independent bounded expiry cleanup. No ownership is guessed
+for anonymous verification records. This last retention cleanup is not implemented.
+
+On `acb7a8b`, CI run 37476445935 passed 453 unit tests and 18 suites / 135 PostgreSQL
+tests, including stale-worker fencing and scoped journal rollback. The new purge
+owner-isolation/legacy-copy/receipt replay PostgreSQL case awaits CI execution.
+Cache invalidation, provider revocation, the worker, retention, backup restore checks
+and user controls remain required before account deletion can be advertised or merged.
+
+### Revocation adapter and durable progress
+
+Google's documented revocation endpoint is used via POST form data, with a five-second
+abort deadline, redirects rejected and provider response bodies discarded. Reference:
+https://developers.google.com/identity/protocols/oauth2/web-server#tokenrevoke
+Only HTTP200 is treated as acknowledgement. Other statuses and network failures
+remain retryable; tests use mocked fetch and perform no actual provider requests.
+
+Revocation progress replaces the encrypted list of remaining credentials under the
+live job lease. Completion requires prior local purge, drops encrypted credentials
+and releases the lease atomically. An unrecoverable-key marker remains manual_required
+even if all other captured tokens were acknowledged. A stale worker cannot finish
+the job. The worker, its deadline/expiry policy, cache invalidation and user disclosure
+of manual revocation still need implementation.
+
+Purge commit dea377b passed 455 unit tests and 18 PostgreSQL suites / 136 tests
+(CI37477135674), including owner isolation and legacy-copy removal. New revocation
+progress PostgreSQL assertions await CI on the next commit.
+
+### Single-job runner — not mounted yet
+
+The runner coalesces overlapping ticks and claims one durable job. Local purge happens
+before network access. Each successful revocation is persisted before the next token;
+lease loss stops the runner. Each lease makes at most six bounded remote calls.
+Failures use exponential retry delays capped at one hour. After the seven-day receipt
+horizon, remaining credentials are discarded and manual revocation is reported.
+Unreadable credentials follow the same explicit manual path. Errors are logged without
+owner IDs, tokens or raw exception details. No timer or route enables this runner yet.
+Cache invalidation and the remaining retention/user-control work must land first.
+
+Eight unit scenarios cover ordered purge/revocation, outage, lost lease, bounded calls,
+expiry, decryption failure, sanitized purge failure and overlapping ticks. A new real
+PostgreSQL runner test uses a mocked revoker to verify local deletion during an outage
+and durable completion on the next claim; it awaits CI. Commit bebd592 passed all four
+CI checks and 18 PostgreSQL suites / 136 tests (run37477792226).
+
+### Private cache invalidation
+
+Chat, status and confirmation calls run inside a bounded per-conversation generation
+context. Invalidating a conversation deletes its generation and drops working state,
+recent turns, the human profile and both provider status keys. In-flight work cannot
+publish later turns/state; nested confirmation reuses its original context, including
+an invalidated one. Provider status publication checks the generation again after
+transport. Contexts retain only bounded conversation identifiers and opaque objects.
+
+The worker now calls owner cache invalidation before local purge. Conversation IDs
+are read by owner in ordered pages of 100, without an unbounded list. Database failure
+aborts that step instead of proceeding to purge with private caches intact. The runner
+still has no timer or mounted request/status routes. Remaining work includes activation,
+retention/verification cleanup, backup restore replay and user-facing controls/disclosures.
+Tests cover late model replies, nested invalidation, capacity eviction, late provider
+refresh and bounded owner-only pages. Commit4f905ba passed all four CI checks, including
+the real PostgreSQL mocked-outage worker flow; new cache changes await their own CI.
+
+### Request and receipt HTTP routes
+
+POST /account/deletion uses the existing signed-session guard and mutation-origin
+checks. A strict body accepts only the confirmation email and client-generated
+256-bit hexadecimal receipt. Accepted requests return202; the owner is never accepted
+from client input. GET /account/deletion/status uses the receipt in x-erasure-receipt,
+not a URL parameter or signed login session. It has an IP fixed-window quota and
+no-store/no-referrer headers. Invalid/missing receipts return404; unexpected database
+errors are sanitized. The response contains only the explicit public job status.
+
+PrivacyModule is imported from the application root, avoiding an Auth/Jarvis cycle.
+The worker is injectable but has no timer yet. These routes do not establish a
+finished deletion product until scheduler, retention, backup replay and user controls
+are implemented and verified. Seven controller cases passed locally; the new real
+HTTP/PostgreSQL signed-owner/origin/session invalidation/capability case awaits CI.
+
+### Activated scheduler and bounded retention
+
+The application now mounts a fifteen-second coalesced scheduler. It drives retention
+and one erasure job, sanitizes failures, continues erasure if retention fails and waits
+for in-flight work on shutdown. NODE_ENV=test disables autonomous execution so disposable
+suites explicitly control work and never initiate provider traffic. The validated
+PRIVACY_WORKER_ENABLED=false setting pauses both tasks for maintenance; retention is
+not enforced while paused. The default is true.
+
+Each cleanup rule locks and removes at most500 rows per tick. Diagnostics older than
+14days and legacy rows containing raw content are discarded. New diagnostics retain
+only conversation/tool/simulation metadata, never input/model text, arguments or results.
+Completed/failed conversation turns expire after90days; started turns and command
+journals remain. Expired sessions, anonymous verifications, pending actions and Google
+OAuth state are removed. Expired revocation credentials are discarded only when no
+live lease owns them; status becomes manual_required. Receipt/tombstone removal still
+requires independent backup-ledger protection and is not implemented by this batch.
+
+Partial SQL indexes cover terminal-history and raw-content scans; ordinary expiration
+indexes are reflected in Prisma. Three new real PostgreSQL retention cases await CI.
+Four scheduler scenarios and diagnostic minimization pass locally. Request-route commit
+85d615f passed all four CI checks and18suites138PostgreSQL tests (37480558200).
+
+### Configured-provider disclosure in Settings
+
+GET /account/privacy is authenticated and returns a strict projection of the configured
+model provider, endpoint hostname/transport, Google sign-in/tool setup, requested scopes,
+weather hosts, disabled web retrieval, processing availability and retention policy.
+Execution and disclosure share model selection. URL credentials, query strings and paths
+are never included. The Settings card explains transfers from the user's perspective,
+including that a local endpoint may itself forward requests elsewhere. It describes
+operator-managed backups as a policy obligation, not an implemented backup service.
+
+Five backend scenarios cover defaults, remote Ollama, OpenAI selection, fallback and
+separate Google setup; a real Vue DOM scenario covers remote model copy and retention.
+Local API75suites492unit and Web90tests plus types/lint/build passed. The new HTTP
+disclosure assertion awaits CI. Retention fixture fix cb4d255 passed all four checks
+and19PostgreSQL suites141tests (37483030334); the completed fixture now includes its
+required response and no database constraint was weakened.
+
+### Export/deletion user controls and public receipt page
+
+Settings now offers a verified coherent export and an explicit email/checkbox deletion
+confirmation. A cryptographic32-byte receipt is stored in sessionStorage before the
+mutation, bound locally to the displayed account so another account never reuses it.
+Storage failure blocks submission. A receipt file can be downloaded for recovery after
+closing the tab. An accepted deletion clears account stores and performs a full
+navigation to /deletion-status; that named route alone bypasses AuthGate. Tracking uses
+the receipt header, never a URL token, and displays pending/manual Google revocation
+without claiming it succeeded. Session expiry also exposes the stored tracking link.
+
+The export reader handles split UTF-8 characters, verifies owner/header/version,
+record shape, count and the post-commit completion marker. Interrupted/incomplete,
+foreign-owner or malformed streams are rejected. Native file destinations stream
+without retaining the whole export and close only after verification; failure aborts
+the partial write. Other browsers use a memory download bounded to64MiB. Individual
+records are bounded to16MiB and capacity errors explain the limitation. Blob downloads
+are reported as launched, not as proven filesystem writes.
+
+The optional expectedAccountId is a concurrency precondition, never an ownership
+selector: a switched signed account returns409 before deletion admission. Invitations
+are matched by normalized email for revocation/export/purge. JSON-formatted user text
+is kept verbatim rather than mistaken for platform credentials; structured credential
+keys in metadata remain redacted. New real PostgreSQL cases for normalized admission
+and JSON note preservation await CI.
+
+Current local validation:75API suites494unit tests,106Web tests, types/lint/build passed.
+DOM scenarios cover confirmation, pre-transport receipt persistence, lost responses,
+post-expiry recovery and the real App public route making no signed-account request.
+Native save-picker/browser rendering have not been exercised by these DOM tests.
+Independent backup-ledger/restore replay and final browser/review evidence remain before
+this draft can merge. No deployment or real provider calls were performed.
+
+## Correctifs de revue indépendante
+
+L'in-memory tool caches (`LAST_CAL_*`, `LAST_GMAIL_*`, `LAST_SHOPPING_LIST`,
+`LAST_MISSION_LIST`, `LAST_TODO_LIST`, `LAST_NOTE_LIST`, `LAST_MEMORY_LIST`) sont
+désormais couverts par `clearLocalToolCaches`, appelé depuis `forgetConversation`,
+et gardés en écriture par `PrivateCacheFence` via `withLocalToolCaches` qui entoure
+toute exécution d'outil (`runTool`, `prepareGmailTargets`, `prepareLocalTargets`,
+`prepareCalendarTarget`). Un appel d'outil en vol après effacement ne peut donc plus
+republier de contenu privé dans ces maps. Voir `api/src/jarvis/tools/tools.ts` et
+`api/src/jarvis/services/jarvis.service.ts`.
+
+Le ledger de sauvegarde (voir `docs/privacy/backup-restoration.md`) écrit son
+admission avant le commit SQL par construction : c'est un choix délibéré en faveur
+de la confidentialité (mieux vaut rejouer une suppression déjà demandée après une
+panne que perdre la protection contre une sauvegarde restaurée). L'écran de
+suppression (`AccountDataControls.vue`) l'explique désormais à l'utilisateur : une
+erreur affichée après confirmation n'annule pas forcément la demande, qui peut
+reprendre au redémarrage du service.
+
+`npm --prefix api run privacy:ledger -- prune` ne pouvait pas s'exécuter : il
+importait directement `erasure-backup-ledger.ts`, décoré `@Injectable()` et utilisant
+le sucre TypeScript des propriétés de paramètre, que le dé-typage intégré de Node
+(utilisé par les scripts `.mjs` du dossier, sans `ts-node`) ne sait pas interpréter.
+La logique du ledger (lecture/écriture/chiffrement/purge) est maintenant dans
+`erasure-backup-ledger-engine.ts`, une classe simple sans décorateur ; l'adaptateur
+Nest `erasure-backup-ledger.ts` s'en sert pour l'application, et le script l'importe
+directement. Le script a été vérifié de bout en bout (purge réelle d'un enregistrement
+`admitted`+`deleted` simulé), pas seulement relu.
+
+## Limites restantes
+
+- Minimisation des logs bruts : seule la table `JarvisLog` est concernée (14 jours,
+  sans texte brut). `Command`/`JarvisActionEvent` conservent arguments, réponses,
+  aperçus et messages d'erreur jusqu'à la suppression du compte, pour permettre la
+  reprise et le suivi des opérations ; la carte Réglages le dit explicitement et ne
+  prétend pas à une minimisation plus large.
+- Historique conversationnel abandonné : un tour `started` qu'une panne, une
+  annulation ou un rejet du trigger de propriétaire laisse sans transition n'est
+  jamais supprimé par lots (il peut encore attendre une réconciliation), mais son
+  texte brut est désormais effacé (`inputText` vidé, état `failed`) une fois qu'il
+  n'est plus plausiblement en vol, après un jour. Les lignes d'un compte désactivé
+  (effacement en cours) sont explicitement exclues de cette rétention : le trigger
+  `guard_active_owner_write` rejette toute écriture sur `ConversationTurn` pour un
+  propriétaire désactivé, et ces comptes sont de toute façon purgés intégralement
+  par le pipeline d'effacement. Voir `PrivacyRetentionService` et
+  `ConversationTurn_started_retention_idx`.
+- Quota IP sur `GET /account/deletion/status` : `configure-http-safety.ts` met
+  `trust proxy` à `false`, donc derrière un reverse-proxy partagé tous les appels
+  partagent le même compteur de 20 requêtes par fenêtre ; un client peut bloquer le
+  suivi des autres. Dépend de la topologie d'hébergement choisie en JAR-010 ; à
+  revoir si un proxy de confiance est introduit.
+- `guard_active_owner_write` incrémente `User.executionEpoch` à chaque écriture
+  propriétaire sur une trentaine de tables, donc toutes les écritures d'un même
+  compte se sérialisent sur le verrou de sa ligne `User`. Acceptable en bêta privée
+  avec le volume attendu ; à revisiter si la contention devient mesurable.
+- Croissance du ledger de sauvegarde : les enregistrements `admitted` ne sont jamais
+  purgés automatiquement. Les enregistrements `deleted` passés leur `retainedUntil`
+  peuvent être retirés via `npm --prefix api run privacy:ledger -- prune
+  --backups-confirmed-retired`, uniquement après confirmation opérateur que les
+  sauvegardes susceptibles de réintroduire ces comptes sont retirées ; sans ce drapeau,
+  la commande ne fait que compter les enregistrements éligibles. Ce retrait reste une
+  action manuelle, jamais déclenchée par le rejeu au démarrage.
+- Aucune répétition pg_dump/pg_restore réelle n'a été exécutée ; cette vérification
+  appartient à JAR-041.
+- Lecteur d'écran réel, `prefers-reduced-motion` système et réseau hors ligne réel ne
+  sont pas vérifiés par cette ticket (hors périmètre, suivis par JAR-034).

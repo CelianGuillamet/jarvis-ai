@@ -12,6 +12,7 @@ export type HttpRequestOptions = {
   method: HttpMethod;
   path: string;
   body?: unknown;
+  headers?: HeadersInit;
   signal?: AbortSignal;
   timeoutMs?: number;
 };
@@ -103,7 +104,7 @@ export function createHttpClient(options: HttpClientOptions = {}) {
 
   const request = async <T>(input: HttpRequestOptions): Promise<T> => {
     const url = joinUrl(baseUrl, input.path);
-    const headers = buildHeaders();
+    const headers = buildHeaders(input.headers);
 
     const controller = new AbortController();
     const timeoutMs =

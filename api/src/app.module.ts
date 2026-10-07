@@ -1,3 +1,4 @@
+import { PrivacyModule } from './privacy/privacy.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
@@ -28,6 +29,7 @@ import { CommandJournalModule } from './commands/command-journal.module';
     GoogleAuthModule,
     JarvisModule,
     InboxZeroModule,
+    PrivacyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

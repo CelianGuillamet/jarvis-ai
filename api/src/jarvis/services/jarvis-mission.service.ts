@@ -188,10 +188,8 @@ export class JarvisMissionService {
         keySignals: parseJsonArray(row.keySignalsJson),
         updatedAt: row.updatedAt.toISOString(),
       }));
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de lire les missions pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de lire les missions.');
       throw dataUnavailable();
     }
   }

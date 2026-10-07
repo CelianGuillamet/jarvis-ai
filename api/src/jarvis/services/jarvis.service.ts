@@ -1,3 +1,5 @@
+import { selectedModelProvider } from '../providers/model-selection';
+import { PrivateCacheFence } from './private-cache-fence';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
 import { todayToolCall } from '../../today/today-tool-call';
@@ -42,6 +44,8 @@ import {
 } from '../lib/execution-policy';
 import { PendingActionsService } from './pending-action.service';
 import {
+  clearLocalToolCaches,
+  withLocalToolCaches,
   previewTool,
   runTool,
   type ToolContext,
@@ -126,7 +130,12 @@ import type {
 } from '../../gmail/providers/gmail.provider';
 import { getGmailCategoryPriority } from '../../gmail/gmail-category';
 import { asGoogleIntegrationError } from '../../google/google-integration.error';
-import { buildGoogleConnectionStatus } from '../../google/google-scopes';
+import {
+  buildGoogleConnectionStatus,
+  hasCalendarWrite,
+  hasGmailModify,
+  hasGmailSend,
+} from '../../google/google-scopes';
 
 type ToolOnly = Extract<ToolCall, { type: 'tool' }>;
 type ToolName = Extract<ToolCall, { type: 'tool' }>['name'];
@@ -459,6 +468,7 @@ export class JarvisService {
   private readonly memoryTtlMs: number;
 
   private readonly convo = new Map<string, ConversationState>();
+  private readonly privateCacheFence: PrivateCacheFence;
   private readonly recentMemory = new Map<string, SessionMemoryTurn[]>();
   private readonly statusGmail = new StatusResourceCache<
     Awaited<ReturnType<GmailProvider['listMessages']>>
@@ -536,6 +546,10 @@ export class JarvisService {
         ? Math.floor(memorySessionsRaw)
         : this.convoMaxSessions;
 
+    this.privateCacheFence = new PrivateCacheFence(
+      Math.max(1, this.convoMaxSessions, this.memoryMaxSessions),
+    );
+
     const memoryCharsRaw = Number(
       this.config.get('JARVIS_MEMORY_MAX_CHARS') ?? 700,
     );
@@ -586,7 +600,7 @@ export class JarvisService {
     ).toLowerCase();
     const openAiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
     const shouldUseOpenAi =
-      llmProvider === 'openai' || (!!openAiKey && llmProvider !== 'ollama');
+      selectedModelProvider(llmProvider, openAiKey) === 'openai';
 
     if (shouldUseOpenAi && openAiKey) {
       this.llm = new OpenAIProvider(
@@ -601,7 +615,7 @@ export class JarvisService {
         `LLM provider: openai (${this.config.get<string>('OPENAI_MODEL_PRIMARY') || 'gpt-5-nano'} -> ${this.config.get<string>('OPENAI_MODEL_FALLBACK') || 'gpt-5-mini'})`,
       );
     } else {
-      if (shouldUseOpenAi && !openAiKey) {
+      if (llmProvider === 'openai' && !openAiKey) {
         this.logger.warn(
           'LLM_PROVIDER=openai mais OPENAI_API_KEY est vide. Fallback vers Ollama.',
         );
@@ -668,8 +682,10 @@ export class JarvisService {
       ]);
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
     const capabilitiesContext = [
-      `Capacités: todos/notes/courses=OK | web=${this.web.name} | weather=${this.weather.name} | Google=${googleStatus.connected ? 'connecté' : 'non connecté'} | Calendar=${googleStatus.calendarConnected ? 'connecté' : 'non connecté'} | Gmail=${googleStatus.gmailConnected ? 'connecté' : 'non connecté'} | simulation=${this.simulation ? 'true' : 'false'}.`,
-      `Si Calendar/Gmail ne sont pas connectés, n’utilise pas les outils calendar.* / gmail.*: réponds "ask" pour proposer la connexion.`,
+      `Capacités: todos/notes/courses=OK | web=${this.web.name} | weather=${this.weather.name} | Google=${googleStatus.connected ? 'connecté' : 'non connecté'} | simulation=${this.simulation ? 'true' : 'false'}.`,
+      `Calendar lecture=${googleStatus.calendarConnected ? 'autorisée' : 'non autorisée'} | Calendar écriture=${hasCalendarWrite(googleStatus.scopes) ? 'autorisée' : 'non autorisée'}.`,
+      `Gmail lecture=${googleStatus.gmailConnected ? 'autorisée' : 'non autorisée'} | Gmail envoi=${hasGmailSend(googleStatus.scopes) ? 'autorisé' : 'non autorisé'} | Gmail modification=${hasGmailModify(googleStatus.scopes) ? 'autorisée' : 'non autorisée'}.`,
+      'Vérifie la capacité requise pour chaque outil : lecture pour consulter Calendar ou Gmail, écriture pour modifier Calendar, envoi pour gmail.send, modification pour les labels et la corbeille Gmail. Si cette capacité manque, réponds "ask" pour proposer la connexion avec les permissions nécessaires. Un envoi autorisé reste possible sans accès en lecture ; demande les informations manquantes à l’utilisateur sans consulter sa boîte mail. gmail.delete reste indisponible dans la bêta.',
     ].join('\n');
     const system = [
       this.baseSystemPrompt,
@@ -758,10 +774,8 @@ export class JarvisService {
       ]);
       const cleaned = out.trim();
       if (cleaned) return cleaned;
-    } catch (error) {
-      this.logger.warn(
-        `Synthese web LLM indisponible (${call.name}): ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Synthese web LLM indisponible.');
     }
 
     return this.summarizeWebResultFallback(userText, call, rawResult);
@@ -795,9 +809,7 @@ export class JarvisService {
     const blocks: string[] = [];
     for (const item of opened) {
       if (item.status === 'rejected') {
-        this.logger.warn(
-          `Lecture source web echouee: ${item.reason instanceof Error ? item.reason.message : String(item.reason)}`,
-        );
+        this.logger.warn('Lecture source web echouee.');
         continue;
       }
       const content = item.value.content.trim();
@@ -1040,6 +1052,35 @@ export class JarvisService {
     };
   }
 
+  forgetConversation(sessionId: string): void {
+    this.privateCacheFence.forget(sessionId);
+    this.clearPrivateConversationCaches(sessionId);
+  }
+
+  private clearPrivateConversationCaches(sessionId: string): void {
+    clearLocalToolCaches(sessionId);
+    this.convo.delete(sessionId);
+    this.recentMemory.delete(sessionId);
+    this.humanProfileStore.forget(sessionId);
+    const matches = (key: string) => {
+      const scope: unknown = JSON.parse(key);
+      return Array.isArray(scope) && scope[1] === sessionId;
+    };
+    this.statusGmail.invalidateWhere(matches);
+    this.statusCalendar.invalidateWhere(matches);
+  }
+
+  private withPrivateConversation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return this.privateCacheFence.run(
+      sessionId,
+      () => withLocalToolCaches(sessionId, operation),
+      () => this.clearPrivateConversationCaches(sessionId),
+    );
+  }
+
   private getState(sessionId: string) {
     this.cleanupConvo();
     const st = this.convo.get(sessionId);
@@ -1052,6 +1093,7 @@ export class JarvisService {
   }
 
   private setState(sessionId: string, st: ConversationState) {
+    if (!this.privateCacheFence.canPublish(sessionId)) return;
     this.cleanupConvo();
     this.convo.set(sessionId, st);
   }
@@ -1113,6 +1155,7 @@ export class JarvisService {
     sessionId: string,
     turn: Omit<SessionMemoryTurn, 'createdAt'>,
   ) {
+    if (!this.privateCacheFence.canPublish(sessionId)) return;
     this.cleanupRecentMemory();
     const history = this.recentMemory.get(sessionId) ?? [];
     history.push({
@@ -1548,12 +1591,19 @@ export class JarvisService {
     result?: string;
   }) {
     try {
-      await this.prisma.jarvisLog.create({ data });
-    } catch (error) {
-      this.logger.error(
-        'Impossible d’écrire le log Jarvis',
-        error instanceof Error ? error.stack : String(error),
-      );
+      await this.prisma.jarvisLog.create({
+        data: {
+          sessionId: data.sessionId,
+          toolName: data.toolName,
+          simulation: data.simulation,
+          userText: '',
+          modelRaw: '',
+          toolArgs: null,
+          result: null,
+        },
+      });
+    } catch {
+      this.logger.warn('Impossible d’écrire le log technique Jarvis.');
     }
   }
 
@@ -1882,6 +1932,13 @@ export class JarvisService {
   }
 
   async status(sessionId?: string, refreshProviders = false) {
+    const resolved = this.resolveSessionId(sessionId);
+    return this.withPrivateConversation(resolved, () =>
+      this.statusInContext(resolved, refreshProviders),
+    );
+  }
+
+  private async statusInContext(sessionId?: string, refreshProviders = false) {
     const resolvedSessionId = this.resolveSessionId(sessionId);
     const prisma = await this.prisma.forConversation(resolvedSessionId);
     const profile = await this.getHumanProfile(resolvedSessionId);
@@ -1938,25 +1995,37 @@ export class JarvisService {
     const revision = revisionOf(googleToken);
     let statusGoogleToken = googleToken;
 
+    const canPublish = () =>
+      this.privateCacheFence.canPublish(resolvedSessionId);
     let [gmailResource, calendarResource] = await Promise.all([
-      this.statusGmail.read(cacheKey, revision, refreshProviders, async () =>
-        (
-          await this.gmail.listMessages(resolvedSessionId, {
-            q: 'is:unread',
-            maxResults: 5,
-          })
-        ).slice(0, 5),
+      this.statusGmail.read(
+        cacheKey,
+        revision,
+        refreshProviders,
+        async () =>
+          (
+            await this.gmail.listMessages(resolvedSessionId, {
+              q: 'is:unread',
+              maxResults: 5,
+            })
+          ).slice(0, 5),
+        canPublish,
       ),
-      this.statusCalendar.read(cacheKey, revision, refreshProviders, async () =>
-        (
-          await this.calendar.listEventsInterval(
-            resolvedSessionId,
-            todayRange.startIso,
-            todayRange.endIso,
-            this.tz,
-            12,
-          )
-        ).slice(0, 12),
+      this.statusCalendar.read(
+        cacheKey,
+        revision,
+        refreshProviders,
+        async () =>
+          (
+            await this.calendar.listEventsInterval(
+              resolvedSessionId,
+              todayRange.startIso,
+              todayRange.endIso,
+              this.tz,
+              12,
+            )
+          ).slice(0, 12),
+        canPublish,
       ),
     ]);
     if (refreshProviders) {
@@ -1967,11 +2036,19 @@ export class JarvisService {
         // A disconnect/account/credential change during transport invalidates
         // both cached and just-returned data before it reaches the browser.
         [gmailResource, calendarResource] = await Promise.all([
-          this.statusGmail.read(cacheKey, latestRevision, false, () =>
-            Promise.resolve([]),
+          this.statusGmail.read(
+            cacheKey,
+            latestRevision,
+            false,
+            () => Promise.resolve([]),
+            canPublish,
           ),
-          this.statusCalendar.read(cacheKey, latestRevision, false, () =>
-            Promise.resolve([]),
+          this.statusCalendar.read(
+            cacheKey,
+            latestRevision,
+            false,
+            () => Promise.resolve([]),
+            canPublish,
           ),
         ]);
       }
@@ -3361,6 +3438,13 @@ export class JarvisService {
   }
 
   async chat(userText: string, sessionId?: string) {
+    const resolved = this.resolveSessionId(sessionId);
+    return this.withPrivateConversation(resolved, () =>
+      this.chatInContext(userText, resolved),
+    );
+  }
+
+  private async chatInContext(userText: string, sessionId?: string) {
     const resolvedSessionId = this.resolveSessionId(sessionId);
     const tz = this.tz;
     const profile = await this.refreshHumanProfile(resolvedSessionId, userText);
@@ -4044,10 +4128,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       if (error instanceof HttpException) throw error;
 
       const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
-      this.logger.error(
-        `Erreur Jarvis (session=${resolvedSessionId}): ${message}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Traitement Jarvis echoue.');
       if (auditContext) {
         await this.auditStore.recordFailure({
           sessionId: auditContext.sessionId,
@@ -4090,6 +4171,12 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
 
   // Backup: route /confirm
   async confirm(actionId: string, sessionId?: string) {
+    return this.withPrivateConversation(this.resolveSessionId(sessionId), () =>
+      this.confirmInContext(actionId, sessionId),
+    );
+  }
+
+  private async confirmInContext(actionId: string, sessionId?: string) {
     const expectedSessionId = sessionId?.trim() || undefined;
     if (this.requireConfirmSessionMatch && !expectedSessionId) {
       throw new BadRequestException(
@@ -4213,10 +4300,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
     } catch (error) {
       await this.pending.markUnknown(item.id, item.sessionId);
       const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
-      this.logger.error(
-        `Erreur confirm (session=${item.sessionId}): ${message}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Confirmation Jarvis echouee.');
       if (auditContext) {
         await this.auditStore.recordFailure({
           sessionId: auditContext.sessionId,

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AccountDataControls from "@/features/privacy/AccountDataControls.vue";
+import AccountPrivacyCard from "@/features/privacy/AccountPrivacyCard.vue";
 import { computed, onMounted, ref, watch } from "vue";
 
 import { TimezoneSchema } from "@/core/contracts/v1";
@@ -49,6 +51,16 @@ const notice = ref("");
 onMounted(async () => {
   await Promise.all([status.refresh(), loadAccount()]);
 });
+
+function leaveAfterDeletion() {
+  // A full navigation drops private view state and pending reads after acceptance.
+  window.location.assign(
+    new URL(
+      "deletion-status",
+      new URL(import.meta.env.BASE_URL || "/", window.location.origin),
+    ).href,
+  );
+}
 
 async function loadAccount() {
   accountError.value = "";
@@ -152,6 +164,13 @@ const connectGoogle = () => {
         >Enregistrer les préférences</BaseButton
       >
     </BaseCard>
+
+    <AccountPrivacyCard />
+    <AccountDataControls
+      v-if="!props.onboarding && account"
+      :account="account"
+      @accepted="leaveAfterDeletion"
+    />
 
     <!-- Google integration -->
     <BaseCard class="p-5">

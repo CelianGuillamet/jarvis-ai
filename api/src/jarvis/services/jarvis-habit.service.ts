@@ -34,8 +34,8 @@ export class JarvisHabitService {
         },
       });
       return this.enrich(habit, []);
-    } catch (err) {
-      this.logger.error(`create habit failed: ${err}`);
+    } catch {
+      this.logger.error('Create habit failed.');
       return null;
     }
   }
@@ -79,8 +79,8 @@ export class JarvisHabitService {
         include: { logs: { orderBy: { date: 'desc' }, take: 90 } },
       });
       return this.enrich(updated, updated.logs);
-    } catch (err) {
-      this.logger.error(`log habit failed: ${err}`);
+    } catch {
+      this.logger.error('Log habit failed.');
       return null;
     }
   }

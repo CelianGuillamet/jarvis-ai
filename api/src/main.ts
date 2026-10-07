@@ -5,6 +5,7 @@ import { configureDevelopmentAssets } from './configure-development-assets';
 import { configureAuth } from './auth/configure-auth';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { configureHttpSafety } from './http/configure-http-safety';
+import { RuntimeConfigurationError } from './config/runtime-config';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -24,6 +25,11 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap().catch((error: unknown) => {
-  console.error('API startup failed', error);
+  // Transport errors can include credential-bearing URLs or provider payloads.
+  console.error(
+    error instanceof RuntimeConfigurationError
+      ? error.message
+      : 'API startup failed.',
+  );
   process.exitCode = 1;
 });
