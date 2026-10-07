@@ -50,14 +50,18 @@ SQL et ne doit ni désactiver le compte ni révoquer son invitation.
 ## Purge du journal (bornage de la croissance)
 
 `ErasureBackupLedger.prune` et `npm --prefix api run privacy:ledger -- prune
-[--backups-confirmed-retired]` retirent uniquement les enregistrements `deleted`
-dont `retainedUntil` est dépassé, et seulement avec le drapeau de confirmation.
-Sans ce drapeau, la commande rapporte le nombre d'enregistrements éligibles sans
-rien supprimer. Les enregistrements `admitted` (effacement non encore confirmé
-localement) ne sont jamais purgés par cette commande, quel que soit le drapeau :
-c'est un geste opérateur explicite, jamais automatique au démarrage ou pendant le
-rejeu, et il ne doit être lancé qu'après avoir confirmé que toutes les sauvegardes
-susceptibles de réintroduire ces comptes ont expiré ou ont été retirées.
+[--backups-confirmed-retired]` retirent les enregistrements `deleted` dont
+`retainedUntil` est dépassé, et seulement avec le drapeau de confirmation ; ils
+retirent alors aussi le fichier `admitted` désormais superflu du même job (la
+purge locale est prouvée par l'existence du `deleted`). Sans ce drapeau, la
+commande rapporte le nombre d'enregistrements `deleted` éligibles sans rien
+supprimer. Un enregistrement `admitted` **sans** `deleted` correspondant n'est
+jamais purgé par cette commande, quel que soit le drapeau ou son propre
+`retainedUntil` : sa purge locale n'est pas confirmée, donc il continue de
+protéger contre une sauvegarde restaurée. C'est un geste opérateur explicite,
+jamais automatique au démarrage ou pendant le rejeu, et il ne doit être lancé
+qu'après avoir confirmé que toutes les sauvegardes susceptibles de réintroduire
+ces comptes ont expiré ou ont été retirées.
 
 ## Vérification
 
@@ -67,8 +71,9 @@ ci-dessus (admis jamais purgé, retrait conditionné à la confirmation et à la
 Les tests PostgreSQL simulent le retour d’anciennes lignes/sessions avec disparition
 du tombstone SQL, puis vérifient désactivation, nouvelle purge, isolation et
 idempotence. Ils couvrent également l’annulation d’admission si le journal est
-indisponible et la préservation d’une exécution non résolue. Local : les 10 tests
-unitaires de `erasure-backup-ledger.spec.ts` passent (dont les 3 de purge) ; la
+indisponible et la préservation d’une exécution non résolue. Local : les 11 tests
+unitaires de `erasure-backup-ledger.spec.ts` passent (dont les 4 de purge, y
+compris le retrait conjoint de l'admitted superflu) ; la
 réconciliation au redémarrage est couverte par
 `api/test/integration/erasure-backup-replay.integration-spec.ts` (PostgreSQL, voir
 `docs/privacy/data-controls-design.md` pour les preuves CI de ce commit).

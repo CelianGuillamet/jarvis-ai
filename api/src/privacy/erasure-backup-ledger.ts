@@ -174,11 +174,13 @@ export class ErasureBackupLedger {
   }
 
   /**
-   * Removes completed ("deleted") tombstones whose retainedUntil has passed. Requires explicit
-   * operator confirmation: retainedUntil is a minimum review date, never a standing deletion
-   * permission (see docs/privacy/backup-restoration.md). "admitted" records are never pruned
-   * here; only a completed local purge, confirmed retired from backups, may be removed. Bounds
-   * the ledger directory so replay cost does not grow without limit.
+   * Removes completed ("deleted") tombstones whose retainedUntil has passed, together with
+   * their now-superseded "admitted" counterpart for the same job. Requires explicit operator
+   * confirmation: retainedUntil is a minimum review date, never a standing deletion permission
+   * (see docs/privacy/backup-restoration.md). An "admitted" record with no matching "deleted"
+   * record is never pruned here — its local purge is still unconfirmed, so it keeps protecting
+   * against a restored backup regardless of its own retainedUntil. Bounds the ledger directory
+   * so replay cost does not grow without limit.
    */
   async prune(
     confirmedBackupsRetired: boolean,
@@ -202,6 +204,17 @@ export class ErasureBackupLedger {
       if (!confirmedBackupsRetired) continue;
       await unlink(path);
       removed += 1;
+      await unlink(join(directory, `${jobId}.admitted.ledger`)).catch(
+        (error: unknown) => {
+          if (
+            typeof error !== 'object' ||
+            error === null ||
+            !('code' in error) ||
+            error.code !== 'ENOENT'
+          )
+            throw error;
+        },
+      );
     }
     return { removed, eligible };
   }

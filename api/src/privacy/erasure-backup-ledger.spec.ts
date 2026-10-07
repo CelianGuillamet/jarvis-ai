@@ -179,4 +179,21 @@ describe('Independent backup deletion ledger', () => {
     });
     expect(await collect(ledger)).toEqual([]);
   });
+
+  it('also removes the superseded admitted record for the same job once its deleted counterpart is pruned', async () => {
+    const admitted = tombstone();
+    const deleted = {
+      ...admitted,
+      kind: 'deleted' as const,
+      localDeletedAt: '2026-10-07T00:00:00.000Z',
+    };
+    await ledger.record(admitted);
+    await ledger.record(deleted);
+    const after = new Date(Date.parse(deleted.retainedUntil) + 1000);
+    expect(await ledger.prune(true, after)).toEqual({
+      removed: 1,
+      eligible: 1,
+    });
+    expect(await collect(ledger)).toEqual([]);
+  });
 });

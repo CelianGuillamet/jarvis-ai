@@ -2,17 +2,21 @@
 
 Statut final : export, suppression, révocation Google, rétention bornée, disclosure
 des fournisseurs et ledger de sauvegarde indépendant sont implémentés et testés.
-Vérification locale sur le commit final (branche `codex/jar-039-data-controls`) :
-511 tests unitaires API et 106 tests Web passent, types/lint/build des deux projets
-passent, et les 147 tests PostgreSQL de `npm --prefix api run test:integration`
-passent (20 suites, y compris `erasure-backup-replay.integration-spec.ts`). Les
-preuves CI GitHub des commits précédents sont listées chronologiquement ci-dessous ;
-celles du commit final apparaîtront dans l'historique des checks de la PR. Limites
-restantes à la fusion : voir la section « Limites restantes » en fin de document. La
-suite chronologique ci-dessous est le journal de conception conservé tel qu'écrit
-pendant le développement ; les phrases « non livré », « pas encore implémenté » ou
-« non raccordé » qu'il contient décrivent l'état au moment où elles ont été écrites,
-pas l'état final.
+Vérification locale sur le commit final (branche `codex/jar-039-data-controls`),
+commande par commande, exécutée dans cette session : 512 tests unitaires API et 106
+tests Web passent (`npm --prefix api test -- --runInBand`, `npm --prefix web test`),
+typecheck/lint/build des deux projets et `build:prototype` passent, et les 148 tests
+PostgreSQL de `npm --prefix api run test:integration` passent (20 suites, y compris
+`erasure-backup-replay.integration-spec.ts` et `privacy-retention.integration-spec.ts`
+avec ses nouveaux cas d'expiration des tours `started`). Ces commandes ont été
+réellement exécutées, pas seulement annoncées. Les preuves CI GitHub des commits
+précédents sont listées chronologiquement ci-dessous ; celles du commit final sont
+visibles dans l'historique des checks de la PR #31. Limites restantes à la fusion :
+voir la section « Limites restantes » en fin de document. La suite chronologique
+ci-dessous est le journal de conception conservé tel qu'écrit pendant le
+développement ; les phrases « non livré », « pas encore implémenté » ou « non
+raccordé » qu'il contient décrivent l'état au moment où elles ont été écrites, pas
+l'état final.
 
 ## Architecture existante vérifiée
 
@@ -425,6 +429,21 @@ reprendre au redémarrage du service.
   aperçus et messages d'erreur jusqu'à la suppression du compte, pour permettre la
   reprise et le suivi des opérations ; la carte Réglages le dit explicitement et ne
   prétend pas à une minimisation plus large.
+- Historique conversationnel abandonné : un tour `started` qu'une panne, une
+  annulation ou un rejet du trigger de propriétaire laisse sans transition n'est
+  jamais supprimé par lots (il peut encore attendre une réconciliation), mais son
+  texte brut est désormais effacé (`inputText` vidé, état `failed`) une fois qu'il
+  n'est plus plausiblement en vol, après un jour. Voir `PrivacyRetentionService` et
+  `ConversationTurn_started_retention_idx`.
+- Quota IP sur `GET /account/deletion/status` : `configure-http-safety.ts` met
+  `trust proxy` à `false`, donc derrière un reverse-proxy partagé tous les appels
+  partagent le même compteur de 20 requêtes par fenêtre ; un client peut bloquer le
+  suivi des autres. Dépend de la topologie d'hébergement choisie en JAR-010 ; à
+  revoir si un proxy de confiance est introduit.
+- `guard_active_owner_write` incrémente `User.executionEpoch` à chaque écriture
+  propriétaire sur une trentaine de tables, donc toutes les écritures d'un même
+  compte se sérialisent sur le verrou de sa ligne `User`. Acceptable en bêta privée
+  avec le volume attendu ; à revisiter si la contention devient mesurable.
 - Croissance du ledger de sauvegarde : les enregistrements `admitted` ne sont jamais
   purgés automatiquement. Les enregistrements `deleted` passés leur `retainedUntil`
   peuvent être retirés via `npm --prefix api run privacy:ledger -- prune

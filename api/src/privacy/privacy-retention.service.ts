@@ -37,6 +37,17 @@ export class PrivacyRetentionService {
     await this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SET LOCAL statement_timeout = '5s'`;
+        // A turn abandoned by a crash, an abort or a rejected update never reaches
+        // 'completed'/'failed' on its own and would otherwise keep raw input forever.
+        // Redact it once it is clearly no longer in flight, then let the ordinary
+        // completed/failed expiry remove the row after its own retention window.
+        await tx.$executeRaw`WITH stale AS (
+          SELECT "id" FROM "ConversationTurn" WHERE "state" = 'started'
+            AND "updatedAt" < CURRENT_TIMESTAMP - interval '1 day'
+          ORDER BY "updatedAt", "id" FOR UPDATE SKIP LOCKED LIMIT 500
+        ) UPDATE "ConversationTurn" t SET "state" = 'failed', "inputText" = '',
+          "updatedAt" = CURRENT_TIMESTAMP
+          FROM stale s WHERE t."id" = s."id"`;
         for (const rule of CLEANUP) {
           const table = Prisma.raw(`"${rule.table}"`);
           const key = Prisma.raw(`"${rule.key}"`);

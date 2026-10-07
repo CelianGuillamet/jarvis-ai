@@ -119,9 +119,15 @@ describe('Bounded privacy retention', () => {
     expect(
       await prisma.conversationTurn.count({ where: { id: finished.id } }),
     ).toBe(0);
-    expect(
-      await prisma.conversationTurn.count({ where: { id: pending.id } }),
-    ).toBe(1);
+    const stalePending = await prisma.conversationTurn.findUnique({
+      where: { id: pending.id },
+    });
+    // An abandoned 'started' turn is never deleted by this batch (it may still need
+    // reconciliation), but its raw input is redacted once it is clearly no longer in
+    // flight, so it does not keep private text with no expiry.
+    expect(stalePending).not.toBeNull();
+    expect(stalePending?.state).toBe('failed');
+    expect(stalePending?.inputText).toBe('');
     expect(
       await prisma.verification.count({ where: { id: verification.id } }),
     ).toBe(0);
@@ -129,6 +135,52 @@ describe('Bounded privacy retention', () => {
       1,
     );
   });
+
+  it('redacts a started turn only once it is clearly no longer in flight', async () => {
+    const ownerId = randomUUID();
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        email: `${ownerId}@example.invalid`,
+        name: 'Retention',
+      },
+    });
+    const conversation = await prisma.conversation.create({
+      data: { ownerId, clientKey: 'started-turn-retention' },
+    });
+    const recent = await prisma.conversationTurn.create({
+      data: {
+        ownerId,
+        conversationId: conversation.id,
+        kind: 'chat',
+        inputText: 'Request in flight right now',
+        state: 'started',
+      },
+    });
+    const abandoned = await prisma.conversationTurn.create({
+      data: {
+        ownerId,
+        conversationId: conversation.id,
+        kind: 'chat',
+        inputText: 'Request the process never finished handling',
+        state: 'started',
+        createdAt: new Date(Date.now() - 2 * 86400000),
+        updatedAt: new Date(Date.now() - 2 * 86400000),
+      },
+    });
+    await retention.runBatch();
+    const stillLive = await prisma.conversationTurn.findUnique({
+      where: { id: recent.id },
+    });
+    expect(stillLive?.state).toBe('started');
+    expect(stillLive?.inputText).toBe('Request in flight right now');
+    const redacted = await prisma.conversationTurn.findUnique({
+      where: { id: abandoned.id },
+    });
+    expect(redacted?.state).toBe('failed');
+    expect(redacted?.inputText).toBe('');
+  });
+
   it('discards expired revocation credentials without racing a live lease', async () => {
     const protection = new ErasureCredentialCipher(
       new ConfigService({ AUTH_SECRET: 'retention-secret'.repeat(4) }),
