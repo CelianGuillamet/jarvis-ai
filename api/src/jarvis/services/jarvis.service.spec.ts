@@ -625,6 +625,57 @@ describe('JarvisService', () => {
     jest.useRealTimers();
   });
 
+  it.each([
+    ['send-only', 'gmail.send', false, true, false],
+    ['compose-only', 'gmail.compose', false, true, false],
+    ['read-only', 'gmail.readonly', true, false, false],
+    ['modify', 'gmail.modify', true, true, true],
+    ['metadata-only', 'gmail.metadata', false, false, false],
+    ['absent', undefined, false, false, false],
+    ['revoked', null, false, false, false],
+  ] as const)(
+    'describes Gmail capabilities independently for %s consent',
+    async (_label, scope, read, send, modify) => {
+      const { service, llmChat } = makeService({
+        googleScope: scope ? `https://www.googleapis.com/auth/${scope}` : scope,
+      });
+      llmChat.mockResolvedValueOnce('{"type":"final","text":"Compris."}');
+
+      await service.chat('Explique la photosynthèse', 'gmail-capabilities');
+
+      const systemPrompt = llmChat.mock.calls[0][0][0].content;
+      expect(systemPrompt).toContain(
+        `Gmail lecture=${read ? 'autorisée' : 'non autorisée'} | Gmail envoi=${send ? 'autorisé' : 'non autorisé'} | Gmail modification=${modify ? 'autorisée' : 'non autorisée'}.`,
+      );
+      expect(systemPrompt).toContain(
+        'Un envoi autorisé reste possible sans accès en lecture',
+      );
+      expect(systemPrompt).not.toContain(
+        'n’utilise pas les outils calendar.* / gmail.*',
+      );
+    },
+  );
+
+  it.each([
+    ['calendar.events', false, true],
+    ['calendar.readonly', true, false],
+    ['calendar', true, true],
+  ] as const)(
+    'describes Calendar capabilities independently for %s consent',
+    async (scope, read, write) => {
+      const { service, llmChat } = makeService({
+        googleScope: `https://www.googleapis.com/auth/${scope}`,
+      });
+      llmChat.mockResolvedValueOnce('{"type":"final","text":"Compris."}');
+
+      await service.chat('Explique la photosynthèse', 'calendar-capabilities');
+
+      expect(llmChat.mock.calls[0][0][0].content).toContain(
+        `Calendar lecture=${read ? 'autorisée' : 'non autorisée'} | Calendar écriture=${write ? 'autorisée' : 'non autorisée'}.`,
+      );
+    },
+  );
+
   it('injects recent final turns into the LLM context', async () => {
     const { service, llmChat } = makeService();
     llmChat

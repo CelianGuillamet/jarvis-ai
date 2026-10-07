@@ -74,6 +74,12 @@ describe('GoogleAuthService', () => {
     });
     expect(client.generateAuthUrl).toHaveBeenCalledWith(
       expect.objectContaining({
+        scope: [
+          'openid',
+          'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+          'https://www.googleapis.com/auth/calendar.events',
+          'https://www.googleapis.com/auth/gmail.modify',
+        ],
         state: 'state',
         nonce: 'nonce',
         code_challenge: 'challenge',

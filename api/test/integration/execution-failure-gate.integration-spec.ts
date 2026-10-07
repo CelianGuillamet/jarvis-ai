@@ -12,6 +12,7 @@ import {
   type InboxReplyIntent,
 } from '../../src/inbox-zero/inbox-reply-operation.service';
 import { buildGoogleConnectionStatus } from '../../src/google/google-scopes';
+import { gateToolCall } from '../../src/jarvis/tools/tool-engine';
 import type { ToolContext } from '../../src/jarvis/tools/tools';
 
 describe('Phase 2 execution failure gate', () => {
@@ -229,7 +230,12 @@ describe('Phase 2 execution failure gate', () => {
     const loadGoogleStatus = jest.fn(() =>
       Promise.resolve(buildGoogleConnectionStatus(grantedScopes)),
     );
-    expect((await loadGoogleStatus()).gmailConnected).toBe(true);
+    const initialStatus = await loadGoogleStatus();
+    expect(initialStatus).toMatchObject({
+      connected: true,
+      gmailConnected: false,
+    });
+    expect(gateToolCall(call, initialStatus)).toBeNull();
     const id = await pending.create(f.conversationId, call);
     expect(await pending.consume(id, f.conversationId)).not.toBeNull();
     grantedScopes = ''; // Revocation occurs after the durable approval/claim.

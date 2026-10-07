@@ -66,7 +66,7 @@ describe('Configured privacy disclosure', () => {
     expect(value.google.signInConfigured).toBe(true);
     expect(value.google.toolsConfigured).toBe(true);
     expect(value.google.requestedScopes).toContain(
-      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.modify',
     );
     expect(JSON.stringify(value)).not.toContain('private-secret');
     expect(disclosure({}, true).google.toolsConfigured).toBe(false);
