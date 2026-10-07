@@ -21,6 +21,7 @@ import {
   pickFocusUnreadEmail,
 } from '../lib/intent-text';
 import { tryDirectToolCall } from '../lib/direct-intent';
+import { isUntrustedOutputTool } from '../lib/untrusted-context';
 import { PrivateCacheFence } from './private-cache-fence';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
@@ -972,7 +973,15 @@ export class JarvisService {
       assistantText,
       kind: options?.prefix ? 'confirm' : 'tool',
       toolName: call.name,
+      untrusted: isUntrustedOutputTool(call.name),
     });
+  }
+
+  private hasUntrustedContext(sessionId: string) {
+    this.cleanupRecentMemory();
+    return (this.recentMemory.get(sessionId) ?? []).some(
+      (turn) => turn.untrusted === true,
+    );
   }
 
   private async refreshPersistentSessionState(sessionId: string) {
@@ -1135,6 +1144,7 @@ export class JarvisService {
     options?: {
       planner?: DecisionPlanner;
       confidence?: DecisionConfidence;
+      untrustedContext?: boolean;
       preview?: string | null;
     },
   ): {
@@ -1144,6 +1154,7 @@ export class JarvisService {
     const decision = buildToolExecutionPlan(item.call, {
       planner: options?.planner,
       confidence: options?.confidence,
+      untrustedContext: options?.untrustedContext,
       tz: this.tz,
       speechMode: profile.speechMode,
     });
@@ -2458,6 +2469,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
       const executionPlan = buildToolExecutionPlan(toolCall, {
         planner: decision.planner,
         confidence: decision.confidence,
+        untrustedContext: this.hasUntrustedContext(resolvedSessionId),
         tz,
         speechMode: profile.speechMode,
       });
@@ -2480,6 +2492,7 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
           {
             planner: decision.planner,
             confidence: decision.confidence,
+            untrustedContext: this.hasUntrustedContext(resolvedSessionId),
             preview,
           },
         );

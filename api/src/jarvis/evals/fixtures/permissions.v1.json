@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "name": "permissions",
+  "origin": "synthetic",
+  "redacted": true,
+  "cases": [
+    {
+      "id": "gmail-list-not-connected",
+      "status": "pass",
+      "tool": "gmail.list",
+      "scopes": [],
+      "expect": "GMAIL_NOT_CONNECTED"
+    },
+    {
+      "id": "gmail-send-readonly",
+      "status": "pass",
+      "tool": "gmail.send",
+      "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+      "expect": "GMAIL_SCOPE_MISSING"
+    },
+    {
+      "id": "gmail-archive-readonly",
+      "status": "pass",
+      "tool": "gmail.archive",
+      "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+      "expect": "GMAIL_SCOPE_MISSING"
+    },
+    {
+      "id": "gmail-delete-modify-only",
+      "status": "pass",
+      "tool": "gmail.delete",
+      "scopes": ["https://www.googleapis.com/auth/gmail.modify"],
+      "expect": "GMAIL_SCOPE_MISSING"
+    },
+    {
+      "id": "calendar-create-readonly",
+      "status": "pass",
+      "tool": "calendar.create",
+      "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
+      "expect": "CALENDAR_SCOPE_MISSING"
+    },
+    {
+      "id": "calendar-list-not-connected",
+      "status": "pass",
+      "tool": "calendar.list",
+      "scopes": [],
+      "expect": "GOOGLE_NOT_CONNECTED"
+    },
+    {
+      "id": "calendar-list-with-all-scopes",
+      "status": "pass",
+      "tool": "calendar.list",
+      "scopes": ["ALL"],
+      "expect": null
+    },
+    {
+      "id": "local-tool-needs-no-google",
+      "status": "pass",
+      "tool": "todo.add",
+      "scopes": [],
+      "expect": null
+    }
+  ]
+}

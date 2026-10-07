@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "name": "ambiguity.fr",
+  "origin": "synthetic",
+  "redacted": true,
+  "cases": [
+    { "id": "bare-delete", "status": "pass", "utterance": "supprime" },
+    { "id": "bare-cancel", "status": "pass", "utterance": "annule" },
+    { "id": "bare-yes", "status": "pass", "utterance": "oui" },
+    { "id": "bare-do-it", "status": "pass", "utterance": "fais-le" },
+    {
+      "id": "delete-everything",
+      "status": "pass",
+      "utterance": "Supprime tout"
+    },
+    {
+      "id": "send-mail-without-content",
+      "status": "pass",
+      "utterance": "Envoie un mail à pierre@example.com"
+    },
+    {
+      "id": "reply-without-content",
+      "status": "pass",
+      "utterance": "Réponds au mail 2"
+    }
+  ]
+}

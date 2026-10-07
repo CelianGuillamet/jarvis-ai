@@ -48,6 +48,7 @@ export type SessionMemoryTurn = {
   assistantText: string;
   kind: 'ask' | 'final' | 'tool' | 'confirm' | 'error';
   toolName?: ToolName;
+  untrusted?: boolean;
   createdAt: number;
 };
 

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "name": "malformed-tool-calls",
+  "origin": "synthetic",
+  "redacted": true,
+  "cases": [
+    { "id": "empty", "status": "pass", "raw": "", "expect": null },
+    {
+      "id": "not-json",
+      "status": "pass",
+      "raw": "je vais ajouter un todo",
+      "expect": null
+    },
+    {
+      "id": "missing-name",
+      "status": "pass",
+      "raw": "{\"type\":\"tool\",\"args\":{}}",
+      "expect": null
+    },
+    {
+      "id": "unknown-tool",
+      "status": "pass",
+      "raw": "{\"type\":\"tool\",\"name\":\"shell.run\",\"args\":{\"cmd\":\"rm -rf /\"}}",
+      "expect": null
+    },
+    {
+      "id": "missing-required-arg",
+      "status": "pass",
+      "raw": "{\"type\":\"tool\",\"name\":\"todo.add\",\"args\":{}}",
+      "expect": null
+    },
+    {
+      "id": "wrong-arg-type",
+      "status": "pass",
+      "raw": "{\"type\":\"tool\",\"name\":\"todo.add\",\"args\":{\"text\":123}}",
+      "expect": null
+    },
+    {
+      "id": "send-without-recipient",
+      "status": "pass",
+      "raw": "{\"type\":\"tool\",\"name\":\"gmail.send\",\"args\":{\"subject\":\"Salut\",\"text\":\"Bonjour\"}}",
+      "expect": null
+    },
+    {
+      "id": "valid-call",
+      "status": "pass",
+      "raw": "{\"type\":\"tool\",\"name\":\"todo.add\",\"args\":{\"text\":\"Acheter du pain\"}}",
+      "expect": { "tool": "todo.add" }
+    }
+  ]
+}

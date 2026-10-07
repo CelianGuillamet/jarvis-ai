@@ -10,6 +10,7 @@ export type DecisionConfidence = 'high' | 'medium' | 'low' | 'unknown';
 export type ConfirmationReason =
   | 'tool_policy'
   | 'intent_medium_confidence'
+  | 'untrusted_context'
   | null;
 
 export type ToolExecutionPlan = {
@@ -27,6 +28,7 @@ export function buildToolExecutionPlan(
   input?: {
     planner?: DecisionPlanner;
     confidence?: DecisionConfidence;
+    untrustedContext?: boolean;
     tz?: string;
     speechMode?: HumanSpeechMode;
   },
@@ -37,14 +39,20 @@ export function buildToolExecutionPlan(
 
   const requiresIntentConfirmation =
     planner === 'intent' && confidence === 'medium' && meta.sideEffect;
+  const requiresUntrustedConfirmation =
+    planner === 'llm' && input?.untrustedContext === true && meta.sideEffect;
   const requiresConfirmation =
-    meta.requiresConfirmation || requiresIntentConfirmation;
+    meta.requiresConfirmation ||
+    requiresIntentConfirmation ||
+    requiresUntrustedConfirmation;
 
   let confirmationReason: ConfirmationReason = null;
   if (requiresIntentConfirmation) {
     confirmationReason = 'intent_medium_confidence';
   } else if (meta.requiresConfirmation) {
     confirmationReason = 'tool_policy';
+  } else if (requiresUntrustedConfirmation) {
+    confirmationReason = 'untrusted_context';
   }
 
   return {

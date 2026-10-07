@@ -598,6 +598,12 @@ function pendingConfirmationContext(
       : 'Le ciblage me paraît plausible, mais je préfère ta validation avant d’agir.';
   }
 
+  if (plan.confirmationReason === 'untrusted_context') {
+    return profile.speechMode === 'vous'
+      ? 'Cette action fait suite à un contenu externe (e-mail ou agenda) ; je préfère votre validation.'
+      : 'Cette action fait suite à un contenu externe (e-mail ou agenda) ; je préfère ta validation.';
+  }
+
   if (plan.confirmationReason === 'tool_policy' && plan.risk === 'high') {
     return 'C’est une action sensible.';
   }
