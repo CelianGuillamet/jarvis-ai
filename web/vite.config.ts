@@ -24,7 +24,12 @@ export default defineConfig(({ mode }) => {
         "/account": { target: proxyTarget, changeOrigin: true },
         "/today": { target: proxyTarget, changeOrigin: true },
         "/jarvis": { target: proxyTarget, changeOrigin: true },
-        "/inbox-zero": { target: proxyTarget, changeOrigin: true },
+        "/inbox-zero": {
+          target: proxyTarget,
+          changeOrigin: true,
+          bypass: (req) =>
+            req.headers.accept?.includes("text/html") ? "/index.html" : undefined,
+        },
         "/auth": { target: proxyTarget, changeOrigin: true },
       },
     },

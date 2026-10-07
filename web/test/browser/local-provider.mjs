@@ -69,6 +69,7 @@ const server = createServer(async (request, response) => {
     requests.push({ path: url.pathname, method: request.method, at: now() });
     if (unavailable) { response.statusCode = 503; return reply({ error: 'Local verification outage' }); }
     if (url.pathname === '/account/me') return reply(contracts.AccountProfileSchema.parse({ id: 'browser-fixture-owner', name: 'Compte local de vérification', email: 'fixture@example.test' }));
+    if (url.pathname === '/account/privacy') return reply(contracts.PrivacyDisclosureSchema.parse({ model: { provider: 'ollama', endpointHost: '127.0.0.1', transport: 'loopback' }, google: { signInConfigured: true, toolsConfigured: true, requestedScopes: ['https://www.googleapis.com/auth/calendar.calendarlist.readonly', 'https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/gmail.modify'] }, weatherHosts: [], webRetrieval: 'disabled', processingEnabled: true, retention: { diagnosticDays: 14, conversationDays: 90, receiptDays: 7, maximumBackupDays: 30, userData: 'until-deleted', commandJournal: 'until-account-deletion' }, backups: 'operator-managed' }));
     if (url.pathname === '/account/preferences') { if (request.method === 'POST') preferences = contracts.AccountPreferencesSchema.parse(input); return reply(preferences); }
     if (url.pathname === '/jarvis/status' || url.pathname === '/jarvis/status/refresh') return reply(status());
     if (url.pathname === '/today') {

@@ -62,6 +62,7 @@ async function retryConnection() {
             <span
               v-if="isOnline"
               class="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-card bg-emerald-400"
+              role="img"
               aria-label="Connecté"
             />
           </div>

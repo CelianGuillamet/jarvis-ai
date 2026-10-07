@@ -218,7 +218,7 @@ const connectGoogle = () => {
             </BaseBadge>
           </div>
         </div>
-        <div class="flex shrink-0 gap-2">
+        <div class="flex flex-wrap gap-2">
           <BaseButton
             variant="secondary"
             size="sm"

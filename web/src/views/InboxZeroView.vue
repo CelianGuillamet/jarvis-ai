@@ -225,10 +225,11 @@ onBeforeUnmount(() => {
           type="button"
           class="group flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-left text-xs transition hover:bg-muted/40"
           :class="inbox.currentStep === s.step ? 'ring-1 ring-primary/20 bg-primary/10' : ''"
+          :aria-pressed="inbox.currentStep === s.step"
           @click="setStep(s.step)"
         >
           <span class="font-semibold">{{ s.label }}</span>
-          <span class="text-muted-foreground">{{ s.hint }}</span>
+          <span :class="inbox.currentStep === s.step ? 'text-foreground' : 'text-muted-foreground'">{{ s.hint }}</span>
           <span
             v-if="s.step !== 'done'"
             class="ml-1 rounded-full border border-border/50 bg-background/40 px-2 py-0.5 text-[11px] text-muted-foreground"

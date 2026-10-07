@@ -15,7 +15,7 @@ after(async () => { globalThis.fetch = originalFetch; dom.window.close(); await 
 async function settle() { for (let i = 0; i < 20; i++) { await new Promise(resolve => setTimeout(resolve, 0)); await nextTick(); } }
 const id = crypto.randomUUID();
 const noteId = crypto.randomUUID();
-async function mount({ unavailable = false, uncertain = false, failNextPage = false, situation = null } = {}) {
+async function mount({ unavailable = false, uncertain = false, failNextPage = false, situation = null, network = { down: false } } = {}) {
   localStorage.clear();
   const requests = [];
   const pinia = createPinia(); setActivePinia(pinia);
@@ -31,6 +31,7 @@ async function mount({ unavailable = false, uncertain = false, failNextPage = fa
   const conversationId = crypto.randomUUID();
   globalThis.fetch = async (url, options = {}) => {
     requests.push({ url, ...options });
+    if (network.down) throw new TypeError('Failed to fetch');
     if (url.endsWith('/account/me')) return new Response(JSON.stringify({ id: 'owner', name: 'Owner', email: 'owner@example.test' }));
     if (failNextPage && url.includes('taskOffset=50')) return new Response('{}', { status: 503 });
     if (url.includes('/today?')) return new Response(JSON.stringify(unavailable ? {} : { conversationId, fetchedAt: new Date().toISOString(), tasks: [{ id, text: url.includes('taskOffset=50') ? 'Next page' : 'Existing task', done, doneAt: done ? new Date().toISOString() : null, createdAt: new Date().toISOString() }], notes: [{ id: noteId, title: 'Existing note', text: 'Body', createdAt: new Date().toISOString() }], tasksHasMore: hasMore, notesHasMore: false }), { status: unavailable ? 503 : 200 });
@@ -40,7 +41,7 @@ async function mount({ unavailable = false, uncertain = false, failNextPage = fa
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: modules.TodayView }, { path: '/chat', component: { template: '<div/>' } }] });
   await router.push('/'); await router.isReady();
   const app = createApp(modules.TodayView); app.use(pinia).use(router); app.mount('#root'); await settle();
-  return { requests, close: () => app.unmount() };
+  return { requests, app: modules.useAppStore(), close: () => app.unmount() };
 }
 function input(selector, text) { const node = document.querySelector(selector); node.value = text; node.dispatchEvent(new dom.window.Event('input', { bubbles: true })); }
 function submit(selector) { document.querySelector(selector).closest('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); }
@@ -122,5 +123,21 @@ test('retains the last successful page after a pagination failure', async () => 
     assert.match(document.body.textContent, /Existing task/);
     assert.ok(document.querySelector('nav[aria-label="Pages des tâches"] button:first-child').disabled);
     assert.ok(document.querySelector('[role="alert"]'));
+  } finally { fixture.close(); }
+});
+
+test('network loss shows a French read error and reloads after the connection recovers', async () => {
+  const network = { down: true };
+  const fixture = await mount({ network });
+  try {
+    const alert = document.querySelector('[role="alert"]');
+    assert.match(alert.textContent, /Connexion au serveur impossible/);
+    assert.doesNotMatch(alert.textContent, /Failed to fetch/);
+    assert.equal(fixture.app.apiUnavailable, true);
+    network.down = false;
+    fixture.app.apiUnavailable = false;
+    await settle();
+    assert.equal(document.querySelector('[role="alert"]'), null);
+    assert.match(document.body.textContent, /Existing task/);
   } finally { fixture.close(); }
 });

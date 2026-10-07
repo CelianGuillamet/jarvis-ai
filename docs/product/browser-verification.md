@@ -1,6 +1,6 @@
 # JAR-034 — Vérification navigateur locale
 
-Statut : en cours. Aucun critère global n’est encore validé.
+Statut : contrôles automatisables terminés le 7 octobre 2026 ; seul le test VoiceOver réel reste à faire par le propriétaire.
 
 Le banc exécute les composants de production contre un serveur HTTP jetable lié à
 127.0.0.1. Il ne contacte ni Google ni un modèle. Ses données restent en mémoire.
@@ -66,3 +66,17 @@ Thème clair via réglages du banc : bouton Enregistrer mesuré blanc sur rgb4,1
 Tons partagés : badges succès/avertissement/critique et bouton danger utilisent désormais les teintes800 en thèmeclair,300 conservées sombre. Navigateurclair confirme danger rgb153,27,27 sur fondred15%, badgeGmail rgb6,95,70 sur emerald10%. Thèmes changés uniquement sur comptefictif, sombre restauré. Les fonds transparents nécessitent composition des ancêtres pour rapport exact ; aucune conformitéglobale prétendue.
 
 Transport réseau : test TypeError fetch sur mutation => événement api-unavailable unique, aucun retry, puis lecture explicite réussie ; annulation utilisateur ne produit pas d’alerte indisponibilité. Test unitaire seulement, pas preuve réseauoffline navigateur. Audit DOM Réglages sombre : couleurs texte composées sur fonds des ancêtres, aucun p/label/bouton actif/h1/h2 sous4.5 ; exclut gradients, disabled, pseudoéléments et autresécrans. Browser reduced-motion actuellementfalse ; règle CSS mediareduce présente dans CSSOM. Pas d’émulationmedia/réseau annoncée par capacité navigateur, pas de smoke VoiceOver réel : contrôles toujoursouverts.
+
+## Audit complet du 7 octobre 2026 (Playwright + axe-core 4.10.2)
+
+Banc local fictif, Chromium piloté par Playwright. Aucun compte réel, aucune donnée réelle.
+
+- Fournisseur fictif complété par `/account/privacy` (écran Réglages de JAR-039), qui renvoyait 404.
+- Proxy Vite : une navigation directe vers `/inbox-zero` était envoyée à l’API (JSON « Unsupported verification route ») au lieu de l’application. Les requêtes HTML reçoivent désormais `index.html` ; les appels API restent proxifiés.
+- axe-core (wcag2a, wcag2aa, wcag21aa) sur Aujourd’hui, Inbox, Chat, Activité et Réglages, en thèmes sombre et clair, à 390x844, 768x1024 et 1440x900 (30 combinaisons). Premier passage : `aria-prohibited-attr` (pastille « Connecté » sans rôle), contraste 1.8/1.72 (`text-muted-foreground/40` dans Chat, widgets et focus Aujourd’hui), contraste 4.46/4.45 (indication de l’étape Inbox active) et débordement de 23 px dans Réglages à 390 px (boutons Google). Après corrections : **0 violation, aucun débordement horizontal** sur les 30 combinaisons. Les éléments « incomplete » restants sont des contenus trop courts ou non textuels, plus `#note-text` partiellement masqué ; ils ont été contrôlés à la main.
+- Étape Inbox active exposée par `aria-pressed`.
+- Réduction des mouvements émulée (`prefers-reduced-motion: reduce`) : media query vraie, 0 élément avec animation ou transition supérieure à 10 ms, `scroll-behavior: auto`.
+- Mode hors ligne réel du navigateur (`context.setOffline`) : Actualiser affiche l’alerte globale et masque le contenu (inert). Défaut trouvé : Aujourd’hui affichait le message anglais brut « Failed to fetch » et le conservait après reconnexion. Il affiche désormais « Connexion au serveur impossible. » et relit automatiquement après « Réessayer la connexion » ; les avertissements de mutation incertaine ne sont pas effacés. Revérifié dans le navigateur : aucune alerte et tâches visibles après reprise. Test de régression ajouté dans `test/today-flow.test.mjs`.
+- Structure accessible : `lang="fr"`, un seul `h1` par écran, repères main/nav/aside/header, aucun contrôle interactif visible sans nom accessible. Ordre Tab sur Aujourd’hui : Se déconnecter, Aller au contenu, navigation, Actualiser ; anneau de focus visible sur chacun. Le bouton Se déconnecter précède le lien d’évitement (mineur, non corrigé).
+
+Reste : test VoiceOver réel sur macOS/iOS (non automatisable ici) par le propriétaire.

@@ -112,13 +112,13 @@ const sendChoice = (choice: string) => {
         </div>
       </div>
       <div class="flex items-center justify-between border-t border-border/30 px-3 py-1.5">
-        <span class="text-[11px] text-muted-foreground/40">
+        <span class="text-[11px] text-muted-foreground">
           Shift+Entrée pour nouvelle ligne
         </span>
         <span
           v-if="draft.length > 200"
           class="text-[11px]"
-          :class="draft.length > 2000 ? 'text-amber-400' : 'text-muted-foreground/40'"
+          :class="draft.length > 2000 ? 'text-amber-400' : 'text-muted-foreground'"
         >
           {{ draft.length }}
         </span>
