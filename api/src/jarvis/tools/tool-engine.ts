@@ -7,6 +7,7 @@ import {
   hasGmailPermanentDelete,
   hasGmailSend,
 } from '../../google/google-scopes';
+import { TOOL_DEFINITIONS } from './tool-definitions';
 import type { ToolOnly } from './tool-registry';
 
 export type GoogleConnectionStatus = {
@@ -21,43 +22,31 @@ export function gateToolCall(
   googleStatus: GoogleConnectionStatus,
 ): GoogleIntegrationError | null {
   const scopes = googleStatus.scopes ?? [];
+  const requirement = TOOL_DEFINITIONS[call.name]?.requires ?? 'none';
 
-  if (call.name.startsWith('calendar.')) {
+  if (requirement.startsWith('calendar.')) {
     if (!googleStatus.connected) {
       return new GoogleIntegrationError('GOOGLE_NOT_CONNECTED');
     }
-
-    const isWrite =
-      call.name === 'calendar.create' ||
-      call.name === 'calendar.update' ||
-      call.name === 'calendar.delete';
-    const ok = isWrite ? hasCalendarWrite(scopes) : hasCalendarRead(scopes);
+    const ok =
+      requirement === 'calendar.write'
+        ? hasCalendarWrite(scopes)
+        : hasCalendarRead(scopes);
     if (!ok) {
       return new GoogleIntegrationError('CALENDAR_SCOPE_MISSING');
     }
   }
 
-  if (call.name.startsWith('gmail.')) {
+  if (requirement.startsWith('gmail.')) {
     if (!googleStatus.connected) {
       return new GoogleIntegrationError('GMAIL_NOT_CONNECTED');
     }
-
-    const isSend = call.name === 'gmail.send';
-    const isModify =
-      call.name === 'gmail.mark_read' ||
-      call.name === 'gmail.bulk_mark_read' ||
-      call.name === 'gmail.mark_unread' ||
-      call.name === 'gmail.archive' ||
-      call.name === 'gmail.unarchive' ||
-      call.name === 'gmail.trash' ||
-      call.name === 'gmail.untrash' ||
-      call.name === 'gmail.delete';
     const ok =
-      call.name === 'gmail.delete'
+      requirement === 'gmail.permanent_delete'
         ? hasGmailPermanentDelete(scopes)
-        : isSend
+        : requirement === 'gmail.send'
           ? hasGmailSend(scopes)
-          : isModify
+          : requirement === 'gmail.modify'
             ? hasGmailModify(scopes)
             : hasGmailRead(scopes);
     if (!ok) {
