@@ -1,4 +1,5 @@
 import type { CalendarProvider, CalendarEventItem } from './calendar.provider';
+import { GoogleIntegrationError } from '../../google/google-integration.error';
 import { GoogleOAuthClientService } from '../../google/google-oauth-client.service';
 
 export class HybridCalendarProvider implements CalendarProvider {
@@ -6,6 +7,7 @@ export class HybridCalendarProvider implements CalendarProvider {
     private readonly googleOAuth: GoogleOAuthClientService,
     private readonly google: CalendarProvider,
     private readonly db: CalendarProvider,
+    private readonly localFallback = false,
   ) {}
 
   private async hasGoogle(sessionId: string) {
@@ -28,6 +30,7 @@ export class HybridCalendarProvider implements CalendarProvider {
         limit,
       );
     }
+    if (!this.localFallback) return [];
     return this.db.listEventsInterval(sessionId, startIso, endIso, tz, limit);
   }
 
@@ -41,6 +44,8 @@ export class HybridCalendarProvider implements CalendarProvider {
     if (await this.hasGoogle(sessionId)) {
       return this.google.createEvent(sessionId, title, whenIso, tz, endWhenIso);
     }
+    if (!this.localFallback)
+      throw new GoogleIntegrationError('GOOGLE_NOT_CONNECTED');
     return this.db.createEvent(sessionId, title, whenIso, tz, endWhenIso);
   }
 

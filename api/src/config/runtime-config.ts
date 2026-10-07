@@ -84,6 +84,7 @@ export function validateRuntimeConfig(input: Record<string, unknown>) {
     'HUMANIZE_RESPONSES',
     'HUMAN_PROFILE_PERSIST',
     'WEB_AUTO_OPEN_RESULTS',
+    'CALENDAR_LOCAL_FALLBACK',
   ])
     enumeration(key, ['true', 'false']);
   integer('PORT', 1, 65535, 3000);

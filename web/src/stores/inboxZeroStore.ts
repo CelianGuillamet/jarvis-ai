@@ -487,20 +487,10 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     }
 
     if (suggested.action === 'remind') {
-      selectedIds.value = [item.messageId];
-      const when = reminderWhen.value.trim();
-      if (!when) {
-        toast.push({
-          title: 'Rappel manquant',
-          detail: 'Renseigne un créneau (ex: demain 9h) puis réessaie.',
-          tone: 'warning',
-        });
-        return;
-      }
-      await apply('remind', {
-        reminderWhen: when,
-        ...(reminderText.value.trim() ? { reminderText: reminderText.value.trim() } : {}),
-        archiveAfter: true,
+      toast.push({
+        title: 'Rappels reportés',
+        detail: 'Les rappels arrivent après la bêta privée.',
+        tone: 'warning',
       });
       return;
     }
@@ -574,18 +564,6 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
       }
       if (token === messageLoadToken) dismissMessage();
     }
-  };
-
-  const createReminder = async (messageId: string) => {
-    selectedIds.value = [messageId];
-    const when = reminderWhen.value.trim();
-    if (!when) return;
-    await apply('remind', {
-      reminderWhen: when,
-      ...(reminderText.value.trim() ? { reminderText: reminderText.value.trim() } : {}),
-      archiveAfter: true,
-    });
-    closeMessage();
   };
 
   watch(
@@ -663,7 +641,6 @@ export const useInboxZeroStore = defineStore('inboxZero', () => {
     applyToCursor,
     applySuggested,
     sendReply,
-    createReminder,
     apply,
   };
 });
