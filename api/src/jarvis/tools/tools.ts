@@ -1,3 +1,6 @@
+import { TOOL_DEFINITIONS } from './tool-definitions';
+import type { ToolDefinition } from './define-tool';
+import { buildToolEnv } from './support/tool-env';
 import { asGoogleIntegrationError } from '../../google/google-integration.error';
 import { dataUnavailable } from '../../http/data-unavailable';
 import { CommandRejectedError } from '../../commands/command-rejected.error';
@@ -737,6 +740,11 @@ async function previewToolInContext(
     );
   }
   try {
+    const definition = TOOL_DEFINITIONS[call.name] as
+      | ToolDefinition
+      | undefined;
+    if (definition?.preview)
+      return await definition.preview(buildToolEnv(ctx), call as never);
     const { prisma, tz, sessionId } = ctx;
 
     const extractRef = (value: string) => {
@@ -1147,6 +1155,12 @@ async function runToolInContext(
 ): Promise<string> {
   if (call.type === 'tool' && isDeferredCapability(call.name))
     return DEFERRED_CAPABILITY_MESSAGE;
+  if (call.type === 'tool') {
+    const definition = TOOL_DEFINITIONS[call.name] as
+      | ToolDefinition
+      | undefined;
+    if (definition) return definition.handler(buildToolEnv(ctx), call as never);
+  }
   const { prisma, tz, sessionId } = ctx;
   const todoSelection =
     ctx.frozenLocalTargets?.kind === 'todo'
