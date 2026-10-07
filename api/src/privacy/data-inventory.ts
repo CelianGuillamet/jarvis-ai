@@ -18,6 +18,7 @@ export const RETAINED_DATA_INVENTORY = {
   CalendarEvent: { scope: 'owner', export: 'data' },
   Note: { scope: 'owner', export: 'data' },
   ShoppingItem: { scope: 'owner', export: 'data' },
+  PersonalFact: { scope: 'owner', export: 'data' },
   PendingAction: { scope: 'conversation', export: 'data' },
   JarvisLog: { scope: 'conversation', export: 'data' },
   GoogleOAuthToken: { scope: 'integration', export: 'excluded' },

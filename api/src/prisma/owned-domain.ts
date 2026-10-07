@@ -1,6 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 
-const ownedModels = new Set(['Todo', 'Note', 'ShoppingItem', 'CalendarEvent']);
+const ownedModels = new Set([
+  'Todo',
+  'Note',
+  'ShoppingItem',
+  'CalendarEvent',
+  'PersonalFact',
+]);
 const filteredOperations = new Set([
   'findUnique',
   'findUniqueOrThrow',
@@ -35,7 +41,7 @@ function ownedWrite(value: unknown, ownerId: string) {
   return { ...data, ownerId };
 }
 
-/** Scope the four account-level domain delegates, including previews and undo.
+/** Scope the account-level domain delegates, including previews and undo.
  * The caller obtains ownerId from a server-owned Conversation, never request data.
  * Other delegates retain their explicit conversation predicates.
  */

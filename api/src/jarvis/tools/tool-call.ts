@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 
 import { GMAIL_CATEGORIES } from '../../gmail/gmail-category';
 import type { ToolCall } from './tools';
+import { normalizeFactText } from '../../memory/personal-memory';
 
 type ToolOnly = Extract<ToolCall, { type: 'tool' }>;
 type ToolName = ToolOnly['name'];
@@ -726,123 +727,48 @@ export function parseToolCall(jsonText: string): ToolCall | null {
   }
 
   if (name === 'memory.list') {
-    const layer = args.layer;
-    if (
-      layer !== undefined &&
-      !isOneOf(layer, [
-        'identity',
-        'preference',
-        'project',
-        'relationship',
-        'workflow',
-        'all',
-      ] as const)
-    ) {
-      return null;
-    }
     const limit = args.limit;
     if (
       limit !== undefined &&
       (typeof limit !== 'number' ||
         !Number.isInteger(limit) ||
         limit < 1 ||
-        limit > 60)
+        limit > 40)
     ) {
       return null;
     }
     return {
       type: 'tool',
       name,
-      args: {
-        ...(layer ? { layer } : {}),
-        ...(typeof limit === 'number' ? { limit } : {}),
-      },
+      args: typeof limit === 'number' ? { limit } : {},
     };
   }
 
-  if (name === 'memory.set') {
-    if (
-      !isOneOf(args.layer, [
-        'identity',
-        'preference',
-        'project',
-        'relationship',
-        'workflow',
-      ] as const)
-    ) {
-      return null;
-    }
-    if (typeof args.key !== 'string' || typeof args.label !== 'string')
-      return null;
-    if (typeof args.value !== 'string') return null;
-    const key = args.key.trim();
-    const label = args.label.trim();
-    const value = args.value.trim();
-    if (!key || !label || !value) return null;
-
-    const confidence = args.confidence;
-    if (
-      confidence !== undefined &&
-      (typeof confidence !== 'number' ||
-        !Number.isFinite(confidence) ||
-        confidence < 0 ||
-        confidence > 1)
-    ) {
-      return null;
-    }
-    const source = args.source;
-    if (source !== undefined && typeof source !== 'string') return null;
-    const sourceClean =
-      typeof source === 'string' && source.trim() ? source.trim() : undefined;
-
-    return {
-      type: 'tool',
-      name,
-      args: {
-        layer: args.layer,
-        key,
-        label,
-        value,
-        ...(typeof confidence === 'number' ? { confidence } : {}),
-        ...(sourceClean ? { source: sourceClean } : {}),
-      },
-    };
+  if (name === 'memory.remember') {
+    const text = normalizeFactText(args.text);
+    return text ? { type: 'tool', name, args: { text } } : null;
   }
 
   if (name === 'memory.forget') {
+    if (typeof args.id === 'string' || typeof args.text === 'string') {
+      if (typeof args.id !== 'string' || typeof args.text !== 'string')
+        return null;
+      const id = args.id.trim();
+      const text = args.text;
+      return id && text ? { type: 'tool', name, args: { id, text } } : null;
+    }
     const hasRef =
       typeof args.ref === 'number' &&
       Number.isInteger(args.ref) &&
       args.ref >= 1 &&
       args.ref <= 200;
-    const layer = args.layer;
-    const hasLayerKey =
-      isOneOf(layer, [
-        'identity',
-        'preference',
-        'project',
-        'relationship',
-        'workflow',
-      ] as const) &&
-      typeof args.key === 'string' &&
-      args.key.trim().length > 0;
     const hasQuery =
       typeof args.query === 'string' && args.query.trim().length > 0;
-    if (!hasRef && !hasLayerKey && !hasQuery) return null;
-
-    return {
-      type: 'tool',
-      name,
-      args: {
-        ...(hasRef && typeof args.ref === 'number' ? { ref: args.ref } : {}),
-        ...(hasLayerKey && typeof args.key === 'string'
-          ? { layer, key: args.key.trim() }
-          : {}),
-        ...(hasQuery && typeof args.query === 'string'
-          ? { query: args.query.trim() }
-          : {}),
-      },
-    };
+    if (hasRef && typeof args.ref === 'number')
+      return { type: 'tool', name, args: { ref: args.ref } };
+    if (hasQuery && typeof args.query === 'string')
+      return { type: 'tool', name, args: { query: args.query.trim() } };
+    return null;
   }
 
   if (name === 'goal.create') {

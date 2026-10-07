@@ -187,26 +187,18 @@ export function buildJarvisBaseSystemPrompt() {
     {
       title: 'Mémoire',
       examples: [
+        { type: 'tool', name: 'memory.list', args: { limit: 20 } },
         {
           type: 'tool',
-          name: 'memory.list',
-          args: { layer: 'all', limit: 20 },
-        },
-        {
-          type: 'tool',
-          name: 'memory.set',
-          args: {
-            layer: 'project',
-            key: 'primary_project',
-            label: 'Projet principal',
-            value: 'Mark 42',
-          },
+          name: 'memory.remember',
+          args: { text: 'Mon projet principal s’appelle Mark 42' },
         },
         { type: 'tool', name: 'memory.forget', args: { ref: 2 } },
       ],
       notes: [
-        'Utilise memory.list quand l’utilisateur demande "qu’est-ce que tu sais sur moi" / "montre ta mémoire".',
-        'Utilise memory.forget pour oublier un fait (ref ou layer+key).',
+        'Utilise memory.remember uniquement quand l’utilisateur demande explicitement de retenir quelque chose ("retiens que…"). Ne déduis jamais un fait à retenir de toi-même.',
+        'Utilise memory.list quand l’utilisateur demande "que sais-tu de moi" / "montre ta mémoire".',
+        'Utilise memory.forget pour oublier un fait (ref #N issu de memory.list, ou query).',
       ],
     },
     {

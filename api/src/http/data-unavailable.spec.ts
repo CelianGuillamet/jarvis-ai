@@ -38,8 +38,6 @@ describe('Unavailable reads are not empty success results', () => {
       audit: () => new JarvisAuditService(prisma, config).listRecent('owned'),
       missions: () => new JarvisMissionService(prisma).list('owned'),
       workflows: () => new JarvisWorkflowService(prisma, config).list('owned'),
-      memory: () => memory.listFacts('owned'),
-      search: () => memory.searchFacts('owned', 'query'),
       contacts: () => new JarvisContactService(prisma).list('owned'),
       contactSearch: () =>
         new JarvisContactService(prisma).find('owned', 'query'),

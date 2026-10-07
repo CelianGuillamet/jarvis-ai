@@ -40,6 +40,19 @@ model Note {
   @@index([ownerId, createdAt])
 }
 
+// Facts the owner explicitly approved; never inferred from conversation text.
+model PersonalFact {
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  id        String   @id @default(uuid())
+  text      String
+  origin    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId, updatedAt])
+}
+
 model ShoppingItem {
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -493,6 +506,7 @@ model User {
   notes         Note[]
   shoppingItems ShoppingItem[]
   calendarEvents CalendarEvent[]
+  personalFacts PersonalFact[]
   conversations Conversation[]
   integrations  IntegrationAccount[]
   googleOAuthStates GoogleOAuthState[]

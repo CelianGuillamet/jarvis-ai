@@ -3,6 +3,9 @@ import {
   AccountErasureRequestSchema,
   AccountErasureStatusSchema,
   PrivacyDisclosureSchema,
+  PersonalFactInputSchema,
+  PersonalFactListSchema,
+  PersonalFactSchema,
   ActivityResponseSchema,
   InboxReplyDraftResponseSchema,
   InboxReplyDraftSaveRequestSchema,
@@ -89,6 +92,16 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
       headers: { "x-erasure-receipt": checked(receipt, AccountErasureReceiptSchema) }, ...(signal ? { signal } : {}),
     }), AccountErasureStatusSchema),
     privacy: () => validated(http.get<unknown>("/account/privacy"), PrivacyDisclosureSchema),
+    personalFacts: () => validated(http.get<unknown>("/account/memory"), PersonalFactListSchema),
+    addPersonalFact: (text: string) =>
+      validated(http.post<unknown>("/account/memory", checked({ text }, PersonalFactInputSchema)), PersonalFactSchema),
+    updatePersonalFact: (id: string, text: string) =>
+      validated(
+        http.post<unknown>(`/account/memory/${encodeURIComponent(id)}`, checked({ text }, PersonalFactInputSchema)),
+        PersonalFactSchema,
+      ),
+    forgetPersonalFact: (id: string) =>
+      validated(http.post<unknown>(`/account/memory/${encodeURIComponent(id)}/forget`), PersonalFactListSchema),
     inboxReplyDraft: (sessionId: string, messageId: string) =>
       validated(
         http.get<unknown>(

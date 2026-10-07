@@ -12,6 +12,12 @@ import {
   DEFERRED_CAPABILITY_MESSAGE,
 } from './beta-capabilities';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  MAX_FACTS_PER_OWNER,
+  MAX_FACT_LENGTH,
+  normalizeFactText,
+  similarFacts,
+} from '../../memory/personal-memory';
 import type {
   CalendarProvider,
   CalendarEventItem,
@@ -57,10 +63,7 @@ import { JarvisReminderService } from '../services/jarvis-reminder.service';
 import { JarvisHabitService } from '../services/jarvis-habit.service';
 import { JarvisContactService } from '../services/jarvis-contact.service';
 import { JarvisFinanceService } from '../services/jarvis-finance.service';
-import {
-  JarvisMemoryService,
-  type MemoryLayer,
-} from '../services/jarvis-memory.service';
+import { JarvisMemoryService } from '../services/jarvis-memory.service';
 
 export type ToolCall =
   | { type: 'tool'; name: 'todo.add'; args: { text: string } }
@@ -254,24 +257,18 @@ export type ToolCall =
   | {
       type: 'tool';
       name: 'memory.list';
-      args: { layer?: MemoryLayer | 'all'; limit?: number };
+      args: { limit?: number };
     }
   | {
       type: 'tool';
-      name: 'memory.set';
-      args: {
-        layer: MemoryLayer;
-        key: string;
-        label: string;
-        value: string;
-        confidence?: number;
-        source?: string;
-      };
+      name: 'memory.remember';
+      args: { text: string };
     }
   | {
       type: 'tool';
       name: 'memory.forget';
-      args: { ref?: number; layer?: MemoryLayer; key?: string; query?: string };
+      // ref/query are resolved to the frozen id/text pair before confirmation.
+      args: { ref?: number; query?: string; id?: string; text?: string };
     }
   // ===== GOALS =====
   | {
@@ -549,6 +546,7 @@ export type ToolContext = {
     | 'todo'
     | 'note'
     | 'shoppingItem'
+    | 'personalFact'
     | 'jarvisActionEvent'
     | 'jarvisMission'
     | 'jarvisWorkflowMemory'
@@ -630,15 +628,7 @@ type LastNoteList = {
   createdAt: number;
 };
 
-type MemoryListItem = {
-  layer: MemoryLayer;
-  key: string;
-  label: string;
-  value: string;
-  confidence: number;
-  source: string;
-  updatedAt: string;
-};
+type MemoryListItem = { id: string; text: string };
 
 type LastMemoryList = {
   items: MemoryListItem[];
@@ -1101,6 +1091,57 @@ function removeShoppingFromCache(sessionId: string, id: string) {
   row.createdAt = Date.now();
 }
 
+export function dropFactFromMemoryLists(factId: string) {
+  for (const [sessionId, row] of LAST_MEMORY_LIST) {
+    if (row.items.some((item) => item.id === factId))
+      LAST_MEMORY_LIST.delete(sessionId);
+  }
+}
+
+export async function resolveMemoryForget(
+  ctx: Pick<ToolContext, 'prisma' | 'sessionId'>,
+  args: { ref?: number; query?: string },
+): Promise<{ id: string; text: string } | { error: string }> {
+  let id: string | undefined;
+  if (typeof args.ref === 'number') {
+    const list = getLastMemoryList(ctx.sessionId);
+    if (!list.length)
+      return {
+        error:
+          'Je n’ai pas de liste récente. Demandez « Que sais-tu de moi ? » puis « Oublie #N ».',
+      };
+    id = list[args.ref - 1]?.id;
+    if (!id)
+      return {
+        error: `Numéro invalide (#${args.ref}). Choisissez entre 1 et ${list.length}.`,
+      };
+  } else {
+    const query = (args.query ?? '').trim().toLowerCase();
+    if (!query) return { error: 'Précisez le fait à oublier.' };
+    const facts = await ctx.prisma.personalFact.findMany({
+      select: { id: true, text: true },
+      take: MAX_FACTS_PER_OWNER,
+    });
+    const matches = facts.filter((fact) =>
+      fact.text.toLowerCase().includes(query),
+    );
+    if (matches.length !== 1)
+      return {
+        error: matches.length
+          ? 'Plusieurs faits correspondent. Demandez « Que sais-tu de moi ? » puis « Oublie #N ».'
+          : 'Aucun fait retenu ne correspond.',
+      };
+    id = matches[0].id;
+  }
+  const fact = await ctx.prisma.personalFact.findFirst({
+    where: { id },
+    select: { id: true, text: true },
+  });
+  return fact
+    ? { id: fact.id, text: fact.text }
+    : { error: 'Ce fait n’existe plus.' };
+}
+
 /** Also invalidates delayed tool resolutions, including nested calls. */
 export function clearLocalToolCaches(sessionId: string) {
   toolCacheFence.forget(sessionId);
@@ -1217,21 +1258,6 @@ function compactText(value: string, max = 260) {
   const clean = value.replace(/\s+/g, ' ').trim();
   if (clean.length <= max) return clean;
   return `${clean.slice(0, max - 1)}…`;
-}
-
-const MEMORY_LAYER_VALUES: MemoryLayer[] = [
-  'identity',
-  'preference',
-  'project',
-  'relationship',
-  'workflow',
-];
-
-function isMemoryLayer(value: unknown): value is MemoryLayer {
-  return (
-    typeof value === 'string' &&
-    MEMORY_LAYER_VALUES.includes(value as MemoryLayer)
-  );
 }
 
 function formatCalendarEventPreview(event: CalendarEventItem, tz: string) {
@@ -1628,6 +1654,37 @@ async function previewToolInContext(
 
       case 'note.delete': {
         return await previewNoteByQuery(call.args.query);
+      }
+
+      case 'memory.remember': {
+        const text = normalizeFactText(call.args.text);
+        if (!text) return null;
+        const close = similarFacts(
+          await prisma.personalFact.findMany({
+            select: {
+              id: true,
+              text: true,
+              origin: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+            take: MAX_FACTS_PER_OWNER,
+          }),
+          text,
+        );
+        return formatPreviewLines([
+          `Fait à retenir : « ${compactText(text, 200)} »`,
+          'Portée : votre compte. Vous pourrez le corriger ou l’oublier dans Réglages.',
+          close.length
+            ? `Faits proches déjà retenus (vérifiez qu’ils ne se contredisent pas) :\n${close.map((fact) => `- « ${compactText(fact.text, 160)} »`).join('\n')}`
+            : null,
+        ]);
+      }
+
+      case 'memory.forget': {
+        return call.args.text
+          ? `Fait à oublier : « ${compactText(call.args.text, 200)} »`
+          : null;
       }
 
       case 'mission.close': {
@@ -4730,159 +4787,59 @@ async function runToolInContext(
 
         // ===== MEMORY =====
         case 'memory.list': {
-          const layerRaw = call.args.layer;
           const limit = Math.min(Math.max(call.args.limit ?? 20, 1), 40);
-          if (
-            layerRaw !== undefined &&
-            layerRaw !== 'all' &&
-            !isMemoryLayer(layerRaw)
-          ) {
-            return `Couche mémoire invalide: "${String(layerRaw)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}, all.`;
-          }
-          const snapshot = await ctx.memory.getSnapshot(sessionId);
-          const layers =
-            layerRaw && layerRaw !== 'all' ? [layerRaw] : MEMORY_LAYER_VALUES;
-
-          const items = layers
-            .flatMap((layer) => snapshot.factsByLayer[layer])
-            .sort((a, b) =>
-              a.updatedAt < b.updatedAt
-                ? 1
-                : a.updatedAt > b.updatedAt
-                  ? -1
-                  : 0,
-            )
-            .slice(0, limit);
-
-          setLastMemoryList(sessionId, items);
-
-          if (!items.length) {
-            return 'Aucun fait en mémoire persistante pour le moment.';
-          }
-
-          const factsText = items
-            .map((fact, index) => {
-              const conf = Math.round((fact.confidence ?? 0) * 100);
-              const label = `${fact.label} = ${fact.value}`;
-              return `- #${index + 1} [${fact.layer}:${fact.key}] ${compactText(label, 180)} (${conf}%)`;
-            })
-            .join('\n');
-
-          const summaryText = snapshot.sessionSummary?.summary
-            ? `\n\nRésumé persistant:\n${snapshot.sessionSummary.summary}`
-            : '';
-
-          return `Mémoire Jarvis:\n${factsText}${summaryText}`;
+          const facts = await prisma.personalFact.findMany({
+            select: { id: true, text: true, origin: true, updatedAt: true },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+            take: limit,
+          });
+          setLastMemoryList(
+            sessionId,
+            facts.map(({ id, text }) => ({ id, text })),
+          );
+          if (!facts.length)
+            return 'Je n’ai encore retenu aucun fait vous concernant. Dites « Retiens que… » pour m’en proposer un.';
+          const lines = facts.map(
+            (fact, index) =>
+              `- #${index + 1} « ${compactText(fact.text, 200)} » (${fact.origin === 'chat' ? 'chat' : 'Réglages'}, ${fact.updatedAt.toISOString().slice(0, 10)})`,
+          );
+          return `Ce que vous m’avez demandé de retenir :\n${lines.join('\n')}\n\nCorrigez ou oubliez ces faits dans Réglages, ou dites « Oublie #N ».`;
         }
 
-        case 'memory.set': {
-          const layer = call.args.layer;
-          if (!isMemoryLayer(layer)) {
+        case 'memory.remember': {
+          const text = normalizeFactText(call.args.text);
+          if (!text)
             throw new CommandRejectedError(
-              `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`,
+              `Fait invalide : 1 à ${MAX_FACT_LENGTH} caractères, sans caractère de contrôle.`,
             );
-          }
-          const key = (call.args.key ?? '').trim();
-          const label = (call.args.label ?? '').trim();
-          const value = (call.args.value ?? '').trim();
-          if (!key || !label || !value) {
+          if ((await prisma.personalFact.count()) >= MAX_FACTS_PER_OWNER)
             throw new CommandRejectedError(
-              `Champs manquants. Requis: layer, key, label, value.`,
+              'La mémoire est pleine. Oubliez un fait avant d’en ajouter un autre.',
             );
-          }
-
-          const fact = await ctx.memory.upsertFact(sessionId, {
-            layer,
-            key,
-            label,
-            value,
-            confidence: call.args.confidence,
-            source: call.args.source,
+          await prisma.personalFact.create({
+            data: { ownerId: prisma.ownerId, text, origin: 'chat' },
+            select: { id: true },
           });
-
-          if (!fact)
-            throw new CommandRejectedError(
-              `Clé ou valeur mémoire invalide pour "${layer}:${key}".`,
-            );
-
-          return `OK. Mémoire mise à jour: [${fact.layer}:${fact.key}] ${fact.label} = ${fact.value}.`;
+          LAST_MEMORY_LIST.delete(sessionId);
+          return `C’est noté : « ${compactText(text, 200)} ».`;
         }
 
         case 'memory.forget': {
-          const ref =
-            typeof call.args.ref === 'number' && Number.isInteger(call.args.ref)
-              ? call.args.ref
-              : null;
-
-          if (ref !== null) {
-            const list = getLastMemoryList(sessionId);
-            if (!list.length) {
-              throw new CommandRejectedError(
-                `Je n’ai pas de liste récente de mémoire. Dis-moi "montre ma mémoire" puis utilise #N.`,
-              );
-            }
-            const idx = ref - 1;
-            if (idx < 0 || idx >= list.length) {
-              throw new CommandRejectedError(
-                `Numéro invalide (#${ref}). Donne-moi un numéro entre 1 et ${list.length}.`,
-              );
-            }
-            const target = list[idx];
-            const ok = await ctx.memory.forgetFact(sessionId, {
-              layer: target.layer,
-              key: target.key,
-            });
-            LAST_MEMORY_LIST.delete(sessionId);
-            return ok
-              ? `OK. Mémoire oubliée: [${target.layer}:${target.key}] ${target.label}.`
-              : `Aucune mémoire trouvée pour [${target.layer}:${target.key}].`;
-          }
-
-          if (call.args.layer && call.args.key) {
-            const layer = call.args.layer;
-            if (!isMemoryLayer(layer)) {
-              throw new CommandRejectedError(
-                `Couche mémoire invalide: "${String(layer)}". Valeurs: ${MEMORY_LAYER_VALUES.join(', ')}.`,
-              );
-            }
-            const key = (call.args.key ?? '').trim();
-            if (!key)
-              throw new CommandRejectedError(`Clé mémoire manquante (key).`);
-            const ok = await ctx.memory.forgetFact(sessionId, { layer, key });
-            LAST_MEMORY_LIST.delete(sessionId);
-            return ok
-              ? `OK. Mémoire oubliée: [${layer}:${key}].`
-              : `Aucune mémoire trouvée pour [${layer}:${key}].`;
-          }
-
-          const query = (call.args.query ?? '').trim();
-          if (query) {
-            const matches = await ctx.memory.searchFacts(sessionId, query, {
-              limit: 6,
-            });
-            if (!matches.length)
-              throw new CommandRejectedError(
-                `Aucune mémoire ne correspond à "${compactText(query, 80)}".`,
-              );
-            if (matches.length > 1) {
-              throw new CommandRejectedError(
-                `Plusieurs entrées correspondent à "${compactText(query, 80)}". Utilise "memory.list" puis "memory.forget" avec ref (#N).`,
-              );
-            }
-            const target = matches[0];
-            const ok = await ctx.memory.forgetFact(sessionId, {
-              layer: target.layer,
-              key: target.key,
-            });
-            LAST_MEMORY_LIST.delete(sessionId);
-            return ok
-              ? `OK. Mémoire oubliée: [${target.layer}:${target.key}] ${target.label}.`
-              : `Aucune mémoire trouvée pour [${target.layer}:${target.key}].`;
-          }
-
-          throw new CommandRejectedError(
-            `Précise ref (#N), ou layer+key, ou query.`,
-          );
+          const { id, text } = call.args;
+          if (!id || !text)
+            throw new CommandRejectedError(
+              'Propose à nouveau l’oubli pour le confirmer.',
+            );
+          const { count } = await prisma.personalFact.deleteMany({
+            where: { id, text },
+          });
+          LAST_MEMORY_LIST.delete(sessionId);
+          if (!count)
+            throw new CommandRejectedError(
+              'Ce fait a changé ou n’existe plus. Rien n’a été oublié.',
+              'NOT_FOUND',
+            );
+          return `C’est oublié : « ${compactText(text, 200)} ».`;
         }
 
         case 'mission.list': {

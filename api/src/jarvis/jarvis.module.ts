@@ -30,10 +30,13 @@ import { JarvisReminderService } from './services/jarvis-reminder.service';
 import { JarvisHabitService } from './services/jarvis-habit.service';
 import { JarvisContactService } from './services/jarvis-contact.service';
 import { JarvisFinanceService } from './services/jarvis-finance.service';
+import { PersonalMemoryService } from '../memory/personal-memory.service';
+import { PersonalMemoryController } from '../memory/personal-memory.controller';
 
 @Module({
   imports: [AuthModule, CommandJournalModule],
   providers: [
+    PersonalMemoryService,
     ActivityService,
     TodayReadService,
     TodayTargetService,
@@ -62,7 +65,7 @@ import { JarvisFinanceService } from './services/jarvis-finance.service';
     JarvisContactService,
     JarvisFinanceService,
   ],
-  controllers: [JarvisController, TodayController],
+  controllers: [JarvisController, TodayController, PersonalMemoryController],
   exports: [JarvisService],
 })
 export class JarvisModule {}

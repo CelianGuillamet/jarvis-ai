@@ -38,6 +38,39 @@ export const AccountPreferencesSchema = z
   })
   .strict();
 export type AccountPreferences = z.infer<typeof AccountPreferencesSchema>;
+export const PersonalFactTextSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(280)
+  .refine(
+    (value) =>
+      ![...value].some((char) => {
+        const code = char.charCodeAt(0);
+        return code < 32 || code === 127;
+      }),
+    {
+      message: 'Control characters are not allowed',
+    },
+  );
+export const PersonalFactInputSchema = z
+  .object({ text: PersonalFactTextSchema })
+  .strict();
+export type PersonalFactInput = z.infer<typeof PersonalFactInputSchema>;
+export const PersonalFactSchema = z
+  .object({
+    id: z.string().min(1),
+    text: z.string().min(1).max(280),
+    origin: z.enum(['chat', 'settings']),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .strict();
+export type PersonalFact = z.infer<typeof PersonalFactSchema>;
+export const PersonalFactListSchema = z
+  .object({ facts: z.array(PersonalFactSchema).max(200) })
+  .strict();
+export type PersonalFactList = z.infer<typeof PersonalFactListSchema>;
 export const AccountErasureReceiptSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const AccountErasureRequestSchema = z
   .object({
