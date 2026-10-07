@@ -39,7 +39,7 @@ const variants: Record<Variant, string> = {
   ghost:
     'bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground active:scale-[0.97]',
   danger:
-    'bg-red-500/15 text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/25 active:scale-[0.97]',
+    'bg-red-500/15 text-red-300 [.light_&]:text-red-800 ring-1 ring-red-500/30 hover:bg-red-500/25 active:scale-[0.97]',
 };
 
 const classes = computed(() =>

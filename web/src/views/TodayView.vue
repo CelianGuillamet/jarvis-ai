@@ -21,6 +21,7 @@ const conversationId = ref("");
 const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
+const readFailed = ref(false);
 const result = ref("");
 const taskOffset = ref(0);
 const noteOffset = ref(0);
@@ -54,11 +55,16 @@ const calendarLabels = {
   not_refreshed: "Actualisez pour consulter le calendrier.",
   available: "",
 };
+function describe(cause: unknown, fallback: string) {
+  if (cause instanceof TypeError) return "Connexion au serveur impossible.";
+  return cause instanceof Error ? cause.message : fallback;
+}
 async function load() {
   if (loading.value) return;
   const token = generation;
   loading.value = true;
   error.value = "";
+  readFailed.value = false;
   try {
     const [account, next] = await Promise.all([
       app.jarvis.account(),
@@ -76,11 +82,10 @@ async function load() {
     conversationId.value = next.conversationId;
     data.value = next;
   } catch (cause) {
-    if (token === generation)
-      error.value =
-        cause instanceof Error
-          ? cause.message
-          : "Les données sont indisponibles.";
+    if (token === generation) {
+      error.value = describe(cause, "Les données sont indisponibles.");
+      readFailed.value = true;
+    }
   } finally {
     if (token === generation) loading.value = false;
   }
@@ -92,6 +97,7 @@ async function save(mutation: TodayMutation) {
   const owner = ownerId.value;
   saving.value = true;
   error.value = "";
+  readFailed.value = false;
   result.value = "";
   try {
     mutation = TodayMutationSchema.parse(mutation);
@@ -112,7 +118,7 @@ async function save(mutation: TodayMutation) {
   } catch (cause) {
     if (token === generation)
       error.value =
-        (cause instanceof Error ? cause.message : "Résultat non confirmé.") +
+        describe(cause, "Résultat non confirmé.") +
         " Reprenez les mêmes valeurs pour vérifier cette action.";
     return false;
   } finally {
@@ -167,8 +173,8 @@ async function newIntent(kind: "task" | "note") {
       noteText.value = "";
     }
   } catch (cause) {
-    error.value =
-      cause instanceof Error ? cause.message : "Action précédente à vérifier.";
+    error.value = describe(cause, "Action précédente à vérifier.");
+    readFailed.value = false;
   }
 }
 async function page(kind: "task" | "note", delta: number) {
@@ -201,8 +207,15 @@ watch(
     loading.value = false;
     saving.value = false;
     error.value = "";
+    readFailed.value = false;
     result.value = "";
     void load();
+  },
+);
+watch(
+  () => app.apiUnavailable,
+  (unavailable) => {
+    if (!unavailable && readFailed.value) void load();
   },
 );
 onMounted(() => {

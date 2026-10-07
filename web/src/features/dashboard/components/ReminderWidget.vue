@@ -57,7 +57,7 @@ const sendAndNav = async (text: string) => {
       <BaseSkeleton class="h-10 w-3/4" />
     </div>
 
-    <div v-else-if="!sorted.length" class="py-4 text-center text-xs text-muted-foreground/40">
+    <div v-else-if="!sorted.length" class="py-4 text-center text-xs text-muted-foreground">
       Aucun rappel à venir. Tape "rappelle-moi de…"
     </div>
 

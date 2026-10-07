@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BaseBadge from '@/shared/ui/BaseBadge.vue';
 import BaseButton from '@/shared/ui/BaseButton.vue';
@@ -18,6 +18,19 @@ const app = useAppStore();
 const preferences = usePreferencesStore();
 const inbox = useInboxZeroStore();
 const status = useStatusStore();
+const messageDialog = ref<HTMLDialogElement | null>(null);
+let messageOpener: HTMLElement | null = null;
+
+watch(() => Boolean(inbox.messagePanel), async open => {
+  if (open) {
+    messageOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    if (inbox.messagePanel && messageDialog.value && !messageDialog.value.open) messageDialog.value.showModal();
+  } else {
+    if (messageOpener?.isConnected) messageOpener.focus();
+    messageOpener = null;
+  }
+}, { flush: 'post' });
 
 const gmailConnected = computed(
   () => status.snapshot?.integrations.gmailConnected ?? false,
@@ -57,6 +70,8 @@ const setStep = async (step: InboxZeroStep) => {
 
 const onKeydown = (event: KeyboardEvent) => {
   if (event.defaultPrevented) return;
+  // The native modal owns keyboard navigation and Escape while open.
+  if (inbox.messagePanel) return;
   const target = event.target instanceof Element ? event.target : null;
   const tag = (target?.tagName || '').toLowerCase();
   if (['input', 'textarea', 'select', 'button', 'a'].includes(tag) || target?.closest('button, a, [role=button]') || target?.closest('[contenteditable=true]')) return;
@@ -210,13 +225,14 @@ onBeforeUnmount(() => {
           type="button"
           class="group flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-left text-xs transition hover:bg-muted/40"
           :class="inbox.currentStep === s.step ? 'ring-1 ring-primary/20 bg-primary/10' : ''"
+          :aria-pressed="inbox.currentStep === s.step"
           @click="setStep(s.step)"
         >
           <span class="font-semibold">{{ s.label }}</span>
-          <span class="text-muted-foreground/60">{{ s.hint }}</span>
+          <span :class="inbox.currentStep === s.step ? 'text-foreground' : 'text-muted-foreground'">{{ s.hint }}</span>
           <span
             v-if="s.step !== 'done'"
-            class="ml-1 rounded-full border border-border/50 bg-background/40 px-2 py-0.5 text-[11px] text-muted-foreground/70"
+            class="ml-1 rounded-full border border-border/50 bg-background/40 px-2 py-0.5 text-[11px] text-muted-foreground"
           >
             {{ s.count }}
           </span>
@@ -234,19 +250,19 @@ onBeforeUnmount(() => {
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                class="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-1 text-xs text-muted-foreground/70 hover:bg-muted/40"
+                class="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted/40"
                 @click="inbox.selectAllVisible"
               >
                 Tout sélectionner (A)
               </button>
               <button
                 type="button"
-                class="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-1 text-xs text-muted-foreground/70 hover:bg-muted/40"
+                class="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted/40"
                 @click="inbox.clearSelection"
               >
                 Clear (Esc)
               </button>
-              <span class="text-xs text-muted-foreground/60">
+              <span class="text-xs text-muted-foreground">
                 {{ inbox.selectedCount }} sélectionné(s)
               </span>
             </div>
@@ -352,7 +368,7 @@ onBeforeUnmount(() => {
 
           <div v-else-if="!inbox.filteredItems.length" class="py-10 text-center">
             <p class="text-sm font-medium">Rien à traiter ici.</p>
-            <p class="mt-1 text-xs text-muted-foreground/60">
+            <p class="mt-1 text-xs text-muted-foreground">
               Passe à l’étape suivante ou relance un scan.
             </p>
           </div>
@@ -367,6 +383,7 @@ onBeforeUnmount(() => {
             >
               <input
                 type="checkbox"
+                :aria-label="`Sélectionner : ${item.subject}`"
                 class="mt-1 size-4 accent-primary"
                 :checked="inbox.isSelected(item.messageId)"
                 @click.stop
@@ -375,10 +392,15 @@ onBeforeUnmount(() => {
               <div class="min-w-0 flex-1">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
-                    <div class="truncate text-sm font-semibold tracking-tight">
+                    <button
+                      type="button"
+                      class="block max-w-full truncate text-left text-sm font-semibold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      :aria-label="`Ouvrir : ${item.subject}`"
+                      @click.stop="inbox.openMessage(item.messageId)"
+                    >
                       {{ item.subject }}
-                    </div>
-                    <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/70">
+                    </button>
+                    <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span class="truncate">{{ item.from }}</span>
                       <button
                         v-if="item.suggested"
@@ -388,16 +410,16 @@ onBeforeUnmount(() => {
                       >
                         {{ item.suggested.label }}
                       </button>
-                      <span v-if="item.reason" class="truncate text-muted-foreground/50">
+                      <span v-if="item.reason" class="truncate text-muted-foreground">
                         {{ item.reason }}
                       </span>
                     </div>
                   </div>
-                  <div class="shrink-0 text-[11px] text-muted-foreground/60">
+                  <div class="shrink-0 text-[11px] text-muted-foreground">
                     {{ preferences.formatDate(item.date) }}
                   </div>
                 </div>
-                <div class="mt-2 truncate text-xs text-muted-foreground/60">
+                <div class="mt-2 truncate text-xs text-muted-foreground">
                   {{ item.snippet }}
                 </div>
               </div>
@@ -409,10 +431,10 @@ onBeforeUnmount(() => {
       <!-- Sidebar -->
       <aside class="hidden space-y-3 lg:flex lg:flex-col">
         <BaseCard class="p-4">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Raccourcis clavier
           </p>
-          <div class="mt-3 space-y-1.5 text-xs text-muted-foreground/70">
+          <div class="mt-3 space-y-1.5 text-xs text-muted-foreground">
             <div><span class="font-mono">J/K</span> naviguer</div>
             <div><span class="font-mono">Entrée</span> ouvrir</div>
             <div><span class="font-mono">Espace</span> sélectionner</div>
@@ -425,7 +447,7 @@ onBeforeUnmount(() => {
         </BaseCard>
 
         <BaseCard class="min-h-0 flex-1 overflow-hidden p-4">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Historique
           </p>
           <div class="mt-3 min-h-0 space-y-2 overflow-y-auto pr-1">
@@ -436,7 +458,7 @@ onBeforeUnmount(() => {
             >
               <div class="flex items-center justify-between gap-2">
                 <span class="font-medium">{{ a.actionType }}</span>
-                <span class="text-[11px] text-muted-foreground/60">
+                <span class="text-[11px] text-muted-foreground">
                   {{ preferences.formatDate(a.createdAt, true) }}
                 </span>
               </div>
@@ -447,7 +469,7 @@ onBeforeUnmount(() => {
             </div>
             <div
               v-if="!inbox.recentActions.length"
-              class="py-4 text-center text-xs text-muted-foreground/50"
+              class="py-4 text-center text-xs text-muted-foreground"
             >
               Aucun événement
             </div>
@@ -457,24 +479,27 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Message panel -->
-    <div
+    <dialog
       v-if="inbox.messagePanel"
-      class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-3"
+      ref="messageDialog"
+      aria-label="Message et réponse"
+      class="m-auto max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] max-w-3xl overflow-auto bg-transparent p-0 text-foreground backdrop:bg-black/70"
+      @cancel.prevent="inbox.closeMessage"
       @click.self="inbox.closeMessage"
     >
       <BaseCard class="w-full max-w-3xl overflow-hidden">
-	        <div class="flex items-start justify-between gap-3 border-b border-border/40 bg-background/30 px-5 py-4">
+	        <div class="flex flex-col items-start justify-between gap-3 border-b border-border/40 bg-background/30 px-5 py-4 sm:flex-row">
 	          <div class="min-w-0">
 	            <div class="truncate text-sm font-semibold tracking-tight">
 	              {{ inbox.messagePanel.message.subject }}
 	            </div>
-	            <div class="mt-1 text-xs text-muted-foreground/70">
+	            <div class="mt-1 text-xs text-muted-foreground">
 	              <span class="font-medium">{{ inbox.messagePanel.message.from }}</span>
-	              <span class="mx-2 text-muted-foreground/40">·</span>
+	              <span class="mx-2 text-muted-foreground">·</span>
 	              {{ preferences.formatDate(inbox.messagePanel.message.date) }}
 	            </div>
 	          </div>
-	          <div class="flex shrink-0 flex-wrap items-center gap-2">
+	          <div class="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">
 	            <BaseButton
 	              variant="secondary"
 	              size="sm"
@@ -505,16 +530,16 @@ onBeforeUnmount(() => {
 
         <div class="grid gap-3 p-5 lg:grid-cols-[1fr_320px]">
           <div class="min-h-0">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Contenu
             </p>
-            <pre class="mt-2 max-h-[52dvh] overflow-auto whitespace-pre-wrap rounded-xl border border-border/40 bg-muted/10 p-3 text-xs text-muted-foreground/80">{{ inbox.messagePanel.message.bodyText }}</pre>
+            <pre class="mt-2 max-h-[52dvh] overflow-auto whitespace-pre-wrap rounded-xl border border-border/40 bg-muted/10 p-3 text-xs text-muted-foreground">{{ inbox.messagePanel.message.bodyText }}</pre>
           </div>
 
           <div class="space-y-3">
             <BaseCard class="p-4">
               <div class="flex items-center justify-between gap-2">
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Réponse
                 </p>
                 <BaseButton
@@ -557,7 +582,7 @@ onBeforeUnmount(() => {
             </BaseCard>
 
             <BaseCard class="p-4">
-              <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Planifier
               </p>
               <div class="mt-3 space-y-2">
@@ -587,6 +612,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </BaseCard>
-    </div>
+    </dialog>
   </section>
 </template>

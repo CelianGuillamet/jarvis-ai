@@ -43,7 +43,7 @@ const logHabit = (habit: HabitRecord) => {
       <BaseSkeleton class="h-10 w-full" />
     </div>
 
-    <div v-else-if="!habits.length" class="py-4 text-center text-xs text-muted-foreground/40">
+    <div v-else-if="!habits.length" class="py-4 text-center text-xs text-muted-foreground">
       Aucune habitude. Tape "crée une habitude sport quotidien".
     </div>
 

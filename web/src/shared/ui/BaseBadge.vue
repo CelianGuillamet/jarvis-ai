@@ -17,9 +17,9 @@ const base =
 
 const tones: Record<Tone, string> = {
   default: 'border-border/60 bg-muted/50 text-foreground/80',
-  ok: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
-  warn: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
-  critical: 'border-red-500/25 bg-red-500/10 text-red-300',
+  ok: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300 [.light_&]:text-emerald-800',
+  warn: 'border-amber-500/25 bg-amber-500/10 text-amber-300 [.light_&]:text-amber-800',
+  critical: 'border-red-500/25 bg-red-500/10 text-red-300 [.light_&]:text-red-800',
   info: 'border-primary/25 bg-primary/10 text-primary',
   muted: 'border-transparent bg-muted/40 text-muted-foreground',
 };

@@ -177,11 +177,11 @@ const connectGoogle = () => {
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
           <p
-            class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50"
+            class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
           >
             Intégration Google
           </p>
-          <p class="mt-1 text-xs text-muted-foreground/60">
+          <p class="mt-1 text-xs text-muted-foreground">
             Autorisez séparément Gmail et Google Agenda pour utiliser ces
             services. Vous pouvez retirer cet accès à tout moment ; vos tâches
             locales restent disponibles.
@@ -218,7 +218,7 @@ const connectGoogle = () => {
             </BaseBadge>
           </div>
         </div>
-        <div class="flex shrink-0 gap-2">
+        <div class="flex flex-wrap gap-2">
           <BaseButton
             variant="secondary"
             size="sm"

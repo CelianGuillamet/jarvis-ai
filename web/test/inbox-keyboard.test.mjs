@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { loadAccountComponents } from './helpers/components.mjs';
 const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'https://app.example.test' });
+// JSDOM cannot render the browser top layer; browser checks cover focus trapping.
+dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
 for (const key of ['window','document','localStorage','Element','HTMLElement','SVGElement','HTMLInputElement','HTMLTextAreaElement','Document','ShadowRoot','Event']) globalThis[key] = dom.window[key];
 const { createApp, nextTick } = await import('vue');
 const { createPinia, setActivePinia } = await import('pinia');
@@ -19,7 +21,15 @@ test('keyboard selects the focused item without stealing native button or text i
   inbox.loadSession = async () => {};
   const app = createApp(modules.InboxZeroView); app.use(pinia); app.mount('#root');
   try {
-    await settle(); inbox.setCursor('one');
+    await settle();
+    assert.equal(document.querySelector('input[type="checkbox"]').getAttribute('aria-label'), 'Sélectionner : one');
+    const opener = document.querySelector('button[aria-label="Ouvrir : one"]');
+    assert.ok(opener);
+    const opened = [];
+    inbox.openMessage = async id => { opened.push(id); };
+    opener.click(); await settle();
+    assert.deepEqual(opened, ['one']);
+    inbox.setCursor('one');
     dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key:'j', bubbles:true }));
     assert.equal(inbox.cursorId,'two');
     dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key:' ', bubbles:true }));
@@ -58,6 +68,8 @@ test('reviews recipient and exact text, invalidates edits, and restores draft af
     assert.ok(opened.includes('/auth/google'));
     status.snapshot = { integrations:{ gmailConnected:true } };
     await inbox.openMessage(message.id); await settle();
+    assert.equal(document.querySelector('dialog').open, true);
+    assert.equal(document.querySelector('dialog').getAttribute('aria-label'), 'Message et réponse');
     assert.equal(document.querySelector('textarea').value,'Restored reply');
     button('Vérifier la réponse').click(); await settle();
     assert.equal(document.querySelectorAll('[aria-label="Revue avant envoi"]').length,1);
@@ -71,5 +83,12 @@ test('reviews recipient and exact text, invalidates edits, and restores draft af
     assert.equal(sent.length,1); assert.equal(sent[0].replyText,'Edited after review');
     assert.deepEqual(sent[0].reviewedReply,{ to:'sender@example.invalid',subject:'Re: Question' });
     assert.equal(inbox.messagePanel,null);
+    const opener = document.querySelector('button'); opener.focus();
+    await inbox.openMessage(message.id); await settle();
+    document.querySelector('textarea').focus();
+    document.querySelector('dialog').dispatchEvent(new dom.window.Event('cancel', { cancelable:true }));
+    await settle();
+    assert.equal(inbox.messagePanel,null);
+    assert.equal(document.activeElement,opener);
   } finally { app.unmount(); dom.window.open=originalOpen; }
 });

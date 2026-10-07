@@ -22,7 +22,8 @@ const scrollToBottom = async () => {
   await nextTick();
   const el = listRef.value;
   if (!el) return;
-  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
 };
 
 const onScroll = () => {
@@ -192,7 +193,7 @@ const examplePrompts = [
       <aside class="hidden space-y-3 lg:flex lg:flex-col">
         <!-- Quick actions -->
         <BaseCard class="p-4">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Actions rapides
           </p>
           <div v-if="status.busy && !status.snapshot" class="mt-3 space-y-2">
@@ -219,7 +220,7 @@ const examplePrompts = [
             </button>
             <div
               v-if="!(status.snapshot?.quickActions?.length)"
-              class="py-2 text-center text-xs text-muted-foreground/50"
+              class="py-2 text-center text-xs text-muted-foreground"
             >
               Aucune action disponible
             </div>
@@ -228,7 +229,7 @@ const examplePrompts = [
 
         <!-- Suggestions rapides -->
         <BaseCard class="p-4">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Raccourcis
           </p>
           <div class="mt-3 flex flex-wrap gap-1.5">

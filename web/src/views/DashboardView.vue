@@ -137,7 +137,7 @@ const metricConfigs: MetricConfig[] = [
             <p class="text-[11px] font-medium text-muted-foreground/60">Prochain rendez-vous</p>
             <p
               class="mt-1 font-semibold"
-              :class="status.snapshot?.focus.nextEvent ? 'text-foreground' : 'text-muted-foreground/40'"
+              :class="status.snapshot?.focus.nextEvent ? 'text-foreground' : 'text-muted-foreground'"
             >
               {{ status.snapshot?.focus.nextEvent?.title ?? '—' }}
             </p>
@@ -151,7 +151,7 @@ const metricConfigs: MetricConfig[] = [
             <p class="text-[11px] font-medium text-muted-foreground/60">Mission active</p>
             <p
               class="mt-1 font-semibold"
-              :class="status.snapshot?.focus.activeMission ? 'text-foreground' : 'text-muted-foreground/40'"
+              :class="status.snapshot?.focus.activeMission ? 'text-foreground' : 'text-muted-foreground'"
             >
               {{ status.snapshot?.focus.activeMission?.objective ?? '—' }}
             </p>
@@ -165,7 +165,7 @@ const metricConfigs: MetricConfig[] = [
             <p class="text-[11px] font-medium text-muted-foreground/60">Email prioritaire</p>
             <p
               class="mt-1 font-semibold"
-              :class="status.snapshot?.focus.topUnreadEmail ? 'text-foreground' : 'text-muted-foreground/40'"
+              :class="status.snapshot?.focus.topUnreadEmail ? 'text-foreground' : 'text-muted-foreground'"
             >
               {{ status.snapshot?.focus.topUnreadEmail?.subject ?? '—' }}
             </p>
@@ -241,7 +241,7 @@ const metricConfigs: MetricConfig[] = [
             </button>
             <div
               v-if="!(status.snapshot?.quickActions?.length)"
-              class="py-4 text-center text-xs text-muted-foreground/40"
+              class="py-4 text-center text-xs text-muted-foreground"
             >
               Aucune action disponible
             </div>

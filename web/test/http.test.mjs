@@ -68,4 +68,18 @@ test('caller cancellation is preserved rather than reported as a timeout', async
     throw new DOMException('Stopped', 'AbortError');
   };
   await assert.rejects(client.get('/chat', { signal: controller.signal }), error => error.name === 'AbortError' && !(error instanceof TimeoutError));
+  assert.deepEqual(events, []);
+});
+
+test('network failure emits unavailability without retrying a mutation, then permits explicit recovery', async () => {
+  let calls = 0;
+  const failure = new TypeError('Failed to fetch');
+  globalThis.fetch = async () => { calls++; throw failure; };
+  await assert.rejects(client.post('/today/mutations', { requestId:'fixture-request' }), error => error === failure);
+  assert.equal(calls, 1, 'An uncertain mutation must never be replayed by transport');
+  assert.deepEqual(events, ['jarvis:api-unavailable']);
+  globalThis.fetch = async () => { calls++; return new Response('{"restored":true}'); };
+  assert.deepEqual(await client.get('/account/me'), { restored:true });
+  assert.equal(calls, 2);
+  assert.deepEqual(events, ['jarvis:api-unavailable']);
 });
