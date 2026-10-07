@@ -2,6 +2,8 @@ import * as toolCaches from '../tools/tools';
 import { InvalidModelResponseError } from '../providers/model-response';
 import { JarvisStatusSnapshotSchema } from '../../contracts/v1';
 import { runTool } from '../tools/tools';
+import { DisabledWebProvider } from '../providers/web.provider';
+import { DefaultWeatherProvider } from '../providers/weather.provider';
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
 import type { CommandExecution } from '../../commands/command-execution.service';
 import { executeWithPolicy } from '../../commands/execution-policy';
@@ -411,8 +413,10 @@ function makeService(options: ServiceOptions = {}) {
     {} as ServiceDependencies[27],
     {} as ServiceDependencies[28],
     personalMemory as unknown as ServiceDependencies[29],
+    { providerName: 'ollama', chat: llmChat },
+    new DisabledWebProvider(),
+    new DefaultWeatherProvider(),
   );
-  jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 
   return {
     service,

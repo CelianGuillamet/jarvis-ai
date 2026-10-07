@@ -16,6 +16,8 @@ class OpenAIRequestError extends Error {
 }
 
 export class OpenAIProvider implements LLMProvider {
+  readonly providerName = 'openai';
+
   constructor(
     private readonly apiKey: string,
     private readonly primaryModel = process.env.OPENAI_MODEL_PRIMARY ||

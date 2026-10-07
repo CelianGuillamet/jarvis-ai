@@ -1,4 +1,3 @@
-import { selectedModelProvider } from '../providers/model-selection';
 import { PrivateCacheFence } from './private-cache-fence';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
@@ -26,16 +25,13 @@ import { DateTime } from 'luxon';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import type { LLMProvider } from '../providers/llm.provider';
-import { OllamaProvider } from '../providers/ollama.provider';
-import { OpenAIProvider } from '../providers/openai.provider';
 import {
-  DisabledWebProvider,
-  type WebProvider,
-} from '../providers/web.provider';
-import {
-  DefaultWeatherProvider,
-  type WeatherProvider,
-} from '../providers/weather.provider';
+  LLM_PROVIDER,
+  WEATHER_PROVIDER,
+  WEB_PROVIDER,
+} from '../providers/provider-tokens';
+import { type WebProvider } from '../providers/web.provider';
+import { type WeatherProvider } from '../providers/weather.provider';
 import {
   buildToolExecutionPlan,
   type DecisionConfidence,
@@ -450,9 +446,6 @@ function parseJarvisAction(jsonText: string): JarvisAction | null {
 @Injectable()
 export class JarvisService {
   private readonly logger = new Logger(JarvisService.name);
-  private readonly llm: LLMProvider;
-  private readonly web: WebProvider;
-  private readonly weather: WeatherProvider;
   private readonly simulation: boolean;
   private readonly tz = 'Europe/Paris';
   private readonly allowDefaultSession: boolean;
@@ -511,6 +504,9 @@ export class JarvisService {
     private readonly todayCommands: TodayCommandService,
     private readonly todayTargets: TodayTargetService,
     private readonly personalMemory: PersonalMemoryService,
+    @Inject(LLM_PROVIDER) private readonly llm: LLMProvider,
+    @Inject(WEB_PROVIDER) private readonly web: WebProvider,
+    @Inject(WEATHER_PROVIDER) private readonly weather: WeatherProvider,
   ) {
     this.simulation = configBool(this.config.get<string>('SIMULATION'), true);
     this.allowDefaultSession = configBool(
@@ -597,52 +593,6 @@ export class JarvisService {
       Number.isFinite(autoOpenCharsRaw) && autoOpenCharsRaw >= 300
         ? Math.min(8_000, Math.floor(autoOpenCharsRaw))
         : 2_200;
-
-    const llmProvider = (
-      this.config.get<string>('LLM_PROVIDER') || ''
-    ).toLowerCase();
-    const openAiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
-    const shouldUseOpenAi =
-      selectedModelProvider(llmProvider, openAiKey) === 'openai';
-
-    if (shouldUseOpenAi && openAiKey) {
-      this.llm = new OpenAIProvider(
-        openAiKey,
-        this.config.get<string>('OPENAI_MODEL_PRIMARY') || 'gpt-5-nano',
-        this.config.get<string>('OPENAI_MODEL_FALLBACK') || 'gpt-5-mini',
-        this.config.get<string>('OPENAI_BASE_URL') ||
-          'https://api.openai.com/v1',
-        Number(this.config.get<string>('OPENAI_TIMEOUT_MS') || 30_000),
-      );
-      this.logger.log(
-        `LLM provider: openai (${this.config.get<string>('OPENAI_MODEL_PRIMARY') || 'gpt-5-nano'} -> ${this.config.get<string>('OPENAI_MODEL_FALLBACK') || 'gpt-5-mini'})`,
-      );
-    } else {
-      if (llmProvider === 'openai' && !openAiKey) {
-        this.logger.warn(
-          'LLM_PROVIDER=openai mais OPENAI_API_KEY est vide. Fallback vers Ollama.',
-        );
-      }
-      this.llm = new OllamaProvider(
-        this.config.get('OLLAMA_URL') || 'http://localhost:11434',
-        this.config.get('OLLAMA_MODEL') || 'llama3.1:latest',
-      );
-      this.logger.log(
-        `LLM provider: ollama (${this.config.get('OLLAMA_MODEL') || 'llama3.1:latest'})`,
-      );
-    }
-
-    this.web = new DisabledWebProvider();
-    this.logger.log(`Web provider: ${this.web.name}`);
-
-    this.weather = new DefaultWeatherProvider(
-      this.config.get<string>('WEATHER_GEO_BASE_URL') ||
-        'https://geocoding-api.open-meteo.com',
-      this.config.get<string>('WEATHER_BASE_URL') ||
-        'https://api.open-meteo.com',
-      Number(this.config.get<string>('WEATHER_TIMEOUT_MS') || 6_000),
-    );
-    this.logger.log(`Weather provider: ${this.weather.name}`);
   }
 
   private readonly baseSystemPrompt = buildJarvisBaseSystemPrompt();
@@ -1296,8 +1246,6 @@ export class JarvisService {
   private llmProviderName() {
     const explicit = this.llm.providerName;
     if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
-    if (this.llm instanceof OpenAIProvider) return 'openai';
-    if (this.llm instanceof OllamaProvider) return 'ollama';
     return this.llm.constructor?.name || 'unknown';
   }
 
