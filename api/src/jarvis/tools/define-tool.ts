@@ -30,8 +30,11 @@ export type ToolDefinition<N extends ToolName = ToolName> = {
   sideEffect: boolean;
   requires: ToolRequirement;
   deferred: boolean;
-  handler: (env: ToolHandlerEnv, call: CallOf<N>) => Promise<string>;
-  preview?: (env: ToolHandlerEnv, call: CallOf<N>) => Promise<string | null>;
+  handler: (env: ToolHandlerEnv, call: CallOf<N>) => string | Promise<string>;
+  preview?: (
+    env: ToolHandlerEnv,
+    call: CallOf<N>,
+  ) => string | null | Promise<string | null>;
 };
 
 export function defineTool<N extends ToolName>(
@@ -39,3 +42,7 @@ export function defineTool<N extends ToolName>(
 ): ToolDefinition<N> {
   return definition;
 }
+
+export type AnyToolDefinition = {
+  [N in ToolName]: ToolDefinition<N>;
+}[ToolName];
