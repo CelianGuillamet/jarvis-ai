@@ -47,6 +47,7 @@ import {
   clearLocalToolCaches,
   withLocalToolCaches,
   previewTool,
+  resolveMemoryForget,
   runTool,
   type ToolContext,
   ToolCall,
@@ -102,6 +103,7 @@ import {
 import { HumanProfileService } from './human-profile.service';
 import { JarvisAuditService } from './jarvis-audit.service';
 import { JarvisMemoryService } from './jarvis-memory.service';
+import { PersonalMemoryService } from '../../memory/personal-memory.service';
 import { JarvisMissionService } from './jarvis-mission.service';
 import { JarvisWorkflowService } from './jarvis-workflow.service';
 import { JarvisGoalService } from './jarvis-goal.service';
@@ -508,6 +510,7 @@ export class JarvisService {
     private readonly compensations: CommandCompensationService,
     private readonly todayCommands: TodayCommandService,
     private readonly todayTargets: TodayTargetService,
+    private readonly personalMemory: PersonalMemoryService,
   ) {
     this.simulation = configBool(this.config.get<string>('SIMULATION'), true);
     this.allowDefaultSession = configBool(
@@ -673,13 +676,23 @@ export class JarvisService {
     extraSystem?: string,
   ) {
     const recentMemory = this.buildRecentMemoryContext(sessionId);
-    const [worldModelContext, missionContext, workflowContext, googleToken] =
-      await Promise.all([
-        this.memoryStore.buildPromptContext(sessionId),
-        this.missionStore.buildPromptContext(sessionId),
-        this.workflowStore.buildPromptContext(sessionId),
-        this.googleTokenForConversation(sessionId),
-      ]);
+    const [
+      personalContext,
+      worldModelContext,
+      missionContext,
+      workflowContext,
+      googleToken,
+    ] = await Promise.all([
+      this.prisma
+        .forConversation(sessionId)
+        .then(({ ownerId }) =>
+          this.personalMemory.buildPromptContext(ownerId, userText),
+        ),
+      this.memoryStore.buildPromptContext(sessionId),
+      this.missionStore.buildPromptContext(sessionId),
+      this.workflowStore.buildPromptContext(sessionId),
+      this.googleTokenForConversation(sessionId),
+    ]);
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
     const capabilitiesContext = [
       `Capacités: todos/notes/courses=OK | web=${this.web.name} | weather=${this.weather.name} | Google=${googleStatus.connected ? 'connecté' : 'non connecté'} | simulation=${this.simulation ? 'true' : 'false'}.`,
@@ -691,6 +704,7 @@ export class JarvisService {
       this.baseSystemPrompt,
       this.nowContextLine(),
       capabilitiesContext,
+      personalContext,
       worldModelContext,
       missionContext,
       workflowContext,
@@ -2360,6 +2374,34 @@ export class JarvisService {
     const hashRefMatch = text.match(/#\s*(\d{1,3})\b/);
     const numRefMatch = text.match(/\b(?:numero|num|n)\s*(\d{1,3})\b/);
 
+    const rememberMatch = userText.match(
+      /^\s*(?:jarvis[,:\s-]*)?(?:retiens|souviens[- ]toi|rappelle[- ]toi|m[ée]morise)\s+(?:bien\s+)?(?:que|qu['’])\s*(.+)$/i,
+    );
+    if (rememberMatch?.[1]?.trim()) {
+      return {
+        type: 'tool',
+        name: 'memory.remember',
+        args: { text: rememberMatch[1].trim() },
+      };
+    }
+    if (
+      /\b(?:que sais[\s-]tu|qu est ce que tu sais|que connais[\s-]tu)\s+(?:de|sur)\s+moi\b/.test(
+        text,
+      )
+    ) {
+      return { type: 'tool', name: 'memory.list', args: { limit: 20 } };
+    }
+    const forgetThatMatch = userText.match(
+      /^\s*(?:jarvis[,:\s-]*)?oublie\s+(?:que|qu['’])\s*(.+)$/i,
+    );
+    if (forgetThatMatch?.[1]?.trim()) {
+      return {
+        type: 'tool',
+        name: 'memory.forget',
+        args: { query: forgetThatMatch[1].trim().replace(/[.!]+$/, '') },
+      };
+    }
+
     const listWords = ['liste', 'lister', 'montre', 'affiche', 'voir'];
     const allWords = ['tout', 'tous', 'toutes', 'all', 'entier', 'complet'];
     const deleteWords = [
@@ -2506,11 +2548,7 @@ export class JarvisService {
           'donne',
         ]));
     if (wantsMemoryList) {
-      return {
-        type: 'tool',
-        name: 'memory.list',
-        args: { layer: 'all', limit: 20 },
-      };
+      return { type: 'tool', name: 'memory.list', args: { limit: 20 } };
     }
 
     const wantsMemoryForget =
@@ -2535,10 +2573,14 @@ export class JarvisService {
         )
         .trim();
 
+      const ref = Number(hashRefMatch?.[1] ?? numRefMatch?.[1]);
       return {
         type: 'tool',
         name: 'memory.forget',
-        args: { query: query || userText.trim() },
+        args:
+          Number.isInteger(ref) && ref >= 1
+            ? { ref }
+            : { query: query || userText.trim() },
       };
     }
 
@@ -3448,7 +3490,6 @@ export class JarvisService {
     const resolvedSessionId = this.resolveSessionId(sessionId);
     const tz = this.tz;
     const profile = await this.refreshHumanProfile(resolvedSessionId, userText);
-    await this.memoryStore.rememberFromUserText(resolvedSessionId, userText);
     let auditContext: AuditExecutionContext | null = null;
 
     try {
@@ -3945,6 +3986,26 @@ Si c'est actionnable: renvoie un JSON tool/ask.`
         };
       }
       toolCall = validatedToolCall;
+
+      if (toolCall.name === 'memory.forget' && !toolCall.args.id) {
+        const resolved = await resolveMemoryForget(
+          await this.buildToolContext(resolvedSessionId),
+          toolCall.args,
+        );
+        if ('error' in resolved) {
+          this.rememberTurn(resolvedSessionId, {
+            userText,
+            assistantText: resolved.error,
+            kind: 'ask',
+          });
+          await this.refreshPersistentSessionState(resolvedSessionId);
+          return {
+            text: resolved.error,
+            meta: { simulation: this.simulation, sessionId: resolvedSessionId },
+          };
+        }
+        toolCall = { type: 'tool', name: 'memory.forget', args: resolved };
+      }
 
       const gateError = gateToolCall(toolCall, googleStatus);
       if (gateError) {

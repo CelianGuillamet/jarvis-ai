@@ -16,6 +16,7 @@ export const EXPORT_PROJECTIONS = {
   CalendarEvent: ['ownerId', 'id', 'title', 'when', 'createdAt'],
   Note: ['ownerId', 'id', 'title', 'text', 'createdAt'],
   ShoppingItem: ['ownerId', 'id', 'text', 'bought', 'boughtAt', 'createdAt'],
+  PersonalFact: ['ownerId', 'id', 'text', 'origin', 'createdAt', 'updatedAt'],
   PendingAction: [
     'id',
     'sessionId',

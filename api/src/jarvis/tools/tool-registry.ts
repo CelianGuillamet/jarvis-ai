@@ -233,9 +233,13 @@ export const TOOL_META: Record<ToolName, ToolMetadata> = {
     sideEffect: false,
     risk: 'low',
   },
-  'memory.set': { requiresConfirmation: false, sideEffect: true, risk: 'low' },
+  'memory.remember': {
+    requiresConfirmation: true,
+    sideEffect: true,
+    risk: 'low',
+  },
   'memory.forget': {
-    requiresConfirmation: false,
+    requiresConfirmation: true,
     sideEffect: true,
     risk: 'low',
   },

@@ -41,6 +41,7 @@ export const ERASURE_DELETE_ORDER = [
   'CalendarEvent',
   'Note',
   'ShoppingItem',
+  'PersonalFact',
   'Command',
   'GoogleOAuthToken',
   'GoogleOAuthState',

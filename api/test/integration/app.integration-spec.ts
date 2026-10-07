@@ -926,6 +926,10 @@ describe('API against disposable migrated PostgreSQL', () => {
         'GET /account/export/profile',
         'GET /account/export/data',
         'GET /account/preferences',
+        'GET /account/memory',
+        'POST /account/memory',
+        'POST /account/memory/:id',
+        'POST /account/memory/:id/forget',
         'GET /auth/google',
         'GET /auth/google/callback',
         'GET /auth/google/status',
@@ -1141,6 +1145,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/account/export/profile',
       '/account/export/data?collection=notes',
       '/account/preferences',
+      '/account/memory',
       '/today',
       '/jarvis/history',
       '/jarvis/activity',
@@ -1161,6 +1166,9 @@ describe('API against disposable migrated PostgreSQL', () => {
     for (const path of [
       '/account/deletion',
       '/account/preferences',
+      '/account/memory',
+      '/account/memory/any-id',
+      '/account/memory/any-id/forget',
       '/auth/google/disconnect',
       '/jarvis/chat',
       '/jarvis/confirm',
@@ -1451,6 +1459,99 @@ describe('API against disposable migrated PostgreSQL', () => {
         },
       }),
     ).toEqual(preferences);
+  });
+
+  it('manages personal facts only for the authenticated account', async () => {
+    async function signedIn(id: string) {
+      await prisma.betaInvite.create({
+        data: { email: `${id}@example.invalid` },
+      });
+      await prisma.user.create({
+        data: {
+          id,
+          name: id,
+          email: `${id}@example.invalid`,
+          emailVerified: true,
+        },
+      });
+      const token = `${id}-token`;
+      await prisma.session.create({
+        data: {
+          id: `${id}-session`,
+          token,
+          userId: id,
+          expiresAt: new Date(Date.now() + 3600000),
+        },
+      });
+      const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+        .update(token)
+        .digest('base64');
+      return `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    }
+    const alice = await signedIn('memory-http-alice');
+    const bob = await signedIn('memory-http-bob');
+    const origin = 'http://localhost:5173';
+    await request(baseUrl)
+      .post('/account/memory')
+      .set('Cookie', alice)
+      .set('Origin', 'https://evil.invalid')
+      .send({ text: 'Refusé' })
+      .expect(403);
+    await request(baseUrl)
+      .post('/account/memory')
+      .set('Cookie', alice)
+      .set('Origin', origin)
+      .send({ text: 'Avec propriétaire', ownerId: 'memory-http-bob' })
+      .expect(400);
+    await request(baseUrl)
+      .post('/account/memory')
+      .set('Cookie', alice)
+      .set('Origin', origin)
+      .send({ text: 'Ligne\nmultiple' })
+      .expect(400);
+    const created = await request(baseUrl)
+      .post('/account/memory')
+      .set('Cookie', alice)
+      .set('Origin', origin)
+      .send({ text: 'Je travaille le mardi à distance' })
+      .expect(201);
+    const fact = created.body as { id: string; origin: string };
+    expect(fact.origin).toBe('settings');
+    await request(baseUrl)
+      .get('/account/memory')
+      .set('Cookie', bob)
+      .expect(200, { facts: [] });
+    await request(baseUrl)
+      .post(`/account/memory/${fact.id}`)
+      .set('Cookie', bob)
+      .set('Origin', origin)
+      .send({ text: 'Modifié par Bob' })
+      .expect(404);
+    await request(baseUrl)
+      .post(`/account/memory/${fact.id}/forget`)
+      .set('Cookie', bob)
+      .set('Origin', origin)
+      .expect(404);
+    await request(baseUrl)
+      .post(`/account/memory/${fact.id}`)
+      .set('Cookie', alice)
+      .set('Origin', origin)
+      .send({ text: 'Je travaille le mardi et le jeudi à distance' })
+      .expect(201);
+    const listed = await request(baseUrl)
+      .get('/account/memory')
+      .set('Cookie', alice)
+      .expect(200);
+    expect((listed.body as { facts: Array<{ text: string }> }).facts).toEqual([
+      expect.objectContaining({
+        text: 'Je travaille le mardi et le jeudi à distance',
+      }),
+    ]);
+    await request(baseUrl)
+      .post(`/account/memory/${fact.id}/forget`)
+      .set('Cookie', alice)
+      .set('Origin', origin)
+      .expect(201, { facts: [] });
   });
 
   it('rejects cross-origin and originless mutations even with a valid cookie', async () => {
