@@ -57,13 +57,11 @@ The assistant previously interpreted inbox connectivity as permission for every 
 
 [Prompt regression tests](../../api/src/jarvis/services/jarvis.service.spec.ts) exercise the public chat path and inspect the actual model input for send-only, compose-only, read-only, modify, metadata-only, absent and revoked Gmail grants, plus partial/read-only/full Calendar grants. These fixture tests prove the prompt construction, not real model compliance or provider approval.
 
-Current checks in this worktree:
+Current checks, rebased on `main` after JAR-039 (7 October 2026):
 
-- `npm --prefix api test -- --runInBand jarvis.service google-scopes google-auth.service tool-engine`: **passed**, 18 suites / 155 tests, including 10 new prompt cases. Jest also selects related service suites.
-- `npm --prefix api run typecheck`, `npm --prefix api run lint`, `npm --prefix api run build`: **passed**.
-- `git diff --check`: **passed**.
-- `npm --prefix api run test:integration`: **blocked before tests**; the runner reports database cleanup failure. A separate `docker info --format '{{.ServerVersion}}'` fails with permission denied on the local Docker socket. The edited revocation scenario has still not run successfully; the coordinator must rerun the integration command with Docker access.
-- The full API suite was not rerun in this prompt-only follow-up. The previous recorded run failed in four HTTP suites with sandbox `listen EPERM`; it remains unvalidated.
+- `npm --prefix api test`: **passed**, 78 suites / 539 tests. The JAR-039 privacy disclosure test was updated to expect `gmail.modify` instead of the removed `gmail.send` request scope.
+- `npm --prefix api run test:integration` with Docker access: **passed**, 20 suites / 149 tests, including the edited revocation scenario in `execution-failure-gate.integration-spec.ts`.
+- `npm --prefix api run typecheck`, `npm --prefix api run lint`, `npm --prefix api run format:check`: **passed**.
 - No live Google consent, console inspection, approval submission, external account access or invitation occurred.
 
 This record must be revisited when the cohort, publishing status, scopes, hosting or data processing changes.
