@@ -14,11 +14,11 @@ Application sign-in requests basic Google identity through Better Auth; it does 
 
 `gmail.readonly`, `gmail.send`, `gmail.compose`, `gmail.labels` and broad `calendar.readonly` were removed from the requested set because they duplicate coverage or add unrelated access. Permanent Gmail deletion is deferred by server capability policy; it needs `https://mail.google.com/` and is **not** covered by `gmail.modify`. The integration still stores/transmits message content for current inbox and model-assisted drafting flows. Existing grants can retain previously authorized scopes: changing the request does not revoke a user's old Google grant. Reconnect and inspect actual granted scopes during provider validation; an owner should revoke older grants if narrowing must be enforced at the provider.
 
-The local capability status now requires the exact scopes needed by its API path. Calendar event browsing needs both calendar-list access and event-read access. Gmail send-only access cannot be reported as an inbox connection. These checks are local safeguards; they do not prove Google granted the scopes or that a real API call works.
+The local capability status now requires the exact scopes needed by its API path. Calendar event browsing needs both calendar-list access and event-read access. Gmail send-only or compose-only access cannot be reported as an inbox connection. Google's [messages.get scope contract](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/get) does not accept `gmail.compose`; the read gate now rejects it while retaining its send capability. These checks are local safeguards; they do not prove Google granted the scopes or that a real API call works.
 
 ## Applicable Google route and distribution decision
 
-Google's [restricted-scope guidance](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification) lists development/testing/staging as a verification exception when the project remains in **Testing** and users are on its test-user list. [Google's audience rules](https://support.google.com/cloud/answer/15549945?hl=en) limit external Testing to up to 100 listed test users, warn testers, and expire authorizations including offline refresh tokens after seven days for non-basic scopes. This is a **verified published-policy exception for development/testing**, not evidence that this project's console is configured that way. The current local-only development falls within the published development/testing category; no provider submission is required to continue local fixture work.
+Google's [restricted-scope guidance](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification) lists development/testing/staging as a verification exception when the project remains in **Testing** and users are on its test-user list. [Google's audience rules](https://support.google.com/cloud/answer/15549945?hl=en) limit external Testing to up to 100 listed test users, warn testers, and expire authorizations including offline refresh tokens after seven days for non-basic scopes. This is a **verified published-policy exception for development/testing**, not evidence that this project's console is configured that way. Local fixture work does not request access to real Google accounts and can continue without provider submission. The Testing exception is a candidate route only: its applicability to this project's OAuth access remains unverified until the console configuration and actual cohort are evidenced.
 
 The proposed five-person external cohort is not itself proof of personal-use eligibility: whether every participant is personally known is unconfirmed. Do not rely on that exception. Google classifies `gmail.modify` as restricted in its [Gmail scope table](https://developers.google.com/workspace/gmail/api/auth/scopes). For a production distribution without an applicable exception, Google's restricted-scope verification applies; its [guidance](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification) says access to restricted user data through a third-party server can require an independent security assessment. Jarvis has a server that processes/transmits Gmail content, so plan for assessment unless Google confirms a relevant exception for the actual distribution and configuration. A small invite list alone does not establish approval, assessment completion or production eligibility.
 
@@ -40,7 +40,7 @@ Also check Workspace organization policies for each test account; a project test
 | Live consent, refresh, API use and revocation | **Not run**; see [JAR-014 live checklist](google-authorization.md#verification). |
 | Release decision | **Blocked for external invitations** until the chosen route above has dated project-specific evidence and the other private-beta launch gates pass. |
 
-## Local verification — 7 October 2026
+## Local verification — initial implementation, 7 October 2026
 
 - API targeted Jest suites (`google-scopes`, `google-auth.service`, `tool-engine`): **19 tests passed** in the final rerun, including the permanent-deletion gate.
 - `npm run typecheck`, `npm run lint`, `npm run build` in `api/`: **passed** in the final rerun.
@@ -48,3 +48,24 @@ Also check Workspace organization policies for each test account; a project test
 - No integration database suite, live Google consent or external deployment was run.
 
 This record must be revisited when the cohort, publishing status, scopes, hosting or data processing changes.
+
+## Verification feedback follow-up — 7 October 2026
+
+The coordinator's integration run found an obsolete pre-revocation assertion: `gmail.send` was expected to report inbox access. The test now asserts a connected Google grant with no inbox access and explicitly checks that `gmail.send` is allowed before consuming the approval. Its existing assertions still require revoked access to prevent provider execution and prevent replay after restart. This preserves the send-only fixture and the safety test rather than broadening consent to make the assertion pass.
+
+Implementation and regression coverage:
+
+- [Scope predicates](../../api/src/google/google-scopes.ts): reject compose-only consent for message reads; sending remains allowed.
+- [Scope tests](../../api/src/google/google-scopes.spec.ts): partial Gmail grants, metadata-only consent, absent/revoked grants and exact scope matching.
+- [Tool gate tests](../../api/src/jarvis/tools/tool-engine.spec.ts): send-only and compose-only grants permit sending but reject inbox reads.
+- [Integration revocation scenario](../../api/test/integration/execution-failure-gate.integration-spec.ts): validates the actual send capability before revocation, then retains the execution/replay checks.
+
+Follow-up checks (these supersede the initial local results above):
+
+- `npm --prefix api test -- --runInBand google-scopes google-auth.service tool-engine`: **passed**, 3 suites / 30 tests.
+- `npm --prefix api run typecheck`, `npm --prefix api run lint`, `npm --prefix api run build`: **passed** after the final code changes.
+- `npm --prefix api test -- --runInBand`: **failed**, 57 suites passed / 4 failed; 409 tests passed / 25 failed. The four HTTP suites encounter `listen EPERM` on loopback or wildcard addresses in this sandbox; the full suite remains unvalidated.
+- `git diff --check`: **passed**.
+- `npm --prefix api run test:integration`: **blocked before database setup** by denied access to the local Docker socket. The runner reported cleanup failure; a separate `docker info` confirmed socket permission denial. No integration test passed in this follow-up; the coordinator must rerun it with Docker access.
+
+Acceptance status: minimum requested scopes and provisional distribution are documented. **Project-specific approval or applicable-exception evidence is still missing; JAR-038 is not ready for Done or external invitations.** No Google account, console, invitation or deployment was accessed or changed. The owner must attach the dated project/client identity, chosen route, actual cohort count and eligibility, console scope/audience/redirect evidence, consent/API/refresh/revocation results, reviewer identity and approval or exception rationale before clearing the release gate. For production, include assessment evidence and its expiry where required. Store only redacted evidence references here.

@@ -88,17 +88,26 @@ describe('gateToolCall', () => {
     ).toBeNull();
   });
 
-  it('does not treat send-only consent as permission to read the inbox', () => {
-    const call: ToolOnly = {
-      type: 'tool',
-      name: 'gmail.list',
-      args: { limit: 20 },
-    };
-    expect(
-      gateToolCall(call, status(['https://www.googleapis.com/auth/gmail.send']))
-        ?.code,
-    ).toBe('GMAIL_SCOPE_MISSING');
-  });
+  it.each(['gmail.send', 'gmail.compose'])(
+    'allows sending but not inbox reads with %s consent',
+    (scope) => {
+      const call: ToolOnly = {
+        type: 'tool',
+        name: 'gmail.list',
+        args: { limit: 20 },
+      };
+      expect(
+        gateToolCall(call, status([`https://www.googleapis.com/auth/${scope}`]))
+          ?.code,
+      ).toBe('GMAIL_SCOPE_MISSING');
+      expect(
+        gateToolCall(
+          { name: 'gmail.send' },
+          status([`https://www.googleapis.com/auth/${scope}`]),
+        ),
+      ).toBeNull();
+    },
+  );
 
   it('does not authorize permanent deletion with gmail.modify', () => {
     const call: ToolOnly = {

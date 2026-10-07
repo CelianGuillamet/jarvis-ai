@@ -30,7 +30,7 @@ export function hasCalendarWrite(scopes: string[]) {
 
 export function hasGmailRead(scopes: string[]) {
   return (
-    ['gmail.readonly', 'gmail.modify', 'gmail.compose'].some((scope) =>
+    ['gmail.readonly', 'gmail.modify'].some((scope) =>
       scopes.includes(`${AUTH}${scope}`),
     ) || scopes.includes('https://mail.google.com/')
   );
