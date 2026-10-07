@@ -130,7 +130,12 @@ import type {
 } from '../../gmail/providers/gmail.provider';
 import { getGmailCategoryPriority } from '../../gmail/gmail-category';
 import { asGoogleIntegrationError } from '../../google/google-integration.error';
-import { buildGoogleConnectionStatus } from '../../google/google-scopes';
+import {
+  buildGoogleConnectionStatus,
+  hasCalendarWrite,
+  hasGmailModify,
+  hasGmailSend,
+} from '../../google/google-scopes';
 
 type ToolOnly = Extract<ToolCall, { type: 'tool' }>;
 type ToolName = Extract<ToolCall, { type: 'tool' }>['name'];
@@ -677,8 +682,10 @@ export class JarvisService {
       ]);
     const googleStatus = buildGoogleConnectionStatus(googleToken?.scope);
     const capabilitiesContext = [
-      `Capacités: todos/notes/courses=OK | web=${this.web.name} | weather=${this.weather.name} | Google=${googleStatus.connected ? 'connecté' : 'non connecté'} | Calendar=${googleStatus.calendarConnected ? 'connecté' : 'non connecté'} | Gmail=${googleStatus.gmailConnected ? 'connecté' : 'non connecté'} | simulation=${this.simulation ? 'true' : 'false'}.`,
-      `Si Calendar/Gmail ne sont pas connectés, n’utilise pas les outils calendar.* / gmail.*: réponds "ask" pour proposer la connexion.`,
+      `Capacités: todos/notes/courses=OK | web=${this.web.name} | weather=${this.weather.name} | Google=${googleStatus.connected ? 'connecté' : 'non connecté'} | simulation=${this.simulation ? 'true' : 'false'}.`,
+      `Calendar lecture=${googleStatus.calendarConnected ? 'autorisée' : 'non autorisée'} | Calendar écriture=${hasCalendarWrite(googleStatus.scopes) ? 'autorisée' : 'non autorisée'}.`,
+      `Gmail lecture=${googleStatus.gmailConnected ? 'autorisée' : 'non autorisée'} | Gmail envoi=${hasGmailSend(googleStatus.scopes) ? 'autorisé' : 'non autorisé'} | Gmail modification=${hasGmailModify(googleStatus.scopes) ? 'autorisée' : 'non autorisée'}.`,
+      'Vérifie la capacité requise pour chaque outil : lecture pour consulter Calendar ou Gmail, écriture pour modifier Calendar, envoi pour gmail.send, modification pour les labels et la corbeille Gmail. Si cette capacité manque, réponds "ask" pour proposer la connexion avec les permissions nécessaires. Un envoi autorisé reste possible sans accès en lecture ; demande les informations manquantes à l’utilisateur sans consulter sa boîte mail. gmail.delete reste indisponible dans la bêta.',
     ].join('\n');
     const system = [
       this.baseSystemPrompt,

@@ -40,15 +40,6 @@ Also check Workspace organization policies for each test account; a project test
 | Live consent, refresh, API use and revocation | **Not run**; see [JAR-014 live checklist](google-authorization.md#verification). |
 | Release decision | **Blocked for external invitations** until the chosen route above has dated project-specific evidence and the other private-beta launch gates pass. |
 
-## Local verification — initial implementation, 7 October 2026
-
-- API targeted Jest suites (`google-scopes`, `google-auth.service`, `tool-engine`): **19 tests passed** in the final rerun, including the permanent-deletion gate.
-- `npm run typecheck`, `npm run lint`, `npm run build` in `api/`: **passed** in the final rerun.
-- Full `npm test -- --runInBand`: **failed** in this restricted worktree: 57 suites passed, 4 failed (397 tests passed, 25 failed). The failures were HTTP/Supertest suites trying to listen on `0.0.0.0`, rejected by the filesystem/network sandbox with `EPERM`. This is not a passed full-suite claim and is not evidence of a product defect in the changed scope code.
-- No integration database suite, live Google consent or external deployment was run.
-
-This record must be revisited when the cohort, publishing status, scopes, hosting or data processing changes.
-
 ## Verification feedback follow-up — 7 October 2026
 
 The coordinator's integration run found an obsolete pre-revocation assertion: `gmail.send` was expected to report inbox access. The test now asserts a connected Google grant with no inbox access and explicitly checks that `gmail.send` is allowed before consuming the approval. Its existing assertions still require revoked access to prevent provider execution and prevent replay after restart. This preserves the send-only fixture and the safety test rather than broadening consent to make the assertion pass.
@@ -60,12 +51,21 @@ Implementation and regression coverage:
 - [Tool gate tests](../../api/src/jarvis/tools/tool-engine.spec.ts): send-only and compose-only grants permit sending but reject inbox reads.
 - [Integration revocation scenario](../../api/test/integration/execution-failure-gate.integration-spec.ts): validates the actual send capability before revocation, then retains the execution/replay checks.
 
-Follow-up checks (these supersede the initial local results above):
+## Prompt regression follow-up — 7 October 2026
 
-- `npm --prefix api test -- --runInBand google-scopes google-auth.service tool-engine`: **passed**, 3 suites / 30 tests.
-- `npm --prefix api run typecheck`, `npm --prefix api run lint`, `npm --prefix api run build`: **passed** after the final code changes.
-- `npm --prefix api test -- --runInBand`: **failed**, 57 suites passed / 4 failed; 409 tests passed / 25 failed. The four HTTP suites encounter `listen EPERM` on loopback or wildcard addresses in this sandbox; the full suite remains unvalidated.
+The assistant previously interpreted inbox connectivity as permission for every Gmail tool. This incorrectly discouraged sending with legacy send-only or compose-only grants even though the server allowed it. [The assistant prompt](../../api/src/jarvis/services/jarvis.service.ts) now describes Gmail read, send and modification permissions separately using the same scope predicates as the tool gate. Calendar read and write permissions are also independent, so event-write consent without calendar-list access does not imply browsing access or disable writes. Missing capabilities require additional consent; sending without read access requires user-supplied details. Permanent deletion remains deferred.
+
+[Prompt regression tests](../../api/src/jarvis/services/jarvis.service.spec.ts) exercise the public chat path and inspect the actual model input for send-only, compose-only, read-only, modify, metadata-only, absent and revoked Gmail grants, plus partial/read-only/full Calendar grants. These fixture tests prove the prompt construction, not real model compliance or provider approval.
+
+Current checks in this worktree:
+
+- `npm --prefix api test -- --runInBand jarvis.service google-scopes google-auth.service tool-engine`: **passed**, 18 suites / 155 tests, including 10 new prompt cases. Jest also selects related service suites.
+- `npm --prefix api run typecheck`, `npm --prefix api run lint`, `npm --prefix api run build`: **passed**.
 - `git diff --check`: **passed**.
-- `npm --prefix api run test:integration`: **blocked before database setup** by denied access to the local Docker socket. The runner reported cleanup failure; a separate `docker info` confirmed socket permission denial. No integration test passed in this follow-up; the coordinator must rerun it with Docker access.
+- `npm --prefix api run test:integration`: **blocked before tests**; the runner reports database cleanup failure. A separate `docker info --format '{{.ServerVersion}}'` fails with permission denied on the local Docker socket. The edited revocation scenario has still not run successfully; the coordinator must rerun the integration command with Docker access.
+- The full API suite was not rerun in this prompt-only follow-up. The previous recorded run failed in four HTTP suites with sandbox `listen EPERM`; it remains unvalidated.
+- No live Google consent, console inspection, approval submission, external account access or invitation occurred.
+
+This record must be revisited when the cohort, publishing status, scopes, hosting or data processing changes.
 
 Acceptance status: minimum requested scopes and provisional distribution are documented. **Project-specific approval or applicable-exception evidence is still missing; JAR-038 is not ready for Done or external invitations.** No Google account, console, invitation or deployment was accessed or changed. The owner must attach the dated project/client identity, chosen route, actual cohort count and eligibility, console scope/audience/redirect evidence, consent/API/refresh/revocation results, reviewer identity and approval or exception rationale before clearing the release gate. For production, include assessment evidence and its expiry where required. Store only redacted evidence references here.
