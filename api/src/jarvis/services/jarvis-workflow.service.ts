@@ -115,10 +115,8 @@ export class JarvisWorkflowService {
         },
         select: { id: true },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible d'apprendre le workflow pour ${input.sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn("Impossible d'apprendre le workflow.");
       return null;
     }
   }
@@ -159,10 +157,8 @@ export class JarvisWorkflowService {
         usageCount: row.usageCount,
         lastUsedAt: row.lastUsedAt.toISOString(),
       }));
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de lire les workflows pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de lire les workflows.');
       throw dataUnavailable();
     }
   }

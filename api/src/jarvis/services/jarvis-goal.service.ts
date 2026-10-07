@@ -76,8 +76,8 @@ export class JarvisGoalService {
       return await Promise.all(
         goals.map((g) => this.enrichGoalWithSubGoals(g)),
       );
-    } catch (error) {
-      this.logger.warn(`Failed to list goals for ${sessionId}: ${error}`);
+    } catch {
+      this.logger.warn('List goals failed.');
       throw dataUnavailable();
     }
   }
@@ -96,10 +96,8 @@ export class JarvisGoalService {
       return await Promise.all(
         rootGoals.map((g) => this.enrichGoalWithSubGoals(g)),
       );
-    } catch (error) {
-      this.logger.warn(
-        `Failed to get goal hierarchy for ${sessionId}: ${error}`,
-      );
+    } catch {
+      this.logger.warn('Get goal hierarchy failed.');
       throw dataUnavailable();
     }
   }

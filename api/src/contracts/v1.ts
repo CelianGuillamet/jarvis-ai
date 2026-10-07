@@ -38,6 +38,46 @@ export const AccountPreferencesSchema = z
   })
   .strict();
 export type AccountPreferences = z.infer<typeof AccountPreferencesSchema>;
+export const AccountErasureReceiptSchema = z.string().regex(/^[a-f0-9]{64}$/);
+export const AccountErasureRequestSchema = z
+  .object({
+    expectedAccountId: z.string().min(1).max(500).optional(),
+    confirmEmail: z.email().max(320),
+    receipt: AccountErasureReceiptSchema,
+  })
+  .strict();
+export type AccountErasureRequest = z.infer<typeof AccountErasureRequestSchema>;
+export const AccountErasureStatusSchema = z
+  .object({
+    id: z.uuid(),
+    state: z.enum([
+      'queued',
+      'purging',
+      'local_deleted',
+      'completed',
+      'blocked',
+    ]),
+    revocationStatus: z.enum(['pending', 'complete', 'manual_required']),
+    requestedAt: z.iso.datetime(),
+    localDeletedAt: z.iso.datetime().nullable(),
+    completedAt: z.iso.datetime().nullable(),
+    receiptExpiresAt: z.iso.datetime(),
+  })
+  .strict();
+export type AccountErasureStatus = z.infer<typeof AccountErasureStatusSchema>;
+export const AccountProfileExportSchema = z
+  .object({
+    formatVersion: z.literal(1),
+    exportedAt: z.iso.datetime(),
+    profile: AccountProfileSchema.extend({
+      emailVerified: z.boolean(),
+      image: z.string().nullable(),
+      createdAt: z.iso.datetime(),
+      updatedAt: z.iso.datetime(),
+    }).strict(),
+    preferences: AccountPreferencesSchema,
+  })
+  .strict();
 const text = z.string();
 const nullableText = text.nullable();
 const count = z.number().int().nonnegative();
@@ -704,6 +744,98 @@ export const TodayNoteSchema = z
     createdAt: z.iso.datetime(),
   })
   .strict();
+export const AccountDataExportQuerySchema = z
+  .object({
+    collection: z.enum(['tasks', 'notes', 'shopping', 'calendar', 'memory']),
+    after: z.uuid().optional(),
+  })
+  .strict();
+export type AccountDataExportQuery = z.infer<
+  typeof AccountDataExportQuerySchema
+>;
+const exportPage = {
+  formatVersion: z.literal(1),
+  exportedAt: z.iso.datetime(),
+  nextCursor: z.uuid().nullable(),
+};
+export const AccountDataExportPageSchema = z.discriminatedUnion('collection', [
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('tasks'),
+      items: z.array(TodayTaskSchema).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('notes'),
+      items: z.array(TodayNoteSchema).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('memory'),
+      items: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              conversationId: z.uuid(),
+              layer: z.string(),
+              key: z.string(),
+              label: z.string(),
+              value: z.string(),
+              confidence: z.number(),
+              source: z.string(),
+              lastSeenAt: z.iso.datetime(),
+              createdAt: z.iso.datetime(),
+              updatedAt: z.iso.datetime(),
+            })
+            .strict(),
+        )
+        .max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('shopping'),
+      items: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              text: z.string(),
+              bought: z.boolean(),
+              boughtAt: z.iso.datetime().nullable(),
+              createdAt: z.iso.datetime(),
+            })
+            .strict(),
+        )
+        .max(50),
+    })
+    .strict(),
+  z
+    .object({
+      ...exportPage,
+      collection: z.literal('calendar'),
+      items: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              title: z.string(),
+              when: z.iso.datetime(),
+              createdAt: z.iso.datetime(),
+            })
+            .strict(),
+        )
+        .max(50),
+    })
+    .strict(),
+]);
 export const TodayLocalSnapshotSchema = z
   .object({
     fetchedAt: z.iso.datetime(),
@@ -791,3 +923,37 @@ export const ActivityResponseSchema = z.strictObject({
   ),
 });
 export type ActivityResponse = z.infer<typeof ActivityResponseSchema>;
+
+export const PrivacyDisclosureSchema = z
+  .object({
+    model: z
+      .object({
+        provider: z.enum(['ollama', 'openai']),
+        endpointHost: z.string().min(1).max(253),
+        transport: z.enum(['loopback', 'network']),
+      })
+      .strict(),
+    google: z
+      .object({
+        signInConfigured: z.boolean(),
+        toolsConfigured: z.boolean(),
+        requestedScopes: z.array(z.string().max(200)).max(20),
+      })
+      .strict(),
+    weatherHosts: z.array(z.string().min(1).max(253)).max(2),
+    webRetrieval: z.literal('disabled'),
+    processingEnabled: z.boolean(),
+    retention: z
+      .object({
+        diagnosticDays: z.literal(14),
+        conversationDays: z.literal(90),
+        receiptDays: z.literal(7),
+        maximumBackupDays: z.literal(30),
+        userData: z.literal('until-deleted'),
+        commandJournal: z.literal('until-account-deletion'),
+      })
+      .strict(),
+    backups: z.literal('operator-managed'),
+  })
+  .strict();
+export type PrivacyDisclosure = z.infer<typeof PrivacyDisclosureSchema>;

@@ -1,3 +1,4 @@
+import { PrivateCacheFence } from '../services/private-cache-fence';
 import { asGoogleIntegrationError } from '../../google/google-integration.error';
 import { dataUnavailable } from '../../http/data-unavailable';
 import { CommandRejectedError } from '../../commands/command-rejected.error';
@@ -740,6 +741,7 @@ export type UndoMutation =
     };
 
 // cache RAM de la dernière liste pour pouvoir faire "supprime #3"
+const toolCacheFence = new PrivateCacheFence(1_000);
 const LAST_CAL_LIST = new Map<string, LastCalendarList>();
 const LAST_CAL_FOCUS = new Map<string, LastCalendarFocus>();
 const LAST_CAL_LIST_TTL_MS = 30 * 60_000;
@@ -784,6 +786,7 @@ function cleanupLastCalendarCache() {
 }
 
 function setLastCalendarList(sessionId: string, events: CalendarEventItem[]) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupLastCalendarCache();
   LAST_CAL_LIST.set(sessionId, { events, createdAt: Date.now() });
 }
@@ -805,6 +808,7 @@ function isSameCalendarEvent(
 }
 
 function setLastCalendarFocus(sessionId: string, event: CalendarEventItem) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupLastCalendarCache();
   LAST_CAL_FOCUS.set(sessionId, { event, createdAt: Date.now() });
 }
@@ -819,6 +823,7 @@ function patchCalendarInCache(
   target: Pick<CalendarEventItem, 'provider' | 'eventId' | 'calendarId'>,
   patch: Partial<Pick<CalendarEventItem, 'title' | 'when' | 'end'>>,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_CAL_LIST.get(sessionId);
   if (!row) return;
   row.events = row.events.map((event) => {
@@ -840,6 +845,7 @@ function removeCalendarFromCache(
   sessionId: string,
   target: Pick<CalendarEventItem, 'provider' | 'eventId' | 'calendarId'>,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_CAL_LIST.get(sessionId);
   if (!row) return;
   row.events = row.events.filter(
@@ -871,6 +877,7 @@ function cleanupSimpleCache<T extends { createdAt: number }>(
 }
 
 function setLastTodoList(sessionId: string, items: TodoListItem[]) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupSimpleCache(LAST_TODO_LIST);
   LAST_TODO_LIST.set(sessionId, { items, createdAt: Date.now() });
 }
@@ -885,6 +892,7 @@ function patchTodoInCache(
   id: string,
   patch: Partial<TodoListItem>,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_TODO_LIST.get(sessionId);
   if (!row) return;
   row.items = row.items.map((item) =>
@@ -894,6 +902,7 @@ function patchTodoInCache(
 }
 
 function removeTodoFromCache(sessionId: string, id: string) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_TODO_LIST.get(sessionId);
   if (!row) return;
   row.items = row.items.filter((item) => item.id !== id);
@@ -901,6 +910,7 @@ function removeTodoFromCache(sessionId: string, id: string) {
 }
 
 function setLastNoteList(sessionId: string, items: NoteListItem[]) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupSimpleCache(LAST_NOTE_LIST);
   LAST_NOTE_LIST.set(sessionId, { items, createdAt: Date.now() });
 }
@@ -911,6 +921,7 @@ function getLastNoteList(sessionId: string) {
 }
 
 function setLastMemoryList(sessionId: string, items: MemoryListItem[]) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupSimpleCache(LAST_MEMORY_LIST);
   LAST_MEMORY_LIST.set(sessionId, { items, createdAt: Date.now() });
 }
@@ -925,6 +936,7 @@ function patchNoteInCache(
   id: string,
   patch: Partial<NoteListItem>,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_NOTE_LIST.get(sessionId);
   if (!row) return;
   row.items = row.items.map((item) =>
@@ -934,6 +946,7 @@ function patchNoteInCache(
 }
 
 function removeNoteFromCache(sessionId: string, id: string) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_NOTE_LIST.get(sessionId);
   if (!row) return;
   row.items = row.items.filter((item) => item.id !== id);
@@ -941,6 +954,7 @@ function removeNoteFromCache(sessionId: string, id: string) {
 }
 
 function setLastShoppingList(sessionId: string, items: ShoppingListItem[]) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupSimpleCache(LAST_SHOPPING_LIST);
   LAST_SHOPPING_LIST.set(sessionId, { items, createdAt: Date.now() });
 }
@@ -956,6 +970,7 @@ function getLastWebSearch(sessionId: string) {
 }
 
 function setLastMissionList(sessionId: string, items: MissionListItem[]) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupSimpleCache(LAST_MISSION_LIST);
   LAST_MISSION_LIST.set(sessionId, { items, createdAt: Date.now() });
 }
@@ -970,6 +985,7 @@ function patchMissionInCache(
   id: string,
   patch: Partial<MissionListItem>,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_MISSION_LIST.get(sessionId);
   if (!row) return;
   row.items = row.items.map((item) =>
@@ -998,6 +1014,7 @@ function mapGmailItem(item: GmailMessageItem | GmailListItem): GmailListItem {
 }
 
 function setLastGmailList(sessionId: string, items: GmailMessageItem[]) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupSimpleCache(LAST_GMAIL_LIST);
   LAST_GMAIL_LIST.set(sessionId, {
     items: items.map((item) => mapGmailItem(item)),
@@ -1014,6 +1031,7 @@ function setLastGmailFocus(
   sessionId: string,
   item: GmailMessageItem | GmailListItem,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   cleanupSimpleCache(LAST_GMAIL_FOCUS);
   LAST_GMAIL_FOCUS.set(sessionId, {
     item: mapGmailItem(item),
@@ -1031,6 +1049,7 @@ function patchGmailInCache(
   id: string,
   patch: Partial<Pick<GmailListItem, 'unread' | 'labels' | 'category'>>,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_GMAIL_LIST.get(sessionId);
   if (row) {
     row.items = row.items.map((item) =>
@@ -1047,6 +1066,7 @@ function patchGmailInCache(
 }
 
 function removeGmailFromCache(sessionId: string, id: string) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_GMAIL_LIST.get(sessionId);
   if (row) {
     row.items = row.items.filter((item) => item.id !== id);
@@ -1064,6 +1084,7 @@ function patchShoppingInCache(
   id: string,
   patch: Partial<ShoppingListItem>,
 ) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_SHOPPING_LIST.get(sessionId);
   if (!row) return;
   row.items = row.items.map((item) =>
@@ -1073,16 +1094,35 @@ function patchShoppingInCache(
 }
 
 function removeShoppingFromCache(sessionId: string, id: string) {
+  if (!toolCacheFence.canPublish(sessionId)) return;
   const row = LAST_SHOPPING_LIST.get(sessionId);
   if (!row) return;
   row.items = row.items.filter((item) => item.id !== id);
   row.createdAt = Date.now();
 }
 
+/** Also invalidates delayed tool resolutions, including nested calls. */
 export function clearLocalToolCaches(sessionId: string) {
+  toolCacheFence.forget(sessionId);
+  LAST_CAL_LIST.delete(sessionId);
+  LAST_CAL_FOCUS.delete(sessionId);
   LAST_TODO_LIST.delete(sessionId);
   LAST_NOTE_LIST.delete(sessionId);
+  LAST_MEMORY_LIST.delete(sessionId);
   LAST_SHOPPING_LIST.delete(sessionId);
+  LAST_WEB_SEARCH.delete(sessionId);
+  LAST_GMAIL_LIST.delete(sessionId);
+  LAST_GMAIL_FOCUS.delete(sessionId);
+  LAST_MISSION_LIST.delete(sessionId);
+}
+
+export function withLocalToolCaches<T>(
+  sessionId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return toolCacheFence.run(sessionId, operation, () =>
+    clearLocalToolCaches(sessionId),
+  );
 }
 
 function parseNumberRef(query: string) {
@@ -1214,6 +1254,15 @@ function formatPreviewLines(lines: Array<string | null | undefined>) {
 }
 
 export async function previewTool(
+  ctx: ToolContext,
+  call: Extract<ToolCall, { type: 'tool' }>,
+): Promise<string | null> {
+  return withLocalToolCaches(ctx.sessionId, () =>
+    previewToolInContext(ctx, call),
+  );
+}
+
+async function previewToolInContext(
   ctx: ToolContext,
   call: Extract<ToolCall, { type: 'tool' }>,
 ): Promise<string | null> {
@@ -2095,6 +2144,12 @@ function resolveGmailBatch(
 }
 
 export async function prepareGmailTargets(ctx: ToolContext, call: ToolOnly) {
+  return withLocalToolCaches(ctx.sessionId, () =>
+    prepareGmailTargetsInContext(ctx, call),
+  );
+}
+
+async function prepareGmailTargetsInContext(ctx: ToolContext, call: ToolOnly) {
   if (!requiresGmailTargets(call)) return undefined;
   if (call.name === 'gmail.bulk_mark_read')
     return resolveGmailBatch(ctx, call.args);
@@ -2107,6 +2162,15 @@ export async function prepareGmailTargets(ctx: ToolContext, call: ToolOnly) {
 }
 
 export async function prepareLocalTargets(
+  ctx: ToolContext,
+  call: ToolOnly,
+): Promise<LocalTargets | undefined> {
+  return withLocalToolCaches(ctx.sessionId, () =>
+    prepareLocalTargetsInContext(ctx, call),
+  );
+}
+
+async function prepareLocalTargetsInContext(
   ctx: ToolContext,
   call: ToolOnly,
 ): Promise<LocalTargets | undefined> {
@@ -2931,6 +2995,15 @@ function createToolResolvers(ctx: ToolContext) {
 }
 
 export async function prepareCalendarTarget(ctx: ToolContext, call: ToolOnly) {
+  return withLocalToolCaches(ctx.sessionId, () =>
+    prepareCalendarTargetInContext(ctx, call),
+  );
+}
+
+async function prepareCalendarTargetInContext(
+  ctx: ToolContext,
+  call: ToolOnly,
+) {
   if (call.name !== 'calendar.update' && call.name !== 'calendar.delete')
     return undefined;
   const { target, error } = await createToolResolvers(
@@ -2942,6 +3015,13 @@ export async function prepareCalendarTarget(ctx: ToolContext, call: ToolOnly) {
 }
 
 export async function runTool(
+  ctx: ToolContext,
+  call: ToolCall,
+): Promise<string> {
+  return withLocalToolCaches(ctx.sessionId, () => runToolInContext(ctx, call));
+}
+
+async function runToolInContext(
   ctx: ToolContext,
   call: ToolCall,
 ): Promise<string> {

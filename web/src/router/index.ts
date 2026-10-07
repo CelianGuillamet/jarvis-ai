@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/deletion-status', name: 'deletion-status', component: () => import('@/views/DeletionStatusView.vue') },
     { path: '/activity', name: 'activity', component: () => import('@/views/ActivityView.vue') },
     { path: '/', redirect: '/dashboard' },
     {

@@ -1,3 +1,11 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  AccountErasureStatusSchema,
+  PrivacyDisclosureSchema,
+} from '../../src/contracts/v1';
+import { AccountSnapshotService } from '../../src/privacy/account-snapshot.service';
 import { ConversationService } from '../../src/auth/conversation.service';
 import { ConfigService } from '@nestjs/config';
 import { GoogleCredentialService } from '../../src/google/google-credential.service';
@@ -30,6 +38,8 @@ import { OpenAIProvider } from '../../src/jarvis/providers/openai.provider';
 import { fakeCalendar, fakeGmail } from '../fixtures/providers';
 import { allowedPorts } from '../fixtures/integration-safety';
 import {
+  AccountDataExportPageSchema,
+  AccountProfileExportSchema,
   JarvisChatResponseSchema,
   JarvisStatusSnapshotSchema,
 } from '../../src/contracts/v1';
@@ -38,6 +48,8 @@ const scopes =
   'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
 
 describe('API against disposable migrated PostgreSQL', () => {
+  let ledgerDirectory: string;
+  const previousLedgerDirectory = process.env.PRIVACY_LEDGER_DIR;
   let app: INestApplication<Server>;
   let prisma: PrismaService;
   let baseUrl: string;
@@ -62,6 +74,8 @@ describe('API against disposable migrated PostgreSQL', () => {
     .mockResolvedValue('{"type":"final","text":"Fixture response"}');
 
   beforeAll(async () => {
+    ledgerDirectory = await mkdtemp(join(tmpdir(), 'jarvis-http-ledger-'));
+    process.env.PRIVACY_LEDGER_DIR = ledgerDirectory;
     // Existing services construct model adapters internally; stub both adapters at
     // their public boundary until JAR-024 moves provider construction into DI.
     jest.spyOn(OllamaProvider.prototype, 'chat').mockImplementation(model);
@@ -117,8 +131,109 @@ describe('API against disposable migrated PostgreSQL', () => {
 
   afterAll(async () => {
     await app?.close();
+    if (previousLedgerDirectory === undefined)
+      delete process.env.PRIVACY_LEDGER_DIR;
+    else process.env.PRIVACY_LEDGER_DIR = previousLedgerDirectory;
+    await rm(ledgerDirectory, { recursive: true, force: true });
     jest.spyOn(OllamaProvider.prototype, 'chat').mockRestore();
     jest.spyOn(OpenAIProvider.prototype, 'chat').mockRestore();
+  });
+
+  it('creates an identity-scoped deletion request and allows only its capability to track it after signout', async () => {
+    const ownerId = `http-erasure-${randomUUID()}`;
+    const email = `${ownerId}@example.invalid`;
+    const token = randomUUID();
+    await prisma.betaInvite.create({ data: { email } });
+    await prisma.user.create({
+      data: { id: ownerId, email, name: 'Erasure HTTP', emailVerified: true },
+    });
+    await prisma.session.create({
+      data: {
+        id: randomUUID(),
+        token,
+        userId: ownerId,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const receipt =
+      randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+    const disclosure = await request(baseUrl)
+      .get('/account/privacy')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(PrivacyDisclosureSchema.safeParse(disclosure.body).success).toBe(
+      true,
+    );
+    expect(disclosure.headers['cache-control']).toBe('no-store');
+    expect(JSON.stringify(disclosure.body)).not.toContain(
+      process.env.AUTH_SECRET!,
+    );
+
+    await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'http://localhost:5173')
+      .set('Cookie', cookie)
+      .send({ confirmEmail: email, receipt, ownerId: 'integration-user' })
+      .expect(400);
+    await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'https://untrusted.invalid')
+      .set('Cookie', cookie)
+      .send({ confirmEmail: email, receipt })
+      .expect(403);
+    await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'http://localhost:5173')
+      .set('Cookie', cookie)
+      .send({
+        confirmEmail: email,
+        receipt,
+        expectedAccountId: 'integration-user',
+      })
+      .expect(409);
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: ownerId } }))
+        .disabled,
+    ).toBe(false);
+    const accepted = await request(baseUrl)
+      .post('/account/deletion')
+      .set('Origin', 'http://localhost:5173')
+      .set('Cookie', cookie)
+      .send({ confirmEmail: email, receipt })
+      .expect(202);
+    expect(AccountErasureStatusSchema.safeParse(accepted.body).success).toBe(
+      true,
+    );
+    expect(accepted.headers['cache-control']).toBe('no-store');
+    expect(await prisma.session.count({ where: { userId: ownerId } })).toBe(0);
+    await request(baseUrl).get('/account/me').set('Cookie', cookie).expect(401);
+    expect(
+      (
+        await prisma.user.findUniqueOrThrow({
+          where: { id: 'integration-user' },
+        })
+      ).disabled,
+    ).toBe(false);
+    await request(baseUrl).get('/account/deletion/status').expect(404);
+    await request(baseUrl)
+      .get('/account/deletion/status')
+      .set('x-erasure-receipt', 'b'.repeat(64))
+      .expect(404);
+    const status = await request(baseUrl)
+      .get('/account/deletion/status')
+      .set('x-erasure-receipt', receipt)
+      .expect(200);
+    expect(AccountErasureStatusSchema.safeParse(status.body).success).toBe(
+      true,
+    );
+    expect(status.headers['cache-control']).toBe('no-store');
+    expect(JSON.stringify(status.body)).not.toContain(ownerId);
+    expect(JSON.stringify(status.body)).not.toContain(email);
+    expect(JSON.stringify(status.body)).not.toContain(receipt);
   });
 
   it('bounds DTOs and throttles verified accounts across conversation changes', async () => {
@@ -805,7 +920,11 @@ describe('API against disposable migrated PostgreSQL', () => {
     }
     expect(routes.sort()).toEqual(
       [
+        'GET /account/privacy',
         'GET /account/me',
+        'GET /account/export/snapshot',
+        'GET /account/export/profile',
+        'GET /account/export/data',
         'GET /account/preferences',
         'GET /auth/google',
         'GET /auth/google/callback',
@@ -818,6 +937,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         'GET /jarvis/activity',
         'GET /jarvis/status',
         'GET /today',
+        'POST /account/deletion',
         'POST /account/preferences',
         'POST /auth/google/disconnect',
         'POST /inbox-zero/apply',
@@ -1015,7 +1135,11 @@ describe('API against disposable migrated PostgreSQL', () => {
 
   it('rejects anonymous and conversation-ID-only access to every private endpoint', async () => {
     for (const path of [
+      '/account/privacy',
       '/account/me',
+      '/account/export/snapshot',
+      '/account/export/profile',
+      '/account/export/data?collection=notes',
       '/account/preferences',
       '/today',
       '/jarvis/history',
@@ -1035,6 +1159,7 @@ describe('API against disposable migrated PostgreSQL', () => {
         .expect(401);
     }
     for (const path of [
+      '/account/deletion',
       '/account/preferences',
       '/auth/google/disconnect',
       '/jarvis/chat',
@@ -1053,6 +1178,208 @@ describe('API against disposable migrated PostgreSQL', () => {
         .send({ sessionId: 'integration-session' })
         .expect(401);
     }
+  });
+
+  it('exports only signed-owner data with bounded pagination and conversation ownership', async () => {
+    const ownerId = 'export-user';
+    await prisma.betaInvite.create({
+      data: { email: 'export@example.invalid' },
+    });
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        name: 'Export',
+        email: 'export@example.invalid',
+        emailVerified: true,
+      },
+    });
+    const token = 'export-session-secret-not-exportable';
+    await prisma.session.create({
+      data: {
+        id: 'export-auth-session',
+        userId: ownerId,
+        token,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const noteIds = Array.from({ length: 51 }, () => randomUUID()).sort();
+    await prisma.note.createMany({
+      data: noteIds.map((id) => ({ id, ownerId, text: 'Owned note' })),
+    });
+    const foreignNote = await prisma.note.create({
+      data: { ownerId: 'integration-user', text: 'Foreign private note' },
+    });
+    const profileResponse = await request(baseUrl)
+      .get('/account/export/profile')
+      .set('Cookie', cookie)
+      .expect(200);
+    const profile = AccountProfileExportSchema.parse(profileResponse.body);
+    expect(profile.profile.id).toBe(ownerId);
+    expect(JSON.stringify(profile)).not.toContain(token);
+    const firstResponse = await request(baseUrl)
+      .get('/account/export/data')
+      .query({ collection: 'notes' })
+      .set('Cookie', cookie)
+      .expect(200);
+    const first = AccountDataExportPageSchema.parse(firstResponse.body);
+    expect(first.items.map((item: { id: string }) => item.id)).toEqual(
+      noteIds.slice(0, 50),
+    );
+    expect(first.nextCursor).toBe(noteIds[49]);
+    const lastResponse = await request(baseUrl)
+      .get('/account/export/data')
+      .query({ collection: 'notes', after: first.nextCursor })
+      .set('Cookie', cookie)
+      .expect(200);
+    const last = AccountDataExportPageSchema.parse(lastResponse.body);
+    expect(last.items.map((item: { id: string }) => item.id)).toEqual(
+      noteIds.slice(50),
+    );
+    expect(last.nextCursor).toBeNull();
+    expect(
+      [...first.items, ...last.items].some(
+        (item) => item.id === foreignNote.id,
+      ),
+    ).toBe(false);
+    for (const query of [
+      { collection: 'notes', ownerId: 'integration-user' },
+      { collection: 'notes', after: 'not-a-uuid' },
+      { collection: 'tokens' },
+    ]) {
+      await request(baseUrl)
+        .get('/account/export/data')
+        .query(query)
+        .set('Cookie', cookie)
+        .expect(400);
+    }
+    const conversation = await prisma.conversation.create({
+      data: { ownerId, clientKey: 'export-conversation' },
+    });
+    const foreignConversation = await prisma.conversation.create({
+      data: {
+        ownerId: 'integration-user',
+        clientKey: 'foreign-export-conversation',
+      },
+    });
+    const memory = await prisma.jarvisMemoryFact.create({
+      data: {
+        sessionId: conversation.id,
+        layer: 'preference',
+        key: 'export',
+        label: 'Préférence',
+        value: 'Owned memory',
+      },
+    });
+    await prisma.jarvisMemoryFact.create({
+      data: {
+        sessionId: foreignConversation.id,
+        layer: 'preference',
+        key: 'export',
+        label: 'Secret',
+        value: 'Foreign memory',
+      },
+    });
+    const memoryResponse = await request(baseUrl)
+      .get('/account/export/data')
+      .query({ collection: 'memory' })
+      .set('Cookie', cookie)
+      .expect(200);
+    const memoryPage = AccountDataExportPageSchema.parse(memoryResponse.body);
+    expect(memoryPage.collection).toBe('memory');
+    expect(memoryPage.items.map((item: { id: string }) => item.id)).toEqual([
+      memory.id,
+    ]);
+    expect(JSON.stringify(memoryPage)).not.toContain('Foreign memory');
+    const download = await request(baseUrl)
+      .get('/account/export/snapshot')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(download.headers['cache-control']).toBe('no-store');
+    expect(download.headers['content-type']).toContain('application/x-ndjson');
+    const records = download.text
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            type: string;
+            collection?: string;
+            data?: Record<string, unknown>;
+            records?: number;
+          },
+      );
+    expect(records[0]).toMatchObject({
+      type: 'header',
+      accountId: ownerId,
+      formatVersion: 1,
+    });
+    expect(records.at(-1)).toEqual({
+      type: 'complete',
+      records: records.length - 2,
+    });
+    expect(
+      records
+        .filter((record) => record.collection === 'Note')
+        .map((record) => record.data?.id)
+        .sort(),
+    ).toEqual(noteIds);
+    expect(download.text).not.toContain(token);
+    expect(download.text).not.toContain('Foreign memory');
+    expect(download.text).not.toContain('Foreign private note');
+    expect(
+      records.some((record) =>
+        [
+          'GoogleOAuthToken',
+          'GoogleOAuthState',
+          'Verification',
+          'LegacyOwnershipBatch',
+        ].includes(record.collection ?? ''),
+      ),
+    ).toBe(false);
+
+    const snapshotRecords: Array<{
+      collection?: string;
+      data?: Record<string, unknown>;
+    }> = [];
+    await app.get(AccountSnapshotService).stream(
+      ownerId,
+      async (value) => {
+        const record = value as {
+          type: string;
+          collection?: string;
+          data?: Record<string, unknown>;
+        };
+        if (record.type === 'header') {
+          // A different connection commits after MVCC begins, before Note is scanned.
+          await prisma.note.update({
+            where: { id: noteIds[0] },
+            data: { text: 'Changed during export' },
+          });
+          await prisma.note.create({
+            data: { ownerId, text: 'Inserted during export' },
+          });
+        }
+        snapshotRecords.push(record);
+      },
+      new AbortController().signal,
+    );
+    const snapshotNotes = snapshotRecords.filter(
+      (record) => record.collection === 'Note',
+    );
+    expect(snapshotNotes).toHaveLength(51);
+    expect(
+      snapshotNotes.find((record) => record.data?.id === noteIds[0])?.data
+        ?.text,
+    ).toBe('Owned note');
+    expect(
+      snapshotNotes.some(
+        (record) => record.data?.text === 'Inserted during export',
+      ),
+    ).toBe(false);
   });
 
   it('persists only authenticated account preferences and rejects identity overrides', async () => {

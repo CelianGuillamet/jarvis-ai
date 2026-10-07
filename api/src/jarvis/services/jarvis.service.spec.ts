@@ -1,3 +1,4 @@
+import * as toolCaches from '../tools/tools';
 import { InvalidModelResponseError } from '../providers/model-response';
 import { JarvisStatusSnapshotSchema } from '../../contracts/v1';
 import { runTool } from '../tools/tools';
@@ -237,6 +238,7 @@ function makeService(options: ServiceOptions = {}) {
 
   const baseProfile = createHumanProfile('tu', 'normal');
   const humanProfileStore = {
+    forget: jest.fn(),
     get: jest.fn().mockResolvedValue(baseProfile),
     updateFromUserText: jest.fn().mockResolvedValue(baseProfile),
   };
@@ -404,6 +406,7 @@ function makeService(options: ServiceOptions = {}) {
 
   return {
     service,
+    humanProfileStore,
     llmChat,
     pending,
     memoryStore,
@@ -416,6 +419,68 @@ function makeService(options: ServiceOptions = {}) {
 }
 
 describe('JarvisService', () => {
+  it('stores diagnostic metadata without raw input, model output, arguments or results', async () => {
+    const { service, prisma } = makeService();
+    await service['logSafe']({
+      sessionId: 'private-conversation',
+      userText: 'private email',
+      modelRaw: 'private model content',
+      simulation: false,
+      toolName: 'todo.create',
+      toolArgs: '{"password":"secret"}',
+      result: 'private result',
+    });
+    expect(prisma.jarvisLog.create).toHaveBeenCalledWith({
+      data: {
+        sessionId: 'private-conversation',
+        toolName: 'todo.create',
+        simulation: false,
+        userText: '',
+        modelRaw: '',
+        toolArgs: null,
+        result: null,
+      },
+    });
+  });
+
+  it('does not restore private working memory when a model reply arrives after erasure', async () => {
+    const { service, llmChat, humanProfileStore } = makeService();
+    llmChat.mockResolvedValue(
+      JSON.stringify({ type: 'final', text: 'Une réponse' }),
+    );
+    await service.chat('Explique la photosynthèse', 'other-conversation');
+    expect(service['recentMemory'].has('other-conversation')).toBe(true);
+    let started!: () => void;
+    let finish!: (value: string) => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    llmChat.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+          started();
+        }),
+    );
+    const pending = service.chat(
+      'Explique la photosynthèse',
+      'erased-conversation',
+    );
+    await ready;
+    const clearTools = jest.spyOn(toolCaches, 'clearLocalToolCaches');
+    service.forgetConversation('erased-conversation');
+    expect(clearTools).toHaveBeenCalledWith('erased-conversation');
+    clearTools.mockRestore();
+    finish(JSON.stringify({ type: 'final', text: 'Réponse privée différée' }));
+    await pending;
+    expect(service['recentMemory'].has('erased-conversation')).toBe(false);
+    expect(service['convo'].has('erased-conversation')).toBe(false);
+    expect(service['recentMemory'].has('other-conversation')).toBe(true);
+    expect(humanProfileStore.forget).toHaveBeenCalledWith(
+      'erased-conversation',
+    );
+  });
+
   it('reads passive status without invoking any model or provider transport', async () => {
     const { service, llmChat, calendar } = makeService();
     const mail = jest.spyOn(service['gmail'], 'listMessages');

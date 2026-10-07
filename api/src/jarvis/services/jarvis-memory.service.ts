@@ -402,10 +402,8 @@ export class JarvisMemoryService {
           }),
         ),
       );
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de persister la mémoire utilisateur pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de persister la memoire utilisateur.');
     }
   }
 
@@ -460,10 +458,8 @@ export class JarvisMemoryService {
           source: row.source,
           updatedAt: row.updatedAt.toISOString(),
         }));
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de lister la mémoire utilisateur pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de lister la memoire utilisateur.');
       throw dataUnavailable();
     }
   }
@@ -511,10 +507,8 @@ export class JarvisMemoryService {
           source: row.source,
           updatedAt: row.updatedAt.toISOString(),
         }));
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de rechercher dans la mémoire utilisateur pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de rechercher dans la memoire utilisateur.');
       throw dataUnavailable();
     }
   }
@@ -633,10 +627,8 @@ export class JarvisMemoryService {
           highlightsJson: JSON.stringify(next.highlights),
         },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de persister le résumé de session pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de persister le resume de session.');
     }
   }
 
@@ -698,10 +690,8 @@ export class JarvisMemoryService {
             }
           : null,
       };
-    } catch (error) {
-      this.logger.warn(
-        `Impossible de lire le monde personnel pour ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Impossible de lire le monde personnel.');
       throw dataUnavailable();
     }
   }

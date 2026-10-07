@@ -60,8 +60,8 @@ export class JarvisFinanceService {
         },
       });
       return this.mapExpense(e);
-    } catch (err) {
-      this.logger.error(`addExpense failed: ${err}`);
+    } catch {
+      this.logger.error('Add expense failed.');
       return null;
     }
   }
@@ -167,8 +167,8 @@ export class JarvisFinanceService {
         update: { limit: input.limit },
       });
       return { ...this.mapBudget(b), spent: 0, remaining: b.limit, percent: 0 };
-    } catch (err) {
-      this.logger.error(`setBudget failed: ${err}`);
+    } catch {
+      this.logger.error('Set budget failed.');
       return null;
     }
   }

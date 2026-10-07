@@ -6,6 +6,8 @@ import type {
 import type { GmailProvider } from '../../gmail/providers/gmail.provider';
 import type { WebProvider } from '../providers/web.provider';
 import {
+  clearLocalToolCaches,
+  withLocalToolCaches,
   runTool,
   previewTool,
   prepareCalendarTarget,
@@ -94,6 +96,90 @@ describe('runTool calendar context resolver', () => {
       gmail: {} as GmailProvider,
     };
   }
+
+  it('erases calendar list and focus for only the forgotten conversation', async () => {
+    const event: CalendarEventItem = {
+      provider: 'db',
+      eventId: 'private',
+      title: 'Private appointment',
+      when: new Date('2026-10-01T10:00:00Z'),
+    };
+    const ctx = {
+      ...makeContext(makeCalendarProvider([event]).provider),
+      sessionId: 'erase-calendar',
+    };
+    const other = { ...ctx, sessionId: 'keep-calendar' };
+    const list = {
+      type: 'tool',
+      name: 'calendar.list',
+      args: {
+        startIso: '2026-10-01T00:00:00Z',
+        endIso: '2026-10-02T00:00:00Z',
+      },
+    } as const;
+    const target = {
+      type: 'tool',
+      name: 'calendar.delete',
+      args: { ref: 1 },
+    } as const;
+    await runTool(ctx, list);
+    await runTool(other, list);
+    expect((await prepareCalendarTarget(ctx, target))?.title).toBe(event.title);
+    clearLocalToolCaches(ctx.sessionId);
+    await expect(prepareCalendarTarget(ctx, target)).rejects.toThrow();
+    await expect(
+      prepareCalendarTarget(ctx, { ...target, args: { query: '__last__' } }),
+    ).rejects.toThrow();
+    expect((await prepareCalendarTarget(other, target))?.title).toBe(
+      event.title,
+    );
+  });
+
+  it('rejects delayed provider publication and nested calls after erasure', async () => {
+    const event: CalendarEventItem = {
+      provider: 'db',
+      eventId: 'late',
+      title: 'Late private appointment',
+      when: new Date('2026-10-01T10:00:00Z'),
+    };
+    const provider = makeCalendarProvider([event]).provider;
+    let release!: (events: CalendarEventItem[]) => void;
+    const waiting = new Promise<CalendarEventItem[]>((resolve) => {
+      release = resolve;
+    });
+    jest.spyOn(provider, 'listEventsInterval').mockReturnValueOnce(waiting);
+    const ctx = { ...makeContext(provider), sessionId: 'late-calendar' };
+    const list = {
+      type: 'tool',
+      name: 'calendar.list',
+      args: {
+        startIso: '2026-10-01T00:00:00Z',
+        endIso: '2026-10-02T00:00:00Z',
+      },
+    } as const;
+    const pending = withLocalToolCaches(ctx.sessionId, async () => {
+      await runTool(ctx, list);
+      // A later tool in the same request must inherit its invalid generation.
+      await runTool(ctx, list);
+      await expect(
+        prepareCalendarTarget(ctx, {
+          type: 'tool',
+          name: 'calendar.delete',
+          args: { ref: 1 },
+        }),
+      ).rejects.toThrow();
+    });
+    clearLocalToolCaches(ctx.sessionId);
+    release([event]);
+    await pending;
+    await expect(
+      prepareCalendarTarget(ctx, {
+        type: 'tool',
+        name: 'calendar.delete',
+        args: { ref: 1 },
+      }),
+    ).rejects.toThrow();
+  });
 
   it('executes the persisted target after the displayed list changes', async () => {
     const first: CalendarEventItem = {

@@ -28,6 +28,7 @@
     "account:invite": "node scripts/manage-invite.mjs",
     "ownership": "node scripts/manage-ownership.mjs",
     "google:tokens": "node scripts/manage-google-tokens.mjs",
+    "privacy:ledger": "node scripts/manage-privacy-ledger.mjs",
     "contracts:check": "node ../scripts/sync-contracts.mjs --check"
   },
   "dependencies": {

@@ -43,6 +43,7 @@ function fixture({
   signedOut = false,
   connected = false,
   revocationPending = false,
+  privacyModel = { provider: "ollama", endpointHost: "localhost", transport: "loopback" },
 } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -72,6 +73,12 @@ function fixture({
         JSON.stringify({ connected: false, revocationPending }),
       );
     }
+    if (url.endsWith("/account/privacy")) return new Response(JSON.stringify({
+      model: privacyModel, google: { signInConfigured: true, toolsConfigured: false, requestedScopes: [] },
+      weatherHosts: ["api.open-meteo.com"], webRetrieval: "disabled", processingEnabled: true,
+      retention: { diagnosticDays: 14, conversationDays: 90, receiptDays: 7, maximumBackupDays: 30,
+        userData: "until-deleted", commandJournal: "until-account-deletion" }, backups: "operator-managed",
+    }));
     if (url.endsWith("/account/preferences")) {
       if (init.method === "POST") {
         if (failSave) return new Response("{}", { status: 503 });
@@ -279,4 +286,41 @@ test('session expiry removes previous account stores before a new account become
     assert.ok(document.querySelector('#private-app'));
     assert.deepEqual(chat.messages, []);
   } finally { mounted.app.unmount(); }
+});
+
+
+test("privacy settings reflect a remote configured model and explain retention", async () => {
+  const f = fixture({ privacyModel: { provider: "ollama", endpointHost: "models.example.test", transport: "network" } });
+  try {
+    await settle();
+    assert.match(document.body.textContent, /models.example.test/);
+    assert.match(document.body.textContent, /accessible par le réseau/);
+    assert.doesNotMatch(document.body.textContent, /serveur est local/);
+    assert.match(document.body.textContent, /recherche web est désactivée/);
+    const details = document.querySelector("details");
+    assert.ok(details);
+    details.open = true;
+    assert.match(details.textContent, /90 jours/);
+    assert.match(details.textContent, /14 jours/);
+    assert.match(details.textContent, /diagnostics techniques JarvisLog enregistrés en base/);
+    assert.match(details.textContent, /journaux d’hébergement sont gérés séparément/);
+    assert.match(details.textContent, /journaux de commandes et d’actions.*restent jusqu’à la suppression du compte/);
+    assert.match(details.textContent, /la minimisation des diagnostics JarvisLog ne s’applique pas à ces contenus/);
+    assert.match(details.textContent, /30 jours/);
+  } finally { f.app.unmount(); }
+});
+
+
+test("a receipt prepared after mount remains reachable when deletion expires the signed session", async () => {
+  const f = fixture({ completed: true });
+  try {
+    await settle();
+    dom.window.sessionStorage.setItem('jarvis.erasure.receipt.v1', JSON.stringify({ accountId: 'owner', receipt: 'a'.repeat(64) }));
+    globalThis.fetch = async (url) => url.endsWith('/account/me')
+      ? new Response('{}', { status: 401 }) : new Response('{"google":true}');
+    dom.window.dispatchEvent(new dom.window.Event('jarvis:session-expired'));
+    await settle();
+    assert.equal(document.querySelector('#private-app'), null);
+    assert.ok(document.querySelector('a[href="/deletion-status"]'));
+  } finally { f.app.unmount(); dom.window.sessionStorage.removeItem('jarvis.erasure.receipt.v1'); }
 });

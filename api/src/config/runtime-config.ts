@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import { readAuthConfig } from '../auth/auth-config';
 import { TokenCipher } from '../google/token-cipher';
 
@@ -52,7 +53,27 @@ export function validateRuntimeConfig(input: Record<string, unknown>) {
       errors.push(key);
     }
   };
+  if (
+    env.PRIVACY_LEDGER_DIR &&
+    (!isAbsolute(env.PRIVACY_LEDGER_DIR) ||
+      env.PRIVACY_LEDGER_DIR.length > 4096)
+  ) {
+    errors.push('PRIVACY_LEDGER_DIR');
+  }
+  if (env.PRIVACY_LEDGER_KEYS || env.PRIVACY_LEDGER_ACTIVE_KEY) {
+    try {
+      new TokenCipher(
+        env.PRIVACY_LEDGER_KEYS || '{}',
+        env.PRIVACY_LEDGER_ACTIVE_KEY || '',
+      );
+    } catch {
+      errors.push('PRIVACY_LEDGER_KEYS / PRIVACY_LEDGER_ACTIVE_KEY');
+    }
+  }
+  enumeration('PRIVACY_WORKER_ENABLED', ['true', 'false'], 'true');
   enumeration('NODE_ENV', ['development', 'test', 'production'], 'development');
+  if (env.NODE_ENV === 'production' && !env.PRIVACY_LEDGER_DIR)
+    errors.push('PRIVACY_LEDGER_DIR');
   enumeration('LLM_PROVIDER', ['ollama', 'openai'], 'ollama');
   enumeration('JARVIS_DEFAULT_SPEECH_MODE', ['tu', 'vous']);
   enumeration('JARVIS_DEFAULT_VERBOSITY', ['brief', 'normal', 'detailed']);

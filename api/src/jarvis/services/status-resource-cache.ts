@@ -33,12 +33,25 @@ export class StatusResourceCache<T> {
     };
   }
 
+  /** Removal also prevents an already-running refresh from republishing data. */
+  invalidate(key: string): void {
+    this.entries.delete(key);
+  }
+
+  invalidateWhere(matches: (key: string) => boolean): void {
+    for (const key of this.entries.keys()) {
+      if (matches(key)) this.invalidate(key);
+    }
+  }
+
   async read(
     key: string,
     revision: string,
     refresh: boolean,
     load: () => Promise<T>,
+    canPublish: () => boolean = () => true,
   ): Promise<CachedStatusResource<T>> {
+    if (!canPublish()) return this.empty();
     const now = this.now();
     for (const [id, entry] of this.entries) {
       if (!entry.pending && entry.expiresAt <= now) this.entries.delete(id);
@@ -74,7 +87,10 @@ export class StatusResourceCache<T> {
     current.pending = (async () => {
       try {
         const resource = await readStatusResource(load);
-        if (this.entries.get(key) !== current) return this.empty();
+        if (this.entries.get(key) !== current || !canPublish()) {
+          if (this.entries.get(key) === current) this.entries.delete(key);
+          return this.empty();
+        }
         const fetchedAt = this.now();
         current.expiresAt = fetchedAt + this.ttlMs;
         current.result = {

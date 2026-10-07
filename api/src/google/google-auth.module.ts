@@ -17,6 +17,10 @@ import { TokenEncryptionService } from './token-encryption.service';
     GoogleCredentialService,
     TokenEncryptionService,
   ],
-  exports: [GoogleAuthService, GoogleOAuthClientService],
+  exports: [
+    GoogleAuthService,
+    GoogleOAuthClientService,
+    TokenEncryptionService,
+  ],
 })
 export class GoogleAuthModule {}

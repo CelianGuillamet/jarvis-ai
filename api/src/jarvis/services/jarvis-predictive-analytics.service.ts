@@ -49,8 +49,8 @@ export class JarvisPredictiveAnalyticsService {
       });
 
       return this.mapMetricRecord(metric);
-    } catch (error) {
-      this.logger.error(`Failed to save forecast for ${metricType}: ${error}`);
+    } catch {
+      this.logger.error('Save forecast failed.');
       return null;
     }
   }
@@ -69,8 +69,8 @@ export class JarvisPredictiveAnalyticsService {
       });
 
       return metric ? this.mapMetricRecord(metric) : null;
-    } catch (error) {
-      this.logger.error(`Failed to get forecast for ${metricType}: ${error}`);
+    } catch {
+      this.logger.error('Get forecast failed.');
       return null;
     }
   }
@@ -117,8 +117,8 @@ export class JarvisPredictiveAnalyticsService {
         recentAverage: Math.round(recentAverage * 100) / 100,
         historicalAverage: Math.round(historicalAverage * 100) / 100,
       };
-    } catch (error) {
-      this.logger.error(`Failed to analyze trend for ${metricType}: ${error}`);
+    } catch {
+      this.logger.error('Analyze forecast trend failed.');
       return null;
     }
   }
@@ -138,8 +138,8 @@ export class JarvisPredictiveAnalyticsService {
       });
 
       return metrics.map((m) => this.mapMetricRecord(m));
-    } catch (error) {
-      this.logger.error(`Failed to list forecasts for ${sessionId}: ${error}`);
+    } catch {
+      this.logger.error('List forecasts failed.');
       return [];
     }
   }
@@ -176,10 +176,8 @@ export class JarvisPredictiveAnalyticsService {
       }
 
       return lines.join('\n');
-    } catch (error) {
-      this.logger.error(
-        `Failed to build prompt context for ${sessionId}: ${error}`,
-      );
+    } catch {
+      this.logger.error('Build forecast context failed.');
       return '';
     }
   }

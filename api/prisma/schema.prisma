@@ -59,6 +59,7 @@ model PendingAction {
   argsJson  String
   createdAt DateTime @default(now())
   expiresAt DateTime
+  @@index([expiresAt, id], map: "PendingAction_expiry_idx")
 }
 
 model JarvisLog {
@@ -73,6 +74,7 @@ model JarvisLog {
   createdAt  DateTime @default(now())
 
   @@index([sessionId])
+  @@index([createdAt, id], map: "JarvisLog_retention_idx")
 }
 
 model GoogleOAuthToken {
@@ -478,6 +480,8 @@ model User {
   emailVerified Boolean   @default(false)
   image         String?
   disabled      Boolean   @default(false)
+  // SQL execution claims increment this fence to serialize account deactivation.
+  executionEpoch BigInt    @default(0)
   displayTimezone String  @default("Europe/Paris")
   theme         String    @default("dark")
   onboardingCompleted Boolean @default(false)
@@ -624,6 +628,7 @@ model GoogleOAuthState {
 
   @@index([expiresAt])
   @@index([ownerId])
+  @@index([expiresAt, digest], map: "GoogleOAuthState_expiry_idx")
 }
 
 // Operator-only rollback evidence. No application route exposes these snapshots.
@@ -660,6 +665,7 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([expiresAt, id], map: "Session_expiry_idx")
 }
 
 model Account {
@@ -691,6 +697,7 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
+  @@index([expiresAt, id], map: "Verification_expiry_idx")
 }
 
 model BetaInvite {
@@ -721,4 +728,28 @@ model InboxReplyDraft {
   updatedAt DateTime @updatedAt
 
   @@id([ownerId, conversationId, messageId])
+}
+
+// Minimal erasure receipt/tombstone survives deletion of User for restart/restore.
+// Credential payload is encrypted and never exposed by the receipt or export.
+model AccountErasureJob {
+  id String @id @default(uuid())
+  ownerId String @unique
+  receiptDigest String @unique
+  state String @default("queued")
+  revocationStatus String @default("pending")
+  encryptedTokens String?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  claimToken String?
+  claimedUntil DateTime?
+  requestedAt DateTime @default(now())
+  localDeletedAt DateTime?
+  completedAt DateTime?
+  receiptExpiresAt DateTime
+  retainedUntil DateTime
+  blockerCode String?
+
+  @@index([state, nextAttemptAt, claimedUntil])
+  @@index([retainedUntil])
 }
