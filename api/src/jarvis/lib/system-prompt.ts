@@ -1,3 +1,4 @@
+import { isDeferredCapability } from '../tools/beta-capabilities';
 import type { ToolCall } from '../tools/tools';
 
 type ToolOnly = Extract<ToolCall, { type: 'tool' }>;
@@ -518,7 +519,16 @@ export function buildJarvisBaseSystemPrompt() {
     },
   ];
 
-  const guide = sections.map((section) => formatSection(section)).join('\n\n');
+  const guide = sections
+    .map((section) => ({
+      ...section,
+      examples: section.examples.filter(
+        (example) => !isDeferredCapability(example.name),
+      ),
+    }))
+    .filter((section) => section.examples.length > 0)
+    .map((section) => formatSection(section))
+    .join('\n\n');
 
   return [
     `Tu es Jarvis.`,

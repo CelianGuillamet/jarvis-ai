@@ -4,7 +4,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BaseBadge from '@/shared/ui/BaseBadge.vue';
 import BaseButton from '@/shared/ui/BaseButton.vue';
 import BaseCard from '@/shared/ui/BaseCard.vue';
-import BaseInput from '@/shared/ui/BaseInput.vue';
 import BaseSkeleton from '@/shared/ui/BaseSkeleton.vue';
 import BaseTextarea from '@/shared/ui/BaseTextarea.vue';
 import { usePreferencesStore } from '@/stores/preferencesStore';
@@ -308,36 +307,9 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-if="inbox.currentStep === 'schedule'" class="mt-3 flex flex-wrap items-end gap-2">
-            <BaseInput
-              v-model="inbox.reminderWhen"
-              label="Rappel"
-              placeholder="demain 9h"
-              hint="Ex: demain 9h, vendredi 14h, 21/04 10:30"
-              class="min-w-[240px]"
-            />
-            <BaseInput
-              v-model="inbox.reminderText"
-              label="Texte (optionnel)"
-              placeholder="Relancer le client…"
-              class="min-w-[280px]"
-            />
-            <BaseButton
-              variant="secondary"
-              size="sm"
-              :disabled="!inbox.hasSelection || !inbox.reminderWhen.trim()"
-              :loading="inbox.busy"
-              @click="
-                inbox.apply('remind', {
-                  reminderWhen: inbox.reminderWhen.trim(),
-                  ...(inbox.reminderText.trim() ? { reminderText: inbox.reminderText.trim() } : {}),
-                  archiveAfter: true,
-                })
-              "
-            >
-              Rappel + archiver
-            </BaseButton>
-          </div>
+          <p v-if="inbox.currentStep === 'schedule'" class="mt-3 text-sm text-muted-foreground">
+            Les rappels arrivent après la bêta privée. Ces e-mails restent dans ta boîte de réception.
+          </p>
         </div>
 
         <!-- List body -->
@@ -585,29 +557,9 @@ onBeforeUnmount(() => {
               <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Planifier
               </p>
-              <div class="mt-3 space-y-2">
-                <BaseInput
-                  v-model="inbox.reminderWhen"
-                  label="Quand"
-                  placeholder="demain 9h"
-                />
-                <BaseInput
-                  v-model="inbox.reminderText"
-                  label="Texte (optionnel)"
-                  placeholder="Relancer…"
-                />
-              </div>
-              <div class="mt-3 flex justify-end">
-                <BaseButton
-                  variant="secondary"
-                  size="sm"
-                  :disabled="!inbox.reminderWhen.trim()"
-                  :loading="inbox.busy"
-                  @click="inbox.createReminder(inbox.messagePanel.message.id)"
-                >
-                  Créer rappel + archiver
-                </BaseButton>
-              </div>
+              <p class="mt-3 text-sm text-muted-foreground">
+                Les rappels arrivent après la bêta privée.
+              </p>
             </BaseCard>
           </div>
         </div>
