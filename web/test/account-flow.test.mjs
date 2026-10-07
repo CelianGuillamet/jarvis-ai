@@ -302,9 +302,10 @@ test("privacy settings reflect a remote configured model and explain retention",
     details.open = true;
     assert.match(details.textContent, /90 jours/);
     assert.match(details.textContent, /14 jours/);
-    assert.match(details.textContent, /diagnostics Jarvis enregistrés en base/);
+    assert.match(details.textContent, /diagnostics techniques JarvisLog enregistrés en base/);
     assert.match(details.textContent, /journaux d’hébergement sont gérés séparément/);
-    assert.match(details.textContent, /journal des commandes reste/);
+    assert.match(details.textContent, /journaux de commandes et d’actions.*restent jusqu’à la suppression du compte/);
+    assert.match(details.textContent, /la minimisation des diagnostics JarvisLog ne s’applique pas à ces contenus/);
     assert.match(details.textContent, /30 jours/);
   } finally { f.app.unmount(); }
 });

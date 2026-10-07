@@ -1,6 +1,18 @@
-# JAR-039 — Contrôle des données : conception en cours
+# JAR-039 — Contrôle des données : conception et état final
 
-Statut : implémentation en cours, aucune fonctionnalité livrée ou fusionnée.
+Statut final : export, suppression, révocation Google, rétention bornée, disclosure
+des fournisseurs et ledger de sauvegarde indépendant sont implémentés et testés.
+Vérification locale sur le commit final (branche `codex/jar-039-data-controls`) :
+511 tests unitaires API et 106 tests Web passent, types/lint/build des deux projets
+passent, et les 147 tests PostgreSQL de `npm --prefix api run test:integration`
+passent (20 suites, y compris `erasure-backup-replay.integration-spec.ts`). Les
+preuves CI GitHub des commits précédents sont listées chronologiquement ci-dessous ;
+celles du commit final apparaîtront dans l'historique des checks de la PR. Limites
+restantes à la fusion : voir la section « Limites restantes » en fin de document. La
+suite chronologique ci-dessous est le journal de conception conservé tel qu'écrit
+pendant le développement ; les phrases « non livré », « pas encore implémenté » ou
+« non raccordé » qu'il contient décrivent l'état au moment où elles ont été écrites,
+pas l'état final.
 
 ## Architecture existante vérifiée
 
@@ -386,3 +398,41 @@ post-expiry recovery and the real App public route making no signed-account requ
 Native save-picker/browser rendering have not been exercised by these DOM tests.
 Independent backup-ledger/restore replay and final browser/review evidence remain before
 this draft can merge. No deployment or real provider calls were performed.
+
+## Correctifs de revue indépendante
+
+L'in-memory tool caches (`LAST_CAL_*`, `LAST_GMAIL_*`, `LAST_SHOPPING_LIST`,
+`LAST_MISSION_LIST`, `LAST_TODO_LIST`, `LAST_NOTE_LIST`, `LAST_MEMORY_LIST`) sont
+désormais couverts par `clearLocalToolCaches`, appelé depuis `forgetConversation`,
+et gardés en écriture par `PrivateCacheFence` via `withLocalToolCaches` qui entoure
+toute exécution d'outil (`runTool`, `prepareGmailTargets`, `prepareLocalTargets`,
+`prepareCalendarTarget`). Un appel d'outil en vol après effacement ne peut donc plus
+republier de contenu privé dans ces maps. Voir `api/src/jarvis/tools/tools.ts` et
+`api/src/jarvis/services/jarvis.service.ts`.
+
+Le ledger de sauvegarde (voir `docs/privacy/backup-restoration.md`) écrit son
+admission avant le commit SQL par construction : c'est un choix délibéré en faveur
+de la confidentialité (mieux vaut rejouer une suppression déjà demandée après une
+panne que perdre la protection contre une sauvegarde restaurée). L'écran de
+suppression (`AccountDataControls.vue`) l'explique désormais à l'utilisateur : une
+erreur affichée après confirmation n'annule pas forcément la demande, qui peut
+reprendre au redémarrage du service.
+
+## Limites restantes
+
+- Minimisation des logs bruts : seule la table `JarvisLog` est concernée (14 jours,
+  sans texte brut). `Command`/`JarvisActionEvent` conservent arguments, réponses,
+  aperçus et messages d'erreur jusqu'à la suppression du compte, pour permettre la
+  reprise et le suivi des opérations ; la carte Réglages le dit explicitement et ne
+  prétend pas à une minimisation plus large.
+- Croissance du ledger de sauvegarde : les enregistrements `admitted` ne sont jamais
+  purgés automatiquement. Les enregistrements `deleted` passés leur `retainedUntil`
+  peuvent être retirés via `npm --prefix api run privacy:ledger -- prune
+  --backups-confirmed-retired`, uniquement après confirmation opérateur que les
+  sauvegardes susceptibles de réintroduire ces comptes sont retirées ; sans ce drapeau,
+  la commande ne fait que compter les enregistrements éligibles. Ce retrait reste une
+  action manuelle, jamais déclenchée par le rejeu au démarrage.
+- Aucune répétition pg_dump/pg_restore réelle n'a été exécutée ; cette vérification
+  appartient à JAR-041.
+- Lecteur d'écran réel, `prefers-reduced-motion` système et réseau hors ligne réel ne
+  sont pas vérifiés par cette ticket (hors périmètre, suivis par JAR-034).

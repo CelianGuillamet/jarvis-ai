@@ -1,3 +1,4 @@
+import * as toolCaches from '../tools/tools';
 import { InvalidModelResponseError } from '../providers/model-response';
 import { JarvisStatusSnapshotSchema } from '../../contracts/v1';
 import { runTool } from '../tools/tools';
@@ -466,7 +467,10 @@ describe('JarvisService', () => {
       'erased-conversation',
     );
     await ready;
+    const clearTools = jest.spyOn(toolCaches, 'clearLocalToolCaches');
     service.forgetConversation('erased-conversation');
+    expect(clearTools).toHaveBeenCalledWith('erased-conversation');
+    clearTools.mockRestore();
     finish(JSON.stringify({ type: 'final', text: 'Réponse privée différée' }));
     await pending;
     expect(service['recentMemory'].has('erased-conversation')).toBe(false);

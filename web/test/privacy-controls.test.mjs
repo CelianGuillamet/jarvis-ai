@@ -39,6 +39,7 @@ for (const failure of [false, true]) {
     app.use(createPinia()); app.mount('#root');
     try {
       button('Préparer la suppression').click(); await nextTick();
+      assert.match(document.body.textContent, /Même si une erreur est affichée/);
       const confirm = button('Confirmer la suppression');
       assert.equal(confirm.disabled, true);
       const email = document.querySelector('input[autocomplete="email"]');
@@ -51,7 +52,8 @@ for (const failure of [false, true]) {
       assert.equal(calls.length, 1);
       assert.equal(accepted, failure ? 0 : 1);
       if (failure) {
-        assert.match(document.body.textContent, /Consultez son suivi/);
+        assert.match(document.body.textContent, /consultez son suivi/);
+        assert.match(document.querySelector('[role=alert]').textContent, /reprendre au redémarrage du service, même après une erreur/);
         assert.ok(document.querySelector('a[href="/deletion-status"]'));
       }
       assert.match(JSON.parse(dom.window.sessionStorage.getItem('jarvis.erasure.receipt.v1')).receipt, /^[a-f0-9]{64}$/);

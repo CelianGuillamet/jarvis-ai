@@ -105,7 +105,7 @@ async function deleteAccount() {
     error.value =
       failure instanceof HttpError && failure.status === 409
         ? failure.message
-        : "La demande n’a pas pu être confirmée. Consultez son suivi avant de réessayer.";
+        : "La demande n’a pas pu être confirmée. La suppression peut néanmoins être enregistrée et reprendre au redémarrage du service, même après une erreur. Conservez votre reçu et consultez son suivi avant de réessayer.";
   } finally {
     deletionBusy.value = false;
   }
@@ -147,7 +147,9 @@ async function deleteAccount() {
       <template v-else>
         <p class="text-sm">
           Un reçu est conservé dans cet onglet. Téléchargez-le pour suivre votre
-          demande après fermeture du navigateur.
+          demande après fermeture du navigateur. Même si une erreur est affichée après
+          confirmation, la suppression peut être enregistrée et reprendre au
+          redémarrage du service.
         </p>
         <BaseButton variant="secondary" @click="downloadReceipt"
           >Télécharger mon reçu</BaseButton

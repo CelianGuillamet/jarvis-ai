@@ -5,7 +5,10 @@ import { mkdtemp, rm, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { ErasureBackupLedger } from '../../src/privacy/erasure-backup-ledger';
+import {
+  ErasureBackupLedger,
+  type ErasureTombstone,
+} from '../../src/privacy/erasure-backup-ledger';
 import { ErasureBackupReplayService } from '../../src/privacy/erasure-backup-replay.service';
 import { AccountErasureStore } from '../../src/privacy/account-erasure.store';
 import { AccountErasurePurgeService } from '../../src/privacy/account-erasure-purge.service';
@@ -59,6 +62,51 @@ describe('Independent deletion replay after restoring old rows', () => {
       throw new Error('Expected isolated replay claim');
     return job;
   }
+
+  it('replays a durable admission even when SQL rolls back and the API reports failure', async () => {
+    const target = await owner();
+    const other = await owner();
+    const receipt = randomBytes(32).toString('hex');
+    const publisher = new ErasureBackupLedger(
+      new ConfigService({ AUTH_SECRET: secret, PRIVACY_LEDGER_DIR: directory }),
+    );
+    const failAfterPublication = jest
+      .spyOn(ledger, 'record')
+      .mockImplementationOnce(async (record: ErasureTombstone) => {
+        await publisher.record(record);
+        throw new Error('SQL transaction interrupted after durable admission');
+      });
+    try {
+      await expect(
+        store.request(target.id, { receipt, confirmEmail: target.email }),
+      ).rejects.toThrow();
+    } finally {
+      failAfterPublication.mockRestore();
+    }
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: target.id } }))
+        .disabled,
+    ).toBe(false);
+    expect(
+      await prisma.accountErasureJob.findUnique({
+        where: { ownerId: target.id },
+      }),
+    ).toBeNull();
+    await new ErasureBackupReplayService(prisma, ledger).reconcile();
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: target.id } }))
+        .disabled,
+    ).toBe(true);
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: other.id } }))
+        .disabled,
+    ).toBe(false);
+    expect(
+      await prisma.accountErasureJob.findUnique({
+        where: { ownerId: target.id },
+      }),
+    ).toMatchObject({ state: 'queued', revocationStatus: 'manual_required' });
+  });
 
   it('reapplies deletion without recreating access and preserves another owner', async () => {
     const target = await owner();

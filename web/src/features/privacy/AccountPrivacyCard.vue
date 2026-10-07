@@ -54,8 +54,8 @@ onMounted(load);
         <ul class="mt-3 list-disc space-y-2 pl-5 text-muted-foreground">
           <li>Vos tâches, notes et souvenirs restent jusqu’à leur suppression.</li>
           <li>Les échanges terminés restent {{ disclosure.retention.conversationDays }} jours.</li>
-          <li>Les diagnostics Jarvis enregistrés en base restent {{ disclosure.retention.diagnosticDays }} jours, sans texte brut des échanges. Les journaux d’hébergement sont gérés séparément par l’opérateur.</li>
-          <li>Le journal des commandes reste jusqu’à la suppression du compte pour permettre la reprise des opérations.</li>
+          <li>Les diagnostics techniques JarvisLog enregistrés en base restent {{ disclosure.retention.diagnosticDays }} jours, sans texte brut des échanges. Les journaux d’hébergement sont gérés séparément par l’opérateur.</li>
+          <li>Les journaux de commandes et d’actions (Command et JarvisActionEvent) restent jusqu’à la suppression du compte pour permettre la reprise et le suivi des opérations. Ils peuvent conserver les arguments, réponses, aperçus de résultats et messages d’erreur ; la minimisation des diagnostics JarvisLog ne s’applique pas à ces contenus.</li>
           <li>Le reçu de suppression permet le suivi pendant {{ disclosure.retention.receiptDays }} jours.</li>
           <li>Les sauvegardes éventuelles sont gérées par l’opérateur et doivent expirer sous {{ disclosure.retention.maximumBackupDays }} jours. Une suppression doit être réappliquée avant de remettre une sauvegarde en service.</li>
         </ul>

@@ -47,14 +47,31 @@ sans ligne de travail. Elle reste une demande explicitement confirmée par son a
 le rejeu doit la reprendre. Une panne du stockage avant publication annule l’admission
 SQL et ne doit ni désactiver le compte ni révoquer son invitation.
 
-## Vérification en cours
+## Purge du journal (bornage de la croissance)
+
+`ErasureBackupLedger.prune` et `npm --prefix api run privacy:ledger -- prune
+[--backups-confirmed-retired]` retirent uniquement les enregistrements `deleted`
+dont `retainedUntil` est dépassé, et seulement avec le drapeau de confirmation.
+Sans ce drapeau, la commande rapporte le nombre d'enregistrements éligibles sans
+rien supprimer. Les enregistrements `admitted` (effacement non encore confirmé
+localement) ne sont jamais purgés par cette commande, quel que soit le drapeau :
+c'est un geste opérateur explicite, jamais automatique au démarrage ou pendant le
+rejeu, et il ne doit être lancé qu'après avoir confirmé que toutes les sauvegardes
+susceptibles de réintroduire ces comptes ont expiré ou ont été retirées.
+
+## Vérification
 
 Les tests natifs de fichiers couvrent écritures concurrentes, chiffrement,
-immutabilité, falsification, permissions et rotation de clés. Les nouveaux tests
-PostgreSQL simulent le retour d’anciennes lignes/sessions avec disparition du tombstone
-SQL, puis vérifient désactivation, nouvelle purge, isolation et idempotence. Ils
-couvrent également l’annulation d’admission si le journal est indisponible et la
-préservation d’une exécution non résolue. Leur CI doit encore être vérifiée.
+immutabilité, falsification, permissions, rotation de clés et la purge décrite
+ci-dessus (admis jamais purgé, retrait conditionné à la confirmation et à la date).
+Les tests PostgreSQL simulent le retour d’anciennes lignes/sessions avec disparition
+du tombstone SQL, puis vérifient désactivation, nouvelle purge, isolation et
+idempotence. Ils couvrent également l’annulation d’admission si le journal est
+indisponible et la préservation d’une exécution non résolue. Local : les 10 tests
+unitaires de `erasure-backup-ledger.spec.ts` passent (dont les 3 de purge) ; la
+réconciliation au redémarrage est couverte par
+`api/test/integration/erasure-backup-replay.integration-spec.ts` (PostgreSQL, voir
+`docs/privacy/data-controls-design.md` pour les preuves CI de ce commit).
 
 Cette preuve ciblée ne prétend pas effectuer une restauration de production ni une
 répétition complète pg_dump/pg_restore : cette répétition appartient à JAR-041.

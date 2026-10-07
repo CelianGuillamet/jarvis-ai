@@ -172,4 +172,37 @@ export class ErasureBackupLedger {
       yield await this.read(join(directory, entry.name), match[1], match[2]);
     }
   }
+
+  /**
+   * Removes completed ("deleted") tombstones whose retainedUntil has passed. Requires explicit
+   * operator confirmation: retainedUntil is a minimum review date, never a standing deletion
+   * permission (see docs/privacy/backup-restoration.md). "admitted" records are never pruned
+   * here; only a completed local purge, confirmed retired from backups, may be removed. Bounds
+   * the ledger directory so replay cost does not grow without limit.
+   */
+  async prune(
+    confirmedBackupsRetired: boolean,
+    now: Date = new Date(),
+  ): Promise<{ removed: number; eligible: number }> {
+    const directory = await this.ensureDirectory();
+    const entries = await opendir(directory);
+    let removed = 0;
+    let eligible = 0;
+    for await (const entry of entries) {
+      if (entry.name.endsWith('.tmp')) continue;
+      const match = filename.exec(entry.name);
+      if (!match || !entry.isFile())
+        throw new Error('Invalid deletion ledger entry.');
+      const [, jobId, kind] = match;
+      if (kind !== 'deleted') continue;
+      const path = join(directory, entry.name);
+      const record = await this.read(path, jobId, kind);
+      if (Date.parse(record.retainedUntil) > now.getTime()) continue;
+      eligible += 1;
+      if (!confirmedBackupsRetired) continue;
+      await unlink(path);
+      removed += 1;
+    }
+    return { removed, eligible };
+  }
 }

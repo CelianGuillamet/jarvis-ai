@@ -44,6 +44,8 @@ import {
 } from '../lib/execution-policy';
 import { PendingActionsService } from './pending-action.service';
 import {
+  clearLocalToolCaches,
+  withLocalToolCaches,
   previewTool,
   runTool,
   type ToolContext,
@@ -1049,6 +1051,7 @@ export class JarvisService {
   }
 
   private clearPrivateConversationCaches(sessionId: string): void {
+    clearLocalToolCaches(sessionId);
     this.convo.delete(sessionId);
     this.recentMemory.delete(sessionId);
     this.humanProfileStore.forget(sessionId);
@@ -1064,8 +1067,10 @@ export class JarvisService {
     sessionId: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    return this.privateCacheFence.run(sessionId, operation, () =>
-      this.clearPrivateConversationCaches(sessionId),
+    return this.privateCacheFence.run(
+      sessionId,
+      () => withLocalToolCaches(sessionId, operation),
+      () => this.clearPrivateConversationCaches(sessionId),
     );
   }
 

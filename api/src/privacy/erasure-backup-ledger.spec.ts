@@ -135,4 +135,48 @@ describe('Independent backup deletion ledger', () => {
     await expect(collect(missing)).rejects.toThrow();
     await expect(missing.record(tombstone())).rejects.toThrow();
   });
+
+  it('never prunes an admitted record, confirmed or not', async () => {
+    const record = tombstone();
+    await ledger.record(record);
+    const past = new Date(Date.parse(record.retainedUntil) + 1000);
+    expect(await ledger.prune(true, past)).toEqual({ removed: 0, eligible: 0 });
+    expect(await collect(ledger)).toEqual([record]);
+  });
+
+  it('reports a completed record past its review date but keeps it until confirmed', async () => {
+    const record = {
+      ...tombstone(),
+      kind: 'deleted' as const,
+      localDeletedAt: '2026-10-07T00:00:00.000Z',
+    };
+    await ledger.record(record);
+    const past = new Date(Date.parse(record.retainedUntil) + 1000);
+    expect(await ledger.prune(false, past)).toEqual({
+      removed: 0,
+      eligible: 1,
+    });
+    expect(await collect(ledger)).toEqual([record]);
+  });
+
+  it('removes a completed record past its review date only once backups are confirmed retired', async () => {
+    const record = {
+      ...tombstone(),
+      kind: 'deleted' as const,
+      localDeletedAt: '2026-10-07T00:00:00.000Z',
+    };
+    await ledger.record(record);
+    const before = new Date(Date.parse(record.retainedUntil) - 1000);
+    expect(await ledger.prune(true, before)).toEqual({
+      removed: 0,
+      eligible: 0,
+    });
+    expect(await collect(ledger)).toEqual([record]);
+    const after = new Date(Date.parse(record.retainedUntil) + 1000);
+    expect(await ledger.prune(true, after)).toEqual({
+      removed: 1,
+      eligible: 1,
+    });
+    expect(await collect(ledger)).toEqual([]);
+  });
 });
