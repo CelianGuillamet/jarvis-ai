@@ -74,6 +74,46 @@ describe('gateToolCall', () => {
     expect(err).toBeNull();
   });
 
+  it('allows gmail.send with gmail.modify scope', () => {
+    const call: ToolOnly = {
+      type: 'tool',
+      name: 'gmail.send',
+      args: { to: 'a@example.com', subject: 'x', text: 'y' },
+    };
+    expect(
+      gateToolCall(
+        call,
+        status(['https://www.googleapis.com/auth/gmail.modify']),
+      ),
+    ).toBeNull();
+  });
+
+  it('does not treat send-only consent as permission to read the inbox', () => {
+    const call: ToolOnly = {
+      type: 'tool',
+      name: 'gmail.list',
+      args: { limit: 20 },
+    };
+    expect(
+      gateToolCall(call, status(['https://www.googleapis.com/auth/gmail.send']))
+        ?.code,
+    ).toBe('GMAIL_SCOPE_MISSING');
+  });
+
+  it('does not authorize permanent deletion with gmail.modify', () => {
+    const call: ToolOnly = {
+      type: 'tool',
+      name: 'gmail.delete',
+      args: { ref: 1 },
+    };
+    expect(
+      gateToolCall(
+        call,
+        status(['https://www.googleapis.com/auth/gmail.modify']),
+      )?.code,
+    ).toBe('GMAIL_SCOPE_MISSING');
+  });
+
   it('blocks calendar.create when calendar.events scope is missing', () => {
     const call: ToolOnly = {
       type: 'tool',
@@ -98,5 +138,23 @@ describe('gateToolCall', () => {
       status(['https://www.googleapis.com/auth/calendar.readonly']),
     );
     expect(err).toBeNull();
+  });
+
+  it('requires both calendar-list and event-read permissions to list events', () => {
+    const call: ToolOnly = {
+      type: 'tool',
+      name: 'calendar.list',
+      args: { rangeText: "aujourd'hui", limit: 20 },
+    };
+    const listScope =
+      'https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+    const eventScope = 'https://www.googleapis.com/auth/calendar.events';
+    expect(gateToolCall(call, status([listScope]))?.code).toBe(
+      'CALENDAR_SCOPE_MISSING',
+    );
+    expect(gateToolCall(call, status([eventScope]))?.code).toBe(
+      'CALENDAR_SCOPE_MISSING',
+    );
+    expect(gateToolCall(call, status([listScope, eventScope]))).toBeNull();
   });
 });
