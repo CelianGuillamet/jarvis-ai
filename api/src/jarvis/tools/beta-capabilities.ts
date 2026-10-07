@@ -1,18 +1,9 @@
-const deferredPrefixes = [
-  'habit.',
-  'expense.',
-  'budget.',
-  'delegation.',
-  'analytics.',
-  'resource.',
-  'reminder.',
-];
+import { TOOL_DEFINITIONS } from './tool-definitions';
+import type { ToolName } from './tool-registry';
+
 export const DEFERRED_CAPABILITY_MESSAGE =
   'Cette fonctionnalité est reportée après la bêta privée.';
 
 export function isDeferredCapability(name: string): boolean {
-  return (
-    deferredPrefixes.some((prefix) => name.startsWith(prefix)) ||
-    name === 'gmail.delete'
-  );
+  return TOOL_DEFINITIONS[name as ToolName]?.deferred ?? false;
 }
