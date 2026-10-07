@@ -2,6 +2,8 @@ import * as toolCaches from '../tools/tools';
 import { InvalidModelResponseError } from '../providers/model-response';
 import { JarvisStatusSnapshotSchema } from '../../contracts/v1';
 import { runTool } from '../tools/tools';
+import { DisabledWebProvider } from '../providers/web.provider';
+import { DefaultWeatherProvider } from '../providers/weather.provider';
 import type { CalendarEventItem } from '../../calendar/providers/calendar.provider';
 import type { CommandExecution } from '../../commands/command-execution.service';
 import { executeWithPolicy } from '../../commands/execution-policy';
@@ -411,8 +413,10 @@ function makeService(options: ServiceOptions = {}) {
     {} as ServiceDependencies[27],
     {} as ServiceDependencies[28],
     personalMemory as unknown as ServiceDependencies[29],
+    { providerName: 'ollama', chat: llmChat },
+    new DisabledWebProvider(),
+    new DefaultWeatherProvider(),
   );
-  jest.spyOn(service['llm'], 'chat').mockImplementation(llmChat);
 
   return {
     service,
@@ -685,6 +689,39 @@ describe('JarvisService', () => {
       );
     },
   );
+
+  it('holds a model-proposed destructive tool for confirmation instead of running it', async () => {
+    const { service, llmChat, pending } = makeService({
+      todos: [{ id: 't1', text: 'Appeler Pepper', done: false }],
+    });
+    llmChat.mockResolvedValueOnce(
+      '{"type":"tool","name":"todo.clear_all","args":{}}',
+    );
+
+    const response = await service.chat('fais le ménage', 'planner-boundary');
+
+    expect(llmChat).toHaveBeenCalledTimes(1);
+    expect(response).toHaveProperty('pending_action.name', 'todo.clear_all');
+    expect(pending.create).toHaveBeenCalledTimes(1);
+    expect(response.text).not.toMatch(/^OK/);
+  });
+
+  it('never executes a model-proposed deferred capability', async () => {
+    const { service, llmChat, pending } = makeService();
+    llmChat.mockResolvedValueOnce(
+      '{"type":"tool","name":"habit.list","args":{}}',
+    );
+
+    const response = await service.chat(
+      'Que penses-tu du temps qui passe ?',
+      'planner-deferred',
+    );
+
+    expect(llmChat).toHaveBeenCalledTimes(1);
+
+    expect(pending.create).not.toHaveBeenCalled();
+    expect(response.text).toContain('reportée après la bêta privée');
+  });
 
   it('injects recent final turns into the LLM context', async () => {
     const { service, llmChat } = makeService();

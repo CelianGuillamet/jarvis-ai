@@ -2,6 +2,8 @@ import { OllamaResponseSchema, readModelResponse } from './model-response';
 import { LLMMessage, LLMProvider } from './llm.provider';
 
 export class OllamaProvider implements LLMProvider {
+  readonly providerName = 'ollama';
+
   constructor(
     private readonly baseUrl = process.env.OLLAMA_URL ||
       'http://localhost:11434',

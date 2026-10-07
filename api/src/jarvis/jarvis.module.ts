@@ -5,6 +5,15 @@ import { TodayTargetService } from '../today/today-target.service';
 import { TodayCommandService } from '../today/today-command.service';
 import { ConversationHistoryService } from './services/conversation-history.service';
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createLlmProvider } from './providers/create-llm-provider';
+import { createWeatherProvider } from './providers/create-weather-provider';
+import { DisabledWebProvider } from './providers/web.provider';
+import {
+  LLM_PROVIDER,
+  WEATHER_PROVIDER,
+  WEB_PROVIDER,
+} from './providers/provider-tokens';
 import { AuthModule } from '../auth/auth.module';
 import { CommandJournalModule } from '../commands/command-journal.module';
 import { JarvisService } from './services/jarvis.service';
@@ -36,6 +45,17 @@ import { PersonalMemoryController } from '../memory/personal-memory.controller';
 @Module({
   imports: [AuthModule, CommandJournalModule],
   providers: [
+    {
+      provide: LLM_PROVIDER,
+      inject: [ConfigService],
+      useFactory: createLlmProvider,
+    },
+    { provide: WEB_PROVIDER, useClass: DisabledWebProvider },
+    {
+      provide: WEATHER_PROVIDER,
+      inject: [ConfigService],
+      useFactory: createWeatherProvider,
+    },
     PersonalMemoryService,
     ActivityService,
     TodayReadService,
