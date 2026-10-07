@@ -1,3 +1,22 @@
+import {
+  compactText,
+  formatPreviewLines,
+  formatMailCategoryTag,
+  formatMailDate,
+  getMailCategory,
+  summarizeMailCategoryBreakdown,
+  stripQuotedReplyLines,
+  summarizeMail,
+} from '../support/tool-text';
+import {
+  getLastGmailList,
+  setLastGmailList,
+  setLastGmailFocus,
+  patchGmailInCache,
+  removeGmailFromCache,
+} from '../support/tool-caches';
+import type { GmailListItem } from '../support/tool-caches';
+import { createPreviewHelpers } from '../support/tool-preview';
 import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import {
   type GmailCategory,
@@ -6,22 +25,7 @@ import {
   getGmailCategoryFromLabels,
   getGmailCategoryLabel,
 } from '../../../gmail/gmail-category';
-import {
-  setLastGmailList,
-  setLastGmailFocus,
-  patchGmailInCache,
-  removeGmailFromCache,
-} from '../support/tool-caches';
 import { resolveGmailBatch } from '../support/tool-resolvers';
-import {
-  formatMailDate,
-  getMailCategory,
-  formatMailCategoryTag,
-  summarizeMailCategoryBreakdown,
-  compactText,
-  stripQuotedReplyLines,
-  summarizeMail,
-} from '../support/tool-text';
 import { defineTool } from '../define-tool';
 
 export const gmailTools = [
@@ -321,6 +325,15 @@ export const gmailTools = [
       });
       return `OK. Email envoyé à ${to} (sujet: "${subject}").`;
     },
+    preview: (_env, call) => {
+      return formatPreviewLines([
+        `To: ${call.args.to}`,
+        call.args.cc ? `Cc: ${call.args.cc}` : null,
+        call.args.bcc ? `Bcc: ${call.args.bcc}` : null,
+        `Sujet: ${compactText(call.args.subject, 140)}`,
+        `Message: ${compactText(call.args.text, 260)}`,
+      ]);
+    },
   }),
   defineTool({
     name: 'gmail.mark_read',
@@ -399,6 +412,49 @@ export const gmailTools = [
       ]
         .filter((line): line is string => !!line)
         .join('\n');
+    },
+    preview: (env, call) => {
+      const { ctx, sessionId } = env;
+      if (ctx.frozenGmailTargets) {
+        return (
+          `${ctx.frozenGmailTargets.length} emails :\n` +
+          ctx.frozenGmailTargets
+            .map((item) => `- ${item.subject} (${item.from})`)
+            .join('\n')
+        );
+      }
+      const unreadOnly = call.args.unreadOnly ?? true;
+      const limit = Math.min(Math.max(call.args.limit ?? 50, 1), 50);
+      const list = getLastGmailList(sessionId);
+      if (!list.length) return 'Liste récente indisponible.';
+
+      const refs = call.args.refs?.length ? call.args.refs : null;
+      const picked = refs
+        ? refs
+            .map((ref) => list[ref - 1])
+            .filter((item): item is GmailListItem => !!item)
+        : list;
+      const filtered = (
+        unreadOnly ? picked.filter((item) => item.unread) : picked
+      ).slice(0, limit);
+
+      if (!filtered.length) {
+        return unreadOnly
+          ? 'Aucun email non lu dans la sélection.'
+          : 'Aucun email dans la sélection.';
+      }
+
+      const sample = filtered.slice(0, 5).map((item) => {
+        const ref = list.findIndex((row) => row.id === item.id) + 1;
+        return `#${ref} ${formatMailCategoryTag(item)} "${compactText(item.subject, 120)}"`;
+      });
+      const rest = filtered.length - sample.length;
+
+      return formatPreviewLines([
+        `Cibles: ${filtered.length} email(s)${unreadOnly ? ' non lu(s)' : ''}.`,
+        ...sample,
+        rest > 0 ? `(+${rest} autres)` : null,
+      ]);
     },
   }),
   defineTool({
@@ -509,6 +565,11 @@ export const gmailTools = [
       removeGmailFromCache(sessionId, target.id);
       return `OK. Email déplacé à la corbeille: "${target.subject}"`;
     },
+    preview: (env, call) => {
+      const { previewGmailByArgs } = createPreviewHelpers(env);
+      const target = previewGmailByArgs(call.args);
+      return target ? `Cible: ${target}` : null;
+    },
   }),
   defineTool({
     name: 'gmail.untrash',
@@ -562,6 +623,11 @@ export const gmailTools = [
       await ctx.gmail.deleteMessage(sessionId, target.id);
       removeGmailFromCache(sessionId, target.id);
       return `OK. Email supprimé définitivement: "${target.subject}"`;
+    },
+    preview: (env, call) => {
+      const { previewGmailByArgs } = createPreviewHelpers(env);
+      const target = previewGmailByArgs(call.args);
+      return target ? `Cible: ${target}` : null;
     },
   }),
 ];

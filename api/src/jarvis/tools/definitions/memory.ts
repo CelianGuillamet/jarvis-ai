@@ -1,11 +1,12 @@
-import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import {
   MAX_FACTS_PER_OWNER,
-  MAX_FACT_LENGTH,
   normalizeFactText,
+  similarFacts,
+  MAX_FACT_LENGTH,
 } from '../../../memory/personal-memory';
+import { compactText, formatPreviewLines } from '../support/tool-text';
+import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import { LAST_MEMORY_LIST, setLastMemoryList } from '../support/tool-caches';
-import { compactText } from '../support/tool-text';
 import { defineTool } from '../define-tool';
 
 export const memoryTools = [
@@ -62,6 +63,31 @@ export const memoryTools = [
       LAST_MEMORY_LIST.delete(sessionId);
       return `C’est noté : « ${compactText(text, 200)} ».`;
     },
+    preview: async (env, call) => {
+      const { prisma } = env;
+      const text = normalizeFactText(call.args.text);
+      if (!text) return null;
+      const close = similarFacts(
+        await prisma.personalFact.findMany({
+          select: {
+            id: true,
+            text: true,
+            origin: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          take: MAX_FACTS_PER_OWNER,
+        }),
+        text,
+      );
+      return formatPreviewLines([
+        `Fait à retenir : « ${compactText(text, 200)} »`,
+        'Portée : votre compte. Vous pourrez le corriger ou l’oublier dans Réglages.',
+        close.length
+          ? `Faits proches déjà retenus (vérifiez qu’ils ne se contredisent pas) :\n${close.map((fact) => `- « ${compactText(fact.text, 160)} »`).join('\n')}`
+          : null,
+      ]);
+    },
   }),
   defineTool({
     name: 'memory.forget',
@@ -87,6 +113,11 @@ export const memoryTools = [
           'NOT_FOUND',
         );
       return `C’est oublié : « ${compactText(text, 200)} ».`;
+    },
+    preview: (_env, call) => {
+      return call.args.text
+        ? `Fait à oublier : « ${compactText(call.args.text, 200)} »`
+        : null;
     },
   }),
 ];

@@ -1,10 +1,14 @@
-import { CommandRejectedError } from '../../../commands/command-rejected.error';
+import { createPreviewHelpers } from '../support/tool-preview';
 import {
+  getLastTodoList,
   LAST_TODO_LIST,
   setLastTodoList,
   patchTodoInCache,
   removeTodoFromCache,
 } from '../support/tool-caches';
+import { cleanRefs } from '../support/tool-resolvers';
+import { compactText, formatPreviewLines } from '../support/tool-text';
+import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import { defineTool } from '../define-tool';
 
 export const todoTools = [
@@ -255,6 +259,10 @@ export const todoTools = [
 
       return `OK. Todo supprimé: "${row.text}"`;
     },
+    preview: async (env, call) => {
+      const { previewTodoByQuery } = createPreviewHelpers(env);
+      return await previewTodoByQuery(call.args.query);
+    },
   }),
   defineTool({
     name: 'todo.bulk_done',
@@ -342,6 +350,23 @@ export const todoTools = [
 
       return `OK. ${before.length} todos supprimés.`;
     },
+    preview: (env, call) => {
+      const { sessionId } = env;
+      const refs = cleanRefs(call.args.refs ?? []);
+      if (!refs.length) return null;
+      const list = getLastTodoList(sessionId);
+      if (!list.length)
+        return `Todos: #${refs.join(', #')} (liste récente indisponible).`;
+      const lines = refs
+        .map((ref) => {
+          const item = list[ref - 1];
+          return item
+            ? `- #${ref} ${item.done ? '[x]' : '[ ]'} ${item.text}`
+            : null;
+        })
+        .filter((line): line is string => !!line);
+      return lines.length ? `Todos:\n${lines.join('\n')}` : null;
+    },
   }),
   defineTool({
     name: 'todo.clear_done',
@@ -386,6 +411,21 @@ export const todoTools = [
 
       return `OK. ${before.length} todos terminés supprimés.`;
     },
+    preview: async (env) => {
+      const { prisma } = env;
+      const doneCount = await prisma.todo.count({ where: { done: true } });
+      const sample = await prisma.todo.findMany({
+        where: { done: true },
+        orderBy: { doneAt: 'desc' },
+        take: 5,
+        select: { text: true },
+      });
+      const sampleLines = sample.map((t) => `- ${compactText(t.text, 120)}`);
+      return formatPreviewLines([
+        `Todos terminés à supprimer: ${doneCount}`,
+        sampleLines.length ? `Exemples:\n${sampleLines.join('\n')}` : null,
+      ]);
+    },
   }),
   defineTool({
     name: 'todo.clear_all',
@@ -427,6 +467,23 @@ export const todoTools = [
       );
 
       return `OK. Tous les todos ont été supprimés (${before.length}).`;
+    },
+    preview: async (env) => {
+      const { prisma } = env;
+      const total = await prisma.todo.count();
+      const open = await prisma.todo.count({ where: { done: false } });
+      const sample = await prisma.todo.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { text: true, done: true },
+      });
+      const sampleLines = sample.map(
+        (t) => `- ${t.done ? '[x]' : '[ ]'} ${compactText(t.text, 120)}`,
+      );
+      return formatPreviewLines([
+        `Todos à supprimer: ${total} (ouverts: ${open})`,
+        sampleLines.length ? `Exemples:\n${sampleLines.join('\n')}` : null,
+      ]);
     },
   }),
 ];

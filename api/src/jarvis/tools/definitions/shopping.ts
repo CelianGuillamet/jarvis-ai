@@ -1,10 +1,14 @@
-import { CommandRejectedError } from '../../../commands/command-rejected.error';
+import { createPreviewHelpers } from '../support/tool-preview';
 import {
+  getLastShoppingList,
   LAST_SHOPPING_LIST,
   setLastShoppingList,
   patchShoppingInCache,
   removeShoppingFromCache,
 } from '../support/tool-caches';
+import { cleanRefs } from '../support/tool-resolvers';
+import { compactText, formatPreviewLines } from '../support/tool-text';
+import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import { defineTool } from '../define-tool';
 
 export const shoppingTools = [
@@ -265,6 +269,10 @@ export const shoppingTools = [
 
       return `OK. Article supprimé: "${row.text}"`;
     },
+    preview: async (env, call) => {
+      const { previewShoppingByQuery } = createPreviewHelpers(env);
+      return await previewShoppingByQuery(call.args.query);
+    },
   }),
   defineTool({
     name: 'shopping.bulk_bought',
@@ -352,6 +360,23 @@ export const shoppingTools = [
 
       return `OK. ${before.length} articles supprimés.`;
     },
+    preview: (env, call) => {
+      const { sessionId } = env;
+      const refs = cleanRefs(call.args.refs ?? []);
+      if (!refs.length) return null;
+      const list = getLastShoppingList(sessionId);
+      if (!list.length)
+        return `Courses: #${refs.join(', #')} (liste récente indisponible).`;
+      const lines = refs
+        .map((ref) => {
+          const item = list[ref - 1];
+          return item
+            ? `- #${ref} ${item.bought ? '[x]' : '[ ]'} ${item.text}`
+            : null;
+        })
+        .filter((line): line is string => !!line);
+      return lines.length ? `Courses:\n${lines.join('\n')}` : null;
+    },
   }),
   defineTool({
     name: 'shopping.clear_bought',
@@ -396,6 +421,23 @@ export const shoppingTools = [
 
       return `OK. ${before.length} articles achetés supprimés.`;
     },
+    preview: async (env) => {
+      const { prisma } = env;
+      const boughtCount = await prisma.shoppingItem.count({
+        where: { bought: true },
+      });
+      const sample = await prisma.shoppingItem.findMany({
+        where: { bought: true },
+        orderBy: { boughtAt: 'desc' },
+        take: 5,
+        select: { text: true },
+      });
+      const sampleLines = sample.map((t) => `- ${compactText(t.text, 120)}`);
+      return formatPreviewLines([
+        `Articles achetés à supprimer: ${boughtCount}`,
+        sampleLines.length ? `Exemples:\n${sampleLines.join('\n')}` : null,
+      ]);
+    },
   }),
   defineTool({
     name: 'shopping.clear_all',
@@ -437,6 +479,25 @@ export const shoppingTools = [
       );
 
       return `OK. Toute la liste de courses a été supprimée (${before.length}).`;
+    },
+    preview: async (env) => {
+      const { prisma } = env;
+      const total = await prisma.shoppingItem.count();
+      const open = await prisma.shoppingItem.count({
+        where: { bought: false },
+      });
+      const sample = await prisma.shoppingItem.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { text: true, bought: true },
+      });
+      const sampleLines = sample.map(
+        (t) => `- ${t.bought ? '[x]' : '[ ]'} ${compactText(t.text, 120)}`,
+      );
+      return formatPreviewLines([
+        `Articles à supprimer: ${total} (à acheter: ${open})`,
+        sampleLines.length ? `Exemples:\n${sampleLines.join('\n')}` : null,
+      ]);
     },
   }),
 ];

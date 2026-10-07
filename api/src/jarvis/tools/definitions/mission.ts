@@ -1,12 +1,21 @@
+import {
+  getLastMissionList,
+  setLastMissionList,
+  patchMissionInCache,
+} from '../support/tool-caches';
+import {
+  compactText,
+  formatDate,
+  formatClock,
+  describeRelativeMoment,
+  scoreMailUrgency,
+  noteLabel,
+} from '../support/tool-text';
 import { asGoogleIntegrationError } from '../../../google/google-integration.error';
 import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import { DateTime } from 'luxon';
 import { resolveRange } from '../../lib/resolve-range';
 import type { GmailMessageItem } from '../../../gmail/providers/gmail.provider';
-import {
-  setLastMissionList,
-  patchMissionInCache,
-} from '../support/tool-caches';
 import {
   tokenizeMissionText,
   uniqueTokens,
@@ -14,14 +23,6 @@ import {
   missionComplexityLabel,
   formatMissionWindow,
 } from '../support/tool-mission';
-import {
-  formatDate,
-  compactText,
-  formatClock,
-  describeRelativeMoment,
-  scoreMailUrgency,
-  noteLabel,
-} from '../support/tool-text';
 import { defineTool } from '../define-tool';
 
 export const missionTools = [
@@ -106,6 +107,18 @@ export const missionTools = [
       });
 
       return `OK. Mission clôturée: "${target.objective}"${target.nextStep ? ` — dernière prochaine étape: ${compactText(target.nextStep, 120)}` : ''}`;
+    },
+    preview: (env, call) => {
+      const { sessionId } = env;
+      const ref =
+        typeof call.args.ref === 'number' && Number.isInteger(call.args.ref)
+          ? call.args.ref
+          : null;
+      if (ref === null) return null;
+      const list = getLastMissionList(sessionId);
+      const item = list[ref - 1];
+      if (!item) return null;
+      return `Mission #${ref}: ${compactText(item.objective, 160)}`;
     },
   }),
   defineTool({

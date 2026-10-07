@@ -1,3 +1,11 @@
+import {
+  compactText,
+  formatPreviewLines,
+  formatDate,
+  resolveCalendarInterval,
+  formatDurationMinutes,
+} from '../support/tool-text';
+import { createPreviewHelpers } from '../support/tool-preview';
 import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import { DateTime } from 'luxon';
 import { RangeParseError } from '../../lib/resolve-range';
@@ -9,11 +17,6 @@ import {
   patchCalendarInCache,
   removeCalendarFromCache,
 } from '../support/tool-caches';
-import {
-  formatDate,
-  resolveCalendarInterval,
-  formatDurationMinutes,
-} from '../support/tool-text';
 import { defineTool } from '../define-tool';
 
 export const calendarTools = [
@@ -194,6 +197,12 @@ export const calendarTools = [
       ctx.recordUndo?.('création événement calendrier', false);
       return `OK. Événement créé: "${call.args.title}" de ${startParsed.toISO({ suppressMilliseconds: true })} à ${effectiveEnd.toISO({ suppressMilliseconds: true })}`;
     },
+    preview: (_env, call) => {
+      return formatPreviewLines([
+        `Titre: ${compactText(call.args.title, 140)}`,
+        `Quand: ${call.args.when}${call.args.endWhen ? ` → ${call.args.endWhen}` : ''}`,
+      ]);
+    },
   }),
   defineTool({
     name: 'calendar.delete',
@@ -225,6 +234,11 @@ export const calendarTools = [
 
       ctx.recordUndo?.('suppression événement calendrier', false);
       return `OK. Supprimé — ${formatDate(target.when, tz)} — ${target.title}`;
+    },
+    preview: (env, call) => {
+      const { previewCalendarByArgs } = createPreviewHelpers(env);
+      const target = previewCalendarByArgs(call.args);
+      return target ? `Cible: ${target}` : null;
     },
   }),
   defineTool({
@@ -338,6 +352,22 @@ export const calendarTools = [
 
       ctx.recordUndo?.('modification événement calendrier', false);
       return `OK. Événement modifié: ${nextTitle} de ${nextWhenIso} à ${nextEndWhenIso}`;
+    },
+    preview: (env, call) => {
+      const { previewCalendarByArgs } = createPreviewHelpers(env);
+      const target = previewCalendarByArgs(call.args);
+      const patch = formatPreviewLines([
+        call.args.title
+          ? `Nouveau titre: ${compactText(call.args.title, 140)}`
+          : null,
+        call.args.when ? `Nouvelle date: ${call.args.when}` : null,
+        call.args.endWhen ? `Nouvelle fin: ${call.args.endWhen}` : null,
+      ]);
+      if (!target && !patch) return null;
+      return formatPreviewLines([
+        target ? `Cible: ${target}` : null,
+        patch ? `Modifs:\n${patch}` : null,
+      ]);
     },
   }),
 ];

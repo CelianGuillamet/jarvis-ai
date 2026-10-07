@@ -1,3 +1,4 @@
+import { createPreviewHelpers } from '../support/tool-preview';
 import { CommandRejectedError } from '../../../commands/command-rejected.error';
 import {
   setLastNoteList,
@@ -196,6 +197,10 @@ export const noteTools = [
       }
 
       return `OK. Note supprimée: "${noteLabel(row)}"`;
+    },
+    preview: async (env, call) => {
+      const { previewNoteByQuery } = createPreviewHelpers(env);
+      return await previewNoteByQuery(call.args.query);
     },
   }),
 ];
