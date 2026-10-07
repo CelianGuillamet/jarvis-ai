@@ -41,10 +41,15 @@ export class PrivacyRetentionService {
         // 'completed'/'failed' on its own and would otherwise keep raw input forever.
         // Redact it once it is clearly no longer in flight, then let the ordinary
         // completed/failed expiry remove the row after its own retention window.
+        // Rows owned by a disabled account are excluded: guard_active_owner_write
+        // rejects any INSERT/UPDATE on ConversationTurn for a disabled owner, and
+        // such accounts are already queued for full erasure, which removes the row.
         await tx.$executeRaw`WITH stale AS (
-          SELECT "id" FROM "ConversationTurn" WHERE "state" = 'started'
-            AND "updatedAt" < CURRENT_TIMESTAMP - interval '1 day'
-          ORDER BY "updatedAt", "id" FOR UPDATE SKIP LOCKED LIMIT 500
+          SELECT t."id" FROM "ConversationTurn" t
+            JOIN "User" u ON u."id" = t."ownerId"
+          WHERE t."state" = 'started' AND NOT u."disabled"
+            AND t."updatedAt" < CURRENT_TIMESTAMP - interval '1 day'
+          ORDER BY t."updatedAt", t."id" FOR UPDATE OF t SKIP LOCKED LIMIT 500
         ) UPDATE "ConversationTurn" t SET "state" = 'failed', "inputText" = '',
           "updatedAt" = CURRENT_TIMESTAMP
           FROM stale s WHERE t."id" = s."id"`;

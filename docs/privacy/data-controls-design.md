@@ -5,10 +5,11 @@ des fournisseurs et ledger de sauvegarde indépendant sont implémentés et test
 Vérification locale sur le commit final (branche `codex/jar-039-data-controls`),
 commande par commande, exécutée dans cette session : 512 tests unitaires API et 106
 tests Web passent (`npm --prefix api test -- --runInBand`, `npm --prefix web test`),
-typecheck/lint/build des deux projets et `build:prototype` passent, et les 148 tests
+typecheck/lint/build des deux projets et `build:prototype` passent, et les 149 tests
 PostgreSQL de `npm --prefix api run test:integration` passent (20 suites, y compris
 `erasure-backup-replay.integration-spec.ts` et `privacy-retention.integration-spec.ts`
-avec ses nouveaux cas d'expiration des tours `started`). Ces commandes ont été
+avec ses nouveaux cas d'expiration des tours `started`, y compris pour un compte
+désactivé). Ces commandes ont été
 réellement exécutées, pas seulement annoncées. Les preuves CI GitHub des commits
 précédents sont listées chronologiquement ci-dessous ; celles du commit final sont
 visibles dans l'historique des checks de la PR #31. Limites restantes à la fusion :
@@ -422,6 +423,16 @@ suppression (`AccountDataControls.vue`) l'explique désormais à l'utilisateur :
 erreur affichée après confirmation n'annule pas forcément la demande, qui peut
 reprendre au redémarrage du service.
 
+`npm --prefix api run privacy:ledger -- prune` ne pouvait pas s'exécuter : il
+importait directement `erasure-backup-ledger.ts`, décoré `@Injectable()` et utilisant
+le sucre TypeScript des propriétés de paramètre, que le dé-typage intégré de Node
+(utilisé par les scripts `.mjs` du dossier, sans `ts-node`) ne sait pas interpréter.
+La logique du ledger (lecture/écriture/chiffrement/purge) est maintenant dans
+`erasure-backup-ledger-engine.ts`, une classe simple sans décorateur ; l'adaptateur
+Nest `erasure-backup-ledger.ts` s'en sert pour l'application, et le script l'importe
+directement. Le script a été vérifié de bout en bout (purge réelle d'un enregistrement
+`admitted`+`deleted` simulé), pas seulement relu.
+
 ## Limites restantes
 
 - Minimisation des logs bruts : seule la table `JarvisLog` est concernée (14 jours,
@@ -433,7 +444,11 @@ reprendre au redémarrage du service.
   annulation ou un rejet du trigger de propriétaire laisse sans transition n'est
   jamais supprimé par lots (il peut encore attendre une réconciliation), mais son
   texte brut est désormais effacé (`inputText` vidé, état `failed`) une fois qu'il
-  n'est plus plausiblement en vol, après un jour. Voir `PrivacyRetentionService` et
+  n'est plus plausiblement en vol, après un jour. Les lignes d'un compte désactivé
+  (effacement en cours) sont explicitement exclues de cette rétention : le trigger
+  `guard_active_owner_write` rejette toute écriture sur `ConversationTurn` pour un
+  propriétaire désactivé, et ces comptes sont de toute façon purgés intégralement
+  par le pipeline d'effacement. Voir `PrivacyRetentionService` et
   `ConversationTurn_started_retention_idx`.
 - Quota IP sur `GET /account/deletion/status` : `configure-http-safety.ts` met
   `trust proxy` à `false`, donc derrière un reverse-proxy partagé tous les appels

@@ -181,6 +181,44 @@ describe('Bounded privacy retention', () => {
     expect(redacted?.inputText).toBe('');
   });
 
+  it('never attempts to redact a stale started turn for a disabled account', async () => {
+    const ownerId = randomUUID();
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        email: `${ownerId}@example.invalid`,
+        name: 'Retention',
+      },
+    });
+    const conversation = await prisma.conversation.create({
+      data: { ownerId, clientKey: 'disabled-owner-retention' },
+    });
+    const stale = await prisma.conversationTurn.create({
+      data: {
+        ownerId,
+        conversationId: conversation.id,
+        kind: 'chat',
+        inputText: 'Abandoned turn for a disabled account',
+        state: 'started',
+        createdAt: new Date(Date.now() - 2 * 86400000),
+        updatedAt: new Date(Date.now() - 2 * 86400000),
+      },
+    });
+    // The account is disabled only after its turn exists, matching an erasure in
+    // progress. guard_active_owner_write then rejects writes to ConversationTurn for
+    // this owner: the batch must skip this row rather than abort the whole transaction.
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { disabled: true },
+    });
+    await expect(retention.runBatch()).resolves.toBeUndefined();
+    const untouched = await prisma.conversationTurn.findUnique({
+      where: { id: stale.id },
+    });
+    expect(untouched?.state).toBe('started');
+    expect(untouched?.inputText).toBe('Abandoned turn for a disabled account');
+  });
+
   it('discards expired revocation credentials without racing a live lease', async () => {
     const protection = new ErasureCredentialCipher(
       new ConfigService({ AUTH_SECRET: 'retention-secret'.repeat(4) }),
