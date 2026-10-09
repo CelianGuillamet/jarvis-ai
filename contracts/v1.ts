@@ -1098,7 +1098,7 @@ export type RoutineResumeRequest = z.infer<typeof RoutineResumeRequestSchema>;
 
 export const VoiceStatusSchema = z.strictObject({
   transcription: z.enum(['disabled', 'unavailable', 'ready']),
-  speech: z.enum(['disabled', 'unavailable', 'ready']),
+  speech: z.enum(['disabled', 'unavailable', 'loading', 'ready']),
 });
 export type VoiceStatus = z.infer<typeof VoiceStatusSchema>;
 export const VoiceTranscriptSchema = z.strictObject({

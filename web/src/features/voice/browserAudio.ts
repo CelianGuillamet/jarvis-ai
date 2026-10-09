@@ -1,4 +1,5 @@
 import type { Capture } from "./dictation.ts";
+import type { Microphone } from "./conversation.ts";
 
 const WORKLET = `
 class JarvisRecorder extends AudioWorkletProcessor {
@@ -88,4 +89,44 @@ export async function playWav(audio: ArrayBuffer, signal: AbortSignal): Promise<
     signal.addEventListener("abort", onAbort, { once: true });
     source.start();
   });
+}
+
+/** Continuous microphone for the hands-free mode: frames go to the detector, nothing is recorded or kept. */
+export async function openMicrophone(): Promise<Microphone> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  let context: AudioContext | undefined;
+  try {
+    context = new AudioContext();
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));
+    try {
+      await context.audioWorklet.addModule(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    const node = new AudioWorkletNode(context, "jarvis-recorder");
+    context.createMediaStreamSource(stream).connect(node);
+    let closed = false;
+    return {
+      rate: context.sampleRate,
+      onFrame: callback => {
+        node.port.onmessage = (event: MessageEvent<Float32Array>) => {
+          if (!closed) callback(event.data);
+        };
+      },
+      close: () => {
+        if (closed) return;
+        closed = true;
+        node.port.onmessage = null;
+        node.disconnect();
+        for (const track of stream.getTracks()) track.stop();
+        void context?.close().catch(() => undefined);
+      },
+    };
+  } catch (error) {
+    for (const track of stream.getTracks()) track.stop();
+    void context?.close().catch(() => undefined);
+    throw error;
+  }
 }

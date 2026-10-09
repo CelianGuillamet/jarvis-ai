@@ -24,7 +24,7 @@ export class Speaker {
 
   async speak(markdown: string): Promise<void> {
     this.stop();
-    const chunks = chunkForSpeech(markdown);
+    const chunks = chunkForSpeech(markdown, 220);
     if (!chunks.length) return;
     const generation = this.generation;
     const controller = new AbortController();

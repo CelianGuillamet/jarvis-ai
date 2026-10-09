@@ -75,9 +75,15 @@ export function validateRuntimeConfig(input: Record<string, unknown>) {
   enumeration('MUTATIONS_DISABLED', ['true', 'false'], 'false');
   for (const key of ['VOICE_STT_ENABLED', 'VOICE_TTS_ENABLED'])
     enumeration(key, ['true', 'false'], 'false');
+  enumeration('VOICE_TTS_ENGINE', ['piper', 'qwen'], 'piper');
   for (const [flag, paths] of [
     ['VOICE_STT_ENABLED', ['WHISPER_CLI_PATH', 'WHISPER_MODEL_PATH']],
-    ['VOICE_TTS_ENABLED', ['PIPER_PATH', 'PIPER_VOICE_PATH']],
+    [
+      'VOICE_TTS_ENABLED',
+      env.VOICE_TTS_ENGINE === 'qwen'
+        ? ['QWEN_TTS_PYTHON', 'QWEN_TTS_REF_AUDIO', 'QWEN_TTS_REF_TEXT']
+        : ['PIPER_PATH', 'PIPER_VOICE_PATH'],
+    ],
   ] as const)
     if (env[flag] === 'true')
       for (const key of paths)

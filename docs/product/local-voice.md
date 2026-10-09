@@ -76,3 +76,29 @@ The word-error rate counts « quinze heures trente » versus « 15h30 » as erro
 - `HOME_ASSISTANT`-style device voice (Assist, Wyoming) is not used.
 - The yes/no parser now requires the entire utterance to be an affirmation or refusal of at most six words; longer natural phrasings such as « oui, vas-y envoie-le » are not accepted and must be shortened.
 - Not run in CI: engines are not available there.
+
+## Update 9 October 2026 — Jarvis voice, hands-free conversation, reply style
+
+### Spoken voice (Qwen3-TTS, designed from a description)
+
+Piper (French) did not give the wanted voice. The spoken replies now use **Qwen3-TTS** (Apache-2.0 code and weights, `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit`, run locally with `mlx-audio`) in a resident worker (`api/scripts/voice/qwen_tts_worker.py`, one model load, requests in sequence, cancellable between audio chunks). Select it with `VOICE_TTS_ENGINE=qwen`; Piper stays the default.
+
+The voice is **designed from a written description** (`api/scripts/voice/jarvis-voice-description.txt`, edited by the owner) with the VoiceDesign model, once, using `design_reference.py`. The 9.4 s result was time-stretched by 25 % (`sox tempo -s 1.25`, pitch preserved) and kept as the reference clip; the worker clones that clip for every sentence, so the voice stays identical and no real person's voice is imitated. Cloning from the already faster reference gave 4.9 s for a sentence that took 6.6 s from the slow reference, with no audio processing at run time.
+
+Install (done on this machine): `uv venv --python 3.12 ~/.jarvis/voice/qwen/.venv && uv pip install --python ~/.jarvis/voice/qwen/.venv/bin/python mlx-audio`, run `design_reference.py` once (downloads the 4 GB VoiceDesign model), then the Base model downloads on first use. The worker runs with `HF_HUB_OFFLINE=1`: nothing is downloaded at run time. Settings: `QWEN_TTS_PYTHON`, `QWEN_TTS_REF_AUDIO`, `QWEN_TTS_REF_TEXT` (absolute paths, validated at startup), optional `QWEN_TTS_MODEL`, `QWEN_TTS_LANG`, `QWEN_TTS_SPEED`.
+
+Measured on the M1 Pro (real worker, `VOICE_BENCH=1 npx jest src/voice/voice.real`): worker ready in about 4 s once cached (a cold load is about 40 s, done at API start-up), 2.7 s for a 1.5 s sentence and 2.7 s for a 4.2 s sentence. `GET /voice` reports `speech: loading` while the model loads and the chat shows « La voix de Jarvis se prépare ». Reply chunks are limited to 220 characters and the first sentence is spoken alone so playback starts early.
+
+The other voices tried (Piper Gilles/Tom/Pierre, macOS voices, Kyutai TTS 1.6B at about 3× slower than real time) were rejected by the owner. A third-party Piper model trained on film audio (`gstratto75/Jarvis_Real`) was tried at the owner's request and rejected: American English only, unusable for French. The Fish Audio « Jarvis » community voice would need a cloud API and was not integrated.
+
+### Hands-free conversation
+
+« Conversation » keeps the microphone open and removes the clicks: an adaptive energy detector (`utteranceDetector.ts`) finds the start and the end of a sentence (about 0.9 s of silence, 0.4 s pre-roll, 350 ms minimum, 28 s maximum, noise floor learned from the room), the audio is transcribed locally, **sent to the chat automatically**, the reply is read aloud, then listening resumes. States are shown in the status line: listening, hearing, transcribing, thinking, speaking. Push-to-talk with an editable transcript is still there. Sensitive actions still ask for confirmation, and spoken confirmations go through the strict yes/no parser.
+
+Safeguards: transcripts that are empty, very short or one of Whisper's stock inventions on silence (« Sous-titres réalisés par la communauté d'Amara.org », « Merci d'avoir regardé cette vidéo », …) are dropped on the server and again in the browser; the loop stops after three consecutive failures; stopping, signing out or changing account closes the microphone, aborts transcription and speech and drops late results. « Pouvoir m'interrompre » (off by default) lets speech cut Jarvis off with a 2.5× higher threshold to ignore its own voice; browser echo cancellation helps but a headset is the reliable setup.
+
+Limits: energy detection is not a speech model: loud background speech or music can trigger it, and a long thinking pause ends the sentence; no spoken wake word; the barge-in and hands-free loop were verified with synthetic signals and a fake microphone only, not with a physical microphone and speakers in a room.
+
+### Reply style
+
+The system prompt now gives Jarvis a persona (formal address, « Monsieur » unless a name is known, calm, dry wit, one proactive suggestion) and Markdown layout rules. List results (agenda, tasks, shopping, notes, mails) are laid out deterministically (`reply-format.ts`): lead-in sentence, day headings, bold times, one item per line, `#N` references kept for follow-up commands, empty results in full sentences. `JARVIS_DEFAULT_SPEECH_MODE` now defaults to `vous`. Chat paragraphs and lists have more spacing. A profile already stored for a session keeps its previous mode until you say « vouvoyez-moi ».
