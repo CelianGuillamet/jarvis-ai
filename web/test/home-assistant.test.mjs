@@ -74,7 +74,7 @@ test('connects without re-displaying the token, selects devices and disconnects 
 });
 
 test('explains a refused connection without exposing the server reply', async () => {
-  globalThis.fetch = async (url, init = {}) => new URL(url).pathname === '/home/connect'
+  globalThis.fetch = async url => new URL(url).pathname === '/home/connect'
     ? new Response(JSON.stringify({ code: 'CONFLICT', message: 'Seules les adresses du réseau local sont autorisées.' }), { status: 409 })
     : new Response(JSON.stringify({ enabled: true, connected: false, baseUrl: null, entities: [] }));
   const app = createApp({ render: () => h(modules.HomeAssistantCard) });
