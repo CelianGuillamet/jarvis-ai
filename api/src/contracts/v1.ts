@@ -1096,3 +1096,17 @@ export const RoutineResumeRequestSchema = z.strictObject({
 export type RoutineEnabledRequest = z.infer<typeof RoutineEnabledRequestSchema>;
 export type RoutineStartRequest = z.infer<typeof RoutineStartRequestSchema>;
 export type RoutineResumeRequest = z.infer<typeof RoutineResumeRequestSchema>;
+
+export const VoiceStatusSchema = z.strictObject({
+  transcription: z.enum(['disabled', 'unavailable', 'ready']),
+  speech: z.enum(['disabled', 'unavailable', 'ready']),
+});
+export type VoiceStatus = z.infer<typeof VoiceStatusSchema>;
+export const VoiceTranscriptSchema = z.strictObject({
+  text: z.string().max(2000),
+});
+export type VoiceTranscript = z.infer<typeof VoiceTranscriptSchema>;
+export const VoiceSpeakRequestSchema = z.strictObject({
+  text: z.string().trim().min(1).max(600),
+});
+export type VoiceSpeakRequest = z.infer<typeof VoiceSpeakRequestSchema>;

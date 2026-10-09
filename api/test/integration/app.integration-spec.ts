@@ -941,6 +941,9 @@ describe('API against disposable migrated PostgreSQL', () => {
         'POST /routines/runs/:id/continue',
         'POST /routines/runs/:id/cancel',
         'POST /routines/runs/:id/resume',
+        'GET /voice',
+        'POST /voice/transcribe',
+        'POST /voice/speak',
         'GET /auth/google',
         'GET /auth/google/callback',
         'GET /auth/google/status',
@@ -965,6 +968,84 @@ describe('API against disposable migrated PostgreSQL', () => {
         'POST /today/mutations',
       ].sort(),
     );
+  });
+
+  it('transcribes a bounded WAV over HTTP and refuses anything else', async () => {
+    const ownerId = 'voice-http-owner';
+    await prisma.user.create({
+      data: {
+        id: ownerId,
+        name: 'Voice HTTP',
+        email: 'voice-http@example.invalid',
+        emailVerified: true,
+      },
+    });
+    await prisma.betaInvite.create({
+      data: { email: 'voice-http@example.invalid' },
+    });
+    const token = 'voice-http-session-token';
+    await prisma.session.create({
+      data: {
+        id: 'voice-http-session',
+        token,
+        userId: ownerId,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const signature = createHmac('sha256', process.env.AUTH_SECRET!)
+      .update(token)
+      .digest('base64');
+    const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+    const header = (seconds: number) => {
+      const data = Math.round(seconds * 16000) * 2;
+      const buffer = Buffer.alloc(44 + data);
+      buffer.write('RIFF', 0, 'ascii');
+      buffer.writeUInt32LE(36 + data, 4);
+      buffer.write('WAVEfmt ', 8, 'ascii');
+      buffer.writeUInt32LE(16, 16);
+      buffer.writeUInt16LE(1, 20);
+      buffer.writeUInt16LE(1, 22);
+      buffer.writeUInt32LE(16000, 24);
+      buffer.writeUInt32LE(32000, 28);
+      buffer.writeUInt16LE(2, 32);
+      buffer.writeUInt16LE(16, 34);
+      buffer.write('data', 36, 'ascii');
+      buffer.writeUInt32LE(data, 40);
+      return buffer;
+    };
+    const post = (body: Buffer, type = 'audio/wav') =>
+      request(baseUrl)
+        .post('/voice/transcribe')
+        .set('Cookie', cookie)
+        .set('Origin', 'http://localhost:5173')
+        .set('Content-Type', type)
+        .send(body);
+    await request(baseUrl)
+      .get('/voice')
+      .set('Cookie', cookie)
+      .expect(200)
+      .expect({ transcription: 'ready', speech: 'disabled' });
+    const ok = await post(header(2)).expect(201);
+    expect(ok.body).toEqual({ text: 'Ajoute du lait à ma liste' });
+    // The server may close the socket before the oversized body is fully sent.
+    await post(header(31)).then(
+      (response) => expect(response.status).toBe(413),
+      (error: { code?: string }) => expect(error.code).toBe('EPIPE'),
+    );
+    await post(Buffer.alloc(20)).expect(400);
+    await post(header(1), 'application/octet-stream').expect(415);
+    await request(baseUrl)
+      .post('/voice/transcribe')
+      .set('Origin', 'http://localhost:5173')
+      .set('Content-Type', 'audio/wav')
+      .send(header(1))
+      .expect(401);
+    await request(baseUrl)
+      .post('/voice/speak')
+      .set('Cookie', cookie)
+      .set('Origin', 'http://localhost:5173')
+      .send({ text: 'Bonjour' })
+      .expect(409);
   });
 
   it('executes direct task and note controls without model routing and replays creation', async () => {
@@ -1160,6 +1241,7 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/home',
       '/home/discover',
       '/routines',
+      '/voice',
       '/today',
       '/jarvis/history',
       '/jarvis/activity',
@@ -1191,6 +1273,8 @@ describe('API against disposable migrated PostgreSQL', () => {
       '/routines/runs/any-id/continue',
       '/routines/runs/any-id/cancel',
       '/routines/runs/any-id/resume',
+      '/voice/transcribe',
+      '/voice/speak',
       '/auth/google/disconnect',
       '/jarvis/chat',
       '/jarvis/confirm',

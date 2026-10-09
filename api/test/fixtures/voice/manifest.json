@@ -1,0 +1,47 @@
+{
+  "voice": "fr_FR-siwis-medium",
+  "engine": "piper-tts 1.8.0",
+  "note": "Synthetic speech, not human recordings.",
+  "samples": [
+    {
+      "file": "meteo.wav",
+      "text": "Bonjour Jarvis, quel temps fait-il à Paris demain matin ?",
+      "seconds": 3.16
+    },
+    {
+      "file": "rappel.wav",
+      "text": "Rappelle-moi d'appeler Madame Dupont jeudi prochain à quinze heures trente.",
+      "seconds": 3.84
+    },
+    {
+      "file": "courses.wav",
+      "text": "Ajoute du lait, des œufs et de la farine à ma liste de courses.",
+      "seconds": 3.78
+    },
+    {
+      "file": "rendez-vous.wav",
+      "text": "Crée un rendez-vous avec Jean-Baptiste Lefèvre le vingt-quatre octobre à neuf heures.",
+      "seconds": 3.96
+    },
+    {
+      "file": "lumiere.wav",
+      "text": "Allume la lumière du salon à quarante pour cent.",
+      "seconds": 2.64
+    },
+    {
+      "file": "mails.wav",
+      "text": "Quels sont mes mails non lus d'Hélène Marchand ?",
+      "seconds": 2.39
+    },
+    {
+      "file": "tache.wav",
+      "text": "Supprime la tâche réviser le contrat de Saint-Étienne.",
+      "seconds": 3.22
+    },
+    {
+      "file": "confirmation.wav",
+      "text": "Si je dis oui, tu envoies quoi ?",
+      "seconds": 1.89
+    }
+  ]
+}

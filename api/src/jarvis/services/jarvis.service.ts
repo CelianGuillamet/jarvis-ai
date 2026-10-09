@@ -25,6 +25,7 @@ import { isUntrustedOutputTool } from '../lib/untrusted-context';
 import { PrivateCacheFence } from './private-cache-fence';
 import { HomeService } from '../../home/home.service';
 import type { RoutineStepOutcome } from '../../routines/routine-step-runner';
+import { parseYesNo } from '../lib/yes-no';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
 import { todayToolCall } from '../../today/today-tool-call';
@@ -1794,38 +1795,7 @@ export class JarvisService {
   }
 
   private parseYesNo(text: string): 'yes' | 'no' | null {
-    // normalise : minuscules + retire accents + espaces clean
-    const t = text
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .replace(/\s+/g, ' ');
-
-    // 1) NO d'abord (gère les négations)
-    if (
-      /(^|\b)(non|no|annule|cancel|stop|laisse tomber|ne fais pas|pas maintenant)(\b|$)/.test(
-        t,
-      ) ||
-      /ne .*confirme pas/.test(t) ||
-      /je .*confirme pas/.test(t) ||
-      /je .*valide pas/.test(t)
-    ) {
-      return 'no';
-    }
-
-    // 2) YES (plus naturel)
-    if (
-      /(^|\b)(oui|ok|okay|daccord|vas y|go|yes|yep|execute|lance)(\b|$)/.test(
-        t,
-      ) ||
-      /(^|\b)(confirme|confirm|valide|approve|approuve)(\b|$)/.test(t) ||
-      /\bje (confirme|valide|suis daccord|veux|peux y aller)\b/.test(t)
-    ) {
-      return 'yes';
-    }
-
-    return null;
+    return parseYesNo(text);
   }
 
   private parseRefCorrection(text: string) {

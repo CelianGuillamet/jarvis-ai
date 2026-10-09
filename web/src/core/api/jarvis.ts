@@ -7,6 +7,9 @@ import {
   PersonalFactListSchema,
   PersonalFactSchema,
   ActivityResponseSchema,
+  VoiceSpeakRequestSchema,
+  VoiceStatusSchema,
+  VoiceTranscriptSchema,
   HomeConnectRequestSchema,
   HomeDiscoverySchema,
   HomeEntitiesRequestSchema,
@@ -49,7 +52,7 @@ import type {
   InboxZeroDraftReplyRequest,
   ConversationHistoryQuery,
 } from "../contracts/v1";
-import { createHttpClient, InvalidResponseError, joinUrl } from "./http";
+import { createHttpClient, HttpError, InvalidResponseError, joinUrl } from "./http";
 import { z } from "zod";
 import { AccountProfileSchema } from "./account";
 import {
@@ -66,6 +69,19 @@ async function validated<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   const parsed = schema.safeParse(await response);
+  if (!parsed.success) throw new InvalidResponseError();
+  return parsed.data;
+}
+
+async function voiceFailure(response: Response): Promise<HttpError> {
+  if (response.status === 401) window.dispatchEvent(new Event("jarvis:session-expired"));
+  const payload: unknown = await response.json().catch(() => null);
+  return new HttpError({ message: `HTTP ${response.status}`, status: response.status, payload });
+}
+
+async function voiceJson<T>(response: Response, schema: z.ZodType<T>): Promise<T> {
+  if (!response.ok) throw await voiceFailure(response);
+  const parsed = schema.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new InvalidResponseError();
   return parsed.data;
 }
@@ -213,6 +229,28 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
         http.post<unknown>(`/routines/runs/${encodeURIComponent(id)}/resume`, checked(input, RoutineResumeRequestSchema)),
         RoutineRunSchema,
       ),
+    voiceStatus: () => validated(http.get<unknown>("/voice"), VoiceStatusSchema),
+    transcribe: async (audio: ArrayBuffer, signal: AbortSignal) => {
+      const response = await fetch(joinUrl(options.baseUrl || "", "/voice/transcribe"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "audio/wav", accept: "application/json" },
+        body: audio,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(40_000)]),
+      });
+      return (await voiceJson(response, VoiceTranscriptSchema)).text;
+    },
+    speak: async (text: string, signal: AbortSignal) => {
+      const response = await fetch(joinUrl(options.baseUrl || "", "/voice/speak"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", accept: "audio/wav" },
+        body: JSON.stringify(checked({ text }, VoiceSpeakRequestSchema)),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+      });
+      if (!response.ok) throw await voiceFailure(response);
+      return response.arrayBuffer();
+    },
     activity: (input: ConversationHistoryQuery, signal?: AbortSignal) => {
       const query = checked(input, ConversationHistoryQuerySchema);
       const params = new URLSearchParams({ limit: String(query.limit) });
