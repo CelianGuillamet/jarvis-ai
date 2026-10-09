@@ -118,6 +118,7 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/today/mutations' && request.method === 'POST') return reply(mutate(input));
     if (url.pathname === '/jarvis/history') return reply(contracts.ConversationHistoryResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, pendingCommand: null, turns }));
+    if (url.pathname === '/routines' && request.method === 'GET') return reply(contracts.RoutineListSchema.parse({ routines: [{ key: 'prepare-day', title: 'Prépare ma journée', description: 'Rassemble ton agenda du jour et tes tâches ouvertes. Lecture seule.', enabled: true, steps: [{ id: 'agenda', tool: 'calendar.list', optional: true, effect: 'read-only' }, { id: 'tasks', tool: 'todo.list', optional: false, effect: 'read-only' }] }], runs: [] }));
     if (url.pathname === '/jarvis/activity') return reply(contracts.ActivityResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, commands: [] }));
     response.statusCode = 404; reply({ error: 'Unsupported verification route' });
   } catch (error) { response.statusCode = 400; response.end(JSON.stringify({ error: error.message })); }

@@ -23,7 +23,7 @@ async function mount(shell = false) {
 }
 test('shows durable results, safe unknown guidance and bounded older pages', async () => {
   const urls = [];
-  globalThis.fetch = async url => { urls.push(url); return new Response(JSON.stringify(url.includes('cursor=') ? page([command('older', 'failed')]) : page([command('one', 'completed'), command('two', 'unknown')], 'two'))); };
+  globalThis.fetch = async url => { if (new URL(url).pathname === '/routines') return new Response(JSON.stringify({ routines: [], runs: [] })); urls.push(url); return new Response(JSON.stringify(url.includes('cursor=') ? page([command('older', 'failed')]) : page([command('one', 'completed'), command('two', 'unknown')], 'two'))); };
   const mounted = await mount();
   try {
     assert.match(document.body.textContent, /Terminée/);
