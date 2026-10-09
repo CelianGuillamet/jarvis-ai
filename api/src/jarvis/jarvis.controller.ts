@@ -20,6 +20,7 @@ import { ConversationService } from '../auth/conversation.service';
 import type { AuthenticatedRequest } from '../auth/session.guard';
 import { JarvisService } from './services/jarvis.service';
 import type { ChatDto } from './dto/chat.dto';
+import { withModelOwner } from './providers/model-budget';
 import type { ConfirmDto } from './dto/confirm.dto';
 import type { ConversationQueryDto } from '../http/query.dto';
 
@@ -47,7 +48,10 @@ export class JarvisController {
       conversationId,
       'chat',
       body.text,
-      () => this.jarvis.chat(body.text, conversationId),
+      () =>
+        withModelOwner(request.identity.userId, () =>
+          this.jarvis.chat(body.text, conversationId),
+        ),
     );
   }
 
@@ -66,7 +70,10 @@ export class JarvisController {
       conversationId,
       'confirm',
       body.actionId,
-      () => this.jarvis.confirm(body.actionId, conversationId),
+      () =>
+        withModelOwner(request.identity.userId, () =>
+          this.jarvis.confirm(body.actionId, conversationId),
+        ),
     );
   }
 

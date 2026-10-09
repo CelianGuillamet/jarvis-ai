@@ -1,8 +1,10 @@
 import { CommandRejectedError } from './command-rejected.error';
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { opsMetrics } from '../ops/ops-metrics';
+import { currentRequestId } from '../ops/request-context';
 import { CommandJournalService } from './command-journal.service';
 import {
   executeWithPolicy,
@@ -27,6 +29,8 @@ export type CommandExecution = {
 /** Records intent before side effects; confirmation responses are finalized by their adapter. */
 @Injectable()
 export class CommandExecutionService {
+  private readonly logger = new Logger('Command');
+
   constructor(private readonly prisma: PrismaService) {}
 
   async execute<T>(
@@ -121,9 +125,18 @@ export class CommandExecutionService {
         });
         if (updated.count !== 1)
           throw new ConflictException('Résultat de commande non enregistré.');
+        if (state === 'unknown') opsMetrics.commandsUnknown += 1;
+        else opsMetrics.commandsCompleted += 1;
       }
       return result;
     } catch (error) {
+      const rejected = error instanceof CommandRejectedError;
+      if (rejected) opsMetrics.commandsFailed += 1;
+      else opsMetrics.commandsUnknown += 1;
+      // Identifiers and the outcome code only: arguments and content stay out of logs.
+      this.logger.warn(
+        `request=${currentRequestId() ?? 'none'} command=${id} tool=${input.toolName} outcome=${rejected ? error.code : 'EXECUTION_UNCERTAIN'}`,
+      );
       // An unavailable database can leave executing intent; never retry the effect.
       await this.prisma.command
         .updateMany({
