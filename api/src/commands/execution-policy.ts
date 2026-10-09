@@ -8,6 +8,7 @@ import {
   type GoogleConnectionStatus,
 } from '../jarvis/tools/tool-engine';
 import { assertMutationsAllowed } from '../ops/mutation-kill-switch';
+import { TOOL_DEFINITIONS } from '../jarvis/tools/tool-definitions';
 import type { ToolName } from '../jarvis/tools/tool-registry';
 
 export type MutationPolicyContext = {
@@ -34,7 +35,9 @@ export async function executeWithPolicy<T>(
   }
   // Simulation never enters the mutation closure, including its local writes.
   if (context.simulation) return simulate();
-  assertMutationsAllowed();
+  // Safe reads stay available while mutations are suspended.
+  if (context.capabilities.some((name) => TOOL_DEFINITIONS[name]?.sideEffect))
+    assertMutationsAllowed();
   if (context.capabilities.some((name) => /^(gmail|calendar)\./.test(name))) {
     const status = await context.loadGoogleStatus();
     for (const name of context.capabilities) {

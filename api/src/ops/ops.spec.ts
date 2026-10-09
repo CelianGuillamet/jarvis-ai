@@ -48,6 +48,19 @@ describe('mutation kill switch', () => {
     expect(opsMetrics.killSwitchRefusals).toBe(1);
   });
 
+  it('keeps read-only tools available while mutations are suspended', async () => {
+    process.env.MUTATIONS_DISABLED = 'true';
+    const read = jest.fn().mockResolvedValue('Aucun todo.');
+    await expect(
+      executeWithPolicy(
+        { ...policy(), capabilities: ['todo.list'] as never },
+        read,
+        () => 'sim',
+      ),
+    ).resolves.toBe('Aucun todo.');
+    expect(opsMetrics.killSwitchRefusals).toBe(0);
+  });
+
   it('blocks the inbox reply sender before any state change', async () => {
     process.env.MUTATIONS_DISABLED = 'true';
     const prisma = {} as PrismaService;
