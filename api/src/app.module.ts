@@ -12,6 +12,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { validateRuntimeConfig } from './config/runtime-config';
+import { OpsModule } from './ops/ops.module';
 import { CommandJournalModule } from './commands/command-journal.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { CommandJournalModule } from './commands/command-journal.module';
     JarvisModule,
     InboxZeroModule,
     PrivacyModule,
+    OpsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

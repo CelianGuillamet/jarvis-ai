@@ -72,6 +72,7 @@ export function validateRuntimeConfig(input: Record<string, unknown>) {
   }
   enumeration('PRIVACY_WORKER_ENABLED', ['true', 'false'], 'true');
   enumeration('HOME_ASSISTANT_ENABLED', ['true', 'false'], 'false');
+  enumeration('MUTATIONS_DISABLED', ['true', 'false'], 'false');
   enumeration('NODE_ENV', ['development', 'test', 'production'], 'development');
   if (env.NODE_ENV === 'production' && !env.PRIVACY_LEDGER_DIR)
     errors.push('PRIVACY_LEDGER_DIR');
@@ -115,6 +116,10 @@ export function validateRuntimeConfig(input: Record<string, unknown>) {
     'HUMAN_PROFILE_MIN_PERSIST_INTERVAL_MS',
   ])
     integer(key, 100, 300000);
+  integer('MODEL_TOTAL_DEADLINE_MS', 1000, 300000, 45000);
+  integer('MODEL_MAX_OUTPUT_TOKENS', 64, 65536, 8192);
+  integer('MODEL_USER_DAILY_CALLS', 1, 100000, 300);
+  integer('MODEL_GLOBAL_DAILY_CALLS', 1, 1000000, 2000);
   try {
     const db = new URL(env.DATABASE_URL ?? '');
     if (

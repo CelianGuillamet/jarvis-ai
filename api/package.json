@@ -24,6 +24,7 @@
     "db:migrate": "prisma migrate deploy",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "test:integration": "node scripts/test-integration.mjs",
+    "rehearse:deployment": "node scripts/rehearse-deployment.mjs",
     "test:runner": "node --test test/integration-database.test.mjs",
     "account:invite": "node scripts/manage-invite.mjs",
     "ownership": "node scripts/manage-ownership.mjs",

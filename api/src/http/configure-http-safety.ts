@@ -3,6 +3,7 @@ import { errorCodeForStatus } from '../contracts/v1';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { REQUEST_LIMITS, REQUEST_QUOTAS } from './request-limits';
+import { requestIdMiddleware } from '../ops/request-context';
 import { RequestQuotaService } from './request-quota.service';
 
 /** Register before authentication: its node adapter accepts the bounded parsed body. */
@@ -10,6 +11,7 @@ export function configureHttpSafety(app: NestExpressApplication): void {
   app.useGlobalFilters(new ApiExceptionFilter());
   const quota = app.get(RequestQuotaService);
   app.disable('x-powered-by');
+  app.use(requestIdMiddleware);
   app.set('trust proxy', false);
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.set({

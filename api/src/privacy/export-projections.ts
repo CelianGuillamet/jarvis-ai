@@ -24,6 +24,18 @@ export const EXPORT_PROJECTIONS = {
     'createdAt',
     'updatedAt',
   ],
+  RoutineSetting: ['ownerId', 'routineKey', 'enabled', 'updatedAt'],
+  RoutineRun: [
+    'ownerId',
+    'id',
+    'routineKey',
+    'requestId',
+    'state',
+    'steps',
+    'result',
+    'createdAt',
+    'updatedAt',
+  ],
   PendingAction: [
     'id',
     'sessionId',

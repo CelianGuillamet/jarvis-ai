@@ -40,6 +40,9 @@ import { JarvisReminderService } from './services/jarvis-reminder.service';
 import { JarvisHabitService } from './services/jarvis-habit.service';
 import { JarvisContactService } from './services/jarvis-contact.service';
 import { JarvisFinanceService } from './services/jarvis-finance.service';
+import { RoutineService } from '../routines/routine.service';
+import { RoutinesController } from '../routines/routines.controller';
+import { ROUTINE_STEP_RUNNER } from '../routines/routine-step-runner';
 import { PersonalMemoryService } from '../memory/personal-memory.service';
 import { PersonalMemoryController } from '../memory/personal-memory.controller';
 
@@ -58,6 +61,8 @@ import { PersonalMemoryController } from '../memory/personal-memory.controller';
       useFactory: createWeatherProvider,
     },
     PersonalMemoryService,
+    RoutineService,
+    { provide: ROUTINE_STEP_RUNNER, useExisting: JarvisService },
     ActivityService,
     TodayReadService,
     TodayTargetService,
@@ -86,7 +91,12 @@ import { PersonalMemoryController } from '../memory/personal-memory.controller';
     JarvisContactService,
     JarvisFinanceService,
   ],
-  controllers: [JarvisController, TodayController, PersonalMemoryController],
+  controllers: [
+    JarvisController,
+    TodayController,
+    PersonalMemoryController,
+    RoutinesController,
+  ],
   exports: [JarvisService],
 })
 export class JarvisModule {}

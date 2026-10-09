@@ -8,7 +8,7 @@ datasource db {
 
 model Todo {
   ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String    @id @default(uuid())
   text      String
   done      Boolean   @default(false)
@@ -20,7 +20,7 @@ model Todo {
 
 model CalendarEvent {
   ownerId   String
-  owner     User    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String   @id @default(uuid())
   title     String
   when      DateTime
@@ -31,7 +31,7 @@ model CalendarEvent {
 
 model Note {
   ownerId   String
-  owner     User    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String   @id @default(uuid())
   title     String?
   text      String
@@ -51,6 +51,35 @@ model HomeAssistantConnection {
   updatedAt      DateTime @updatedAt
 }
 
+model RoutineSetting {
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  routineKey String
+  enabled    Boolean
+  updatedAt  DateTime @updatedAt
+
+  @@id([ownerId, routineKey])
+}
+
+model RoutineRun {
+  ownerId         String
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  id              String   @id @default(uuid())
+  conversationId  String
+  routineKey      String
+  requestId       String
+  state           String
+  steps           Json
+  result          String?
+  cancelRequested Boolean  @default(false)
+  revision        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([ownerId, requestId])
+  @@index([ownerId, createdAt])
+}
+
 model PersonalFact {
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -65,7 +94,7 @@ model PersonalFact {
 
 model ShoppingItem {
   ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id        String    @id @default(uuid())
   text      String
   bought    Boolean   @default(false)
@@ -82,6 +111,7 @@ model PendingAction {
   argsJson  String
   createdAt DateTime @default(now())
   expiresAt DateTime
+
   @@index([expiresAt, id], map: "PendingAction_expiry_idx")
 }
 
@@ -101,18 +131,18 @@ model JarvisLog {
 }
 
 model GoogleOAuthToken {
-  generation String @default(uuid())
-  integrationAccountId String? @unique
-  integrationAccount IntegrationAccount? @relation(fields: [integrationAccountId], references: [id], onDelete: Restrict)
-  id           String    @id @default(uuid())
-  sessionId    String    @unique
-  refreshToken String
-  accessToken  String?
-  tokenType    String?
-  scope        String?
-  expiryDate   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  generation           String              @default(uuid())
+  integrationAccountId String?             @unique
+  integrationAccount   IntegrationAccount? @relation(fields: [integrationAccountId], references: [id], onDelete: Restrict)
+  id                   String              @id @default(uuid())
+  sessionId            String              @unique
+  refreshToken         String
+  accessToken          String?
+  tokenType            String?
+  scope                String?
+  expiryDate           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 }
 
 model JarvisHumanProfile {
@@ -209,30 +239,30 @@ model JarvisWorkflowMemory {
 }
 
 model JarvisGoal {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   sessionId    String
   title        String
   description  String?
-  priority     Int      @default(0)
+  priority     Int       @default(0)
   targetDate   DateTime?
-  status       String   @default("active")
+  status       String    @default("active")
   parentGoalId String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([sessionId, status, updatedAt])
   @@index([sessionId, parentGoalId])
 }
 
 model JarvisTaskDependency {
-  id              String   @id @default(uuid())
-  sessionId       String
-  sourceTaskId    String
-  targetTaskId    String
-  dependencyType  String   @default("blocks")
-  estimatedDays   Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  sessionId      String
+  sourceTaskId   String
+  targetTaskId   String
+  dependencyType String   @default("blocks")
+  estimatedDays  Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([sessionId, sourceTaskId, targetTaskId])
   @@index([sessionId, sourceTaskId])
@@ -240,109 +270,109 @@ model JarvisTaskDependency {
 }
 
 model JarvisResourceAllocation {
-  id              String   @id @default(uuid())
-  sessionId       String
-  resourceType    String
-  resourceName    String
-  allocatedHours  Float
-  usedHours       Float    @default(0)
-  allocationDate  DateTime
-  expiryDate      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(uuid())
+  sessionId      String
+  resourceType   String
+  resourceName   String
+  allocatedHours Float
+  usedHours      Float     @default(0)
+  allocationDate DateTime
+  expiryDate     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([sessionId, resourceType, allocationDate])
 }
 
 model JarvisPredictiveMetric {
-  id              String   @id @default(uuid())
-  sessionId       String
-  metricType      String
-  historicalData  String
-  forecast        String
-  accuracy        Float    @default(0.0)
-  forecastedAt    DateTime
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  sessionId      String
+  metricType     String
+  historicalData String
+  forecast       String
+  accuracy       Float    @default(0.0)
+  forecastedAt   DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([sessionId, metricType, forecastedAt])
 }
 
 model JarvisSchedulingSuggestion {
-  id              String   @id @default(uuid())
-  sessionId       String
-  taskId          String?
-  suggestedTime   DateTime
-  rationale       String
-  priority        Int      @default(0)
-  applied         Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  sessionId     String
+  taskId        String?
+  suggestedTime DateTime
+  rationale     String
+  priority      Int      @default(0)
+  applied       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([sessionId, suggestedTime])
   @@index([sessionId, applied])
 }
 
 model JarvisContextualHelp {
-  id              String   @id @default(uuid())
-  sessionId       String
-  context         String
-  contentType     String
-  content         String
-  relevanceScore  Float    @default(0.0)
-  viewedCount     Int      @default(0)
-  helpful         Boolean?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  sessionId      String
+  context        String
+  contentType    String
+  content        String
+  relevanceScore Float    @default(0.0)
+  viewedCount    Int      @default(0)
+  helpful        Boolean?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([sessionId, context, createdAt])
   @@index([sessionId, viewedCount])
 }
 
 model JarvisKnowledgeEntry {
-  id          String   @id @default(uuid())
-  sessionId   String
-  title       String
-  content     String
-  tags        String   @default("[]")
-  category    String   @default("general")
-  useCount    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  sessionId String
+  title     String
+  content   String
+  tags      String   @default("[]")
+  category  String   @default("general")
+  useCount  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sessionId, category, updatedAt])
   @@index([sessionId, useCount])
 }
 
 model JarvisTimeInsight {
-  id              String   @id @default(uuid())
-  sessionId       String
-  metricName      String
-  value           Float
-  unit            String   @default("minutes")
-  period          String
-  periodStart     DateTime
-  periodEnd       DateTime
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id          String   @id @default(uuid())
+  sessionId   String
+  metricName  String
+  value       Float
+  unit        String   @default("minutes")
+  period      String
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([sessionId, metricName, periodStart])
   @@index([sessionId, period])
 }
 
 model JarvisDelegation {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   sessionId       String
   taskDescription String
   delegateTo      String
   reason          String?
-  priority        String   @default("normal")
-  status          String   @default("pending")
+  priority        String    @default("normal")
+  status          String    @default("pending")
   dueDate         DateTime?
   resolvedAt      DateTime?
   resolutionNote  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([sessionId, status, createdAt])
   @@index([sessionId, delegateTo])
@@ -436,13 +466,13 @@ model Budget {
 }
 
 model InboxZeroSession {
-  sessionId String   @id
-  status    String   @default("active")
-  step      String   @default("urgent")
-  query     String   @default("in:inbox is:unread")
-  startedAt DateTime @default(now())
+  sessionId String    @id
+  status    String    @default("active")
+  step      String    @default("urgent")
+  query     String    @default("in:inbox is:unread")
+  startedAt DateTime  @default(now())
   scannedAt DateTime?
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime  @updatedAt
 
   items   InboxZeroItem[]
   actions InboxZeroAction[]
@@ -451,28 +481,28 @@ model InboxZeroSession {
 }
 
 model InboxZeroItem {
-  id           String   @id @default(uuid())
-  sessionId    String
-  googleAccountId String?
+  id                   String    @id @default(uuid())
+  sessionId            String
+  googleAccountId      String?
   googleAccountSubject String?
-  messageId    String
-  threadId     String
-  subject      String
-  from         String
-  to           String
-  date         DateTime
-  snippet      String
-  labelsJson   String   @default("[]")
-  gmailCategory String?
-  unread       Boolean
-  category     String
-  priority     Int      @default(0)
-  reason       String?
-  suggestedJson String?
-  status       String   @default("pending")
-  lastActionAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  messageId            String
+  threadId             String
+  subject              String
+  from                 String
+  to                   String
+  date                 DateTime
+  snippet              String
+  labelsJson           String    @default("[]")
+  gmailCategory        String?
+  unread               Boolean
+  category             String
+  priority             Int       @default(0)
+  reason               String?
+  suggestedJson        String?
+  status               String    @default("pending")
+  lastActionAt         DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   session InboxZeroSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
@@ -481,14 +511,14 @@ model InboxZeroItem {
 }
 
 model InboxZeroAction {
-  id          String   @id @default(uuid())
-  sessionId   String
-  messageId   String?
-  actionType  String
-  payloadJson String?
-  status      String   @default("completed")
+  id           String   @id @default(uuid())
+  sessionId    String
+  messageId    String?
+  actionType   String
+  payloadJson  String?
+  status       String   @default("completed")
   errorMessage String?
-  createdAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   session InboxZeroSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
@@ -497,94 +527,96 @@ model InboxZeroAction {
 
 // Application identity is separate from conversation IDs and provider tokens.
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  disabled      Boolean   @default(false)
+  id                  String                   @id
+  name                String
+  email               String                   @unique
+  emailVerified       Boolean                  @default(false)
+  image               String?
+  disabled            Boolean                  @default(false)
   // SQL execution claims increment this fence to serialize account deactivation.
-  executionEpoch BigInt    @default(0)
-  displayTimezone String  @default("Europe/Paris")
-  theme         String    @default("dark")
-  onboardingCompleted Boolean @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  todos         Todo[]
-  notes         Note[]
-  shoppingItems ShoppingItem[]
-  calendarEvents CalendarEvent[]
-  personalFacts PersonalFact[]
-  homeAssistant HomeAssistantConnection?
-  conversations Conversation[]
-  integrations  IntegrationAccount[]
-  googleOAuthStates GoogleOAuthState[]
+  executionEpoch      BigInt                   @default(0)
+  displayTimezone     String                   @default("Europe/Paris")
+  theme               String                   @default("dark")
+  onboardingCompleted Boolean                  @default(false)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  sessions            Session[]
+  accounts            Account[]
+  todos               Todo[]
+  notes               Note[]
+  shoppingItems       ShoppingItem[]
+  calendarEvents      CalendarEvent[]
+  personalFacts       PersonalFact[]
+  homeAssistant       HomeAssistantConnection?
+  routineSettings     RoutineSetting[]
+  routineRuns         RoutineRun[]
+  conversations       Conversation[]
+  integrations        IntegrationAccount[]
+  googleOAuthStates   GoogleOAuthState[]
 }
 
 // A conversation is not an authentication session or a provider identity.
 // Legacy session IDs require an explicit, verified mapping in the ownership cutover.
 model Conversation {
-  id        String   @id @default(uuid())
-  clientKey String
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  createdAt DateTime @default(now())
-  commands Command[]
+  id           String                @id @default(uuid())
+  clientKey    String
+  ownerId      String
+  owner        User                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt    DateTime              @default(now())
+  commands     Command[]
   inboxReplies InboxReplyOperation[]
-  inboxDrafts InboxReplyDraft[]
-  turns ConversationTurn[]
+  inboxDrafts  InboxReplyDraft[]
+  turns        ConversationTurn[]
 
-  @@index([ownerId, createdAt])
   @@unique([ownerId, clientKey])
   @@unique([id, ownerId])
+  @@index([ownerId, createdAt])
 }
 
 // Immutable command envelope; transitions and approvals are constrained in SQL.
 model InboxReplyOperation {
-  id String @id @default(uuid())
-  ownerId String
-  conversationId String
-  conversation Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
-  requestId String
-  digest String
-  intent Json
-  sendState String @default("pending")
+  id                String       @id @default(uuid())
+  ownerId           String
+  conversationId    String
+  conversation      Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  requestId         String
+  digest            String
+  intent            Json
+  sendState         String       @default("pending")
   providerMessageId String?
-  providerThreadId String?
-  labelsComplete Boolean @default(false)
-  localComplete Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  providerThreadId  String?
+  labelsComplete    Boolean      @default(false)
+  localComplete     Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   @@unique([ownerId, requestId])
 }
 
 model Command {
-  id String @id @default(uuid())
-  ownerId String
+  id             String               @id @default(uuid())
+  ownerId        String
   conversationId String
-  conversation Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
-  requestId String
-  toolName String
-  toolVersion String
-  source String @default("confirmation")
-  arguments Json
-  targets Json
-  digest String
-  state String @default("proposed")
-  revision Int @default(0)
+  conversation   Conversation         @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  requestId      String
+  toolName       String
+  toolVersion    String
+  source         String               @default("confirmation")
+  arguments      Json
+  targets        Json
+  digest         String
+  state          String               @default("proposed")
+  revision       Int                  @default(0)
   approvedDigest String?
-  approvedAt DateTime?
-  outcomeCode String?
-  response Json?
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-  transitions CommandTransition[]
-  compensation CommandCompensation?
-  turns ConversationTurn[]
+  approvedAt     DateTime?
+  outcomeCode    String?
+  response       Json?
+  expiresAt      DateTime
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @default(now())
+  transitions    CommandTransition[]
+  compensation   CommandCompensation?
+  turns          ConversationTurn[]
 
   @@unique([ownerId, requestId])
   @@unique([id, ownerId, conversationId])
@@ -594,62 +626,62 @@ model Command {
 
 // Durable user-visible exchanges, separate from working memory and diagnostic logs.
 model ConversationTurn {
-  id String @id @default(uuid())
-  ownerId String
+  id             String       @id @default(uuid())
+  ownerId        String
   conversationId String
-  conversation Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
-  kind String
-  inputText String
-  state String @default("started")
-  response Json?
-  commandId String?
-  command Command? @relation(fields: [commandId, ownerId, conversationId], references: [id, ownerId, conversationId], onDelete: Restrict)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  conversation   Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  kind           String
+  inputText      String
+  state          String       @default("started")
+  response       Json?
+  commandId      String?
+  command        Command?     @relation(fields: [commandId, ownerId, conversationId], references: [id, ownerId, conversationId], onDelete: Restrict)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([ownerId, conversationId, createdAt, id])
   @@index([ownerId, conversationId, commandId, createdAt, id], map: "ConversationTurn_command_history_idx")
 }
 
 model CommandTransition {
-  commandId String
-  command Command @relation(fields: [commandId], references: [id], onDelete: Restrict)
-  revision Int
-  fromState String?
-  toState String
+  commandId      String
+  command        Command  @relation(fields: [commandId], references: [id], onDelete: Restrict)
+  revision       Int
+  fromState      String?
+  toState        String
   approvedDigest String?
-  outcomeCode String?
-  createdAt DateTime @default(now())
+  outcomeCode    String?
+  createdAt      DateTime @default(now())
 
   @@id([commandId, revision])
 }
 
 // Separate from Better Auth's login Account. Tokens are migrated in JAR-014.
 model IntegrationAccount {
-  id              String @id @default(uuid())
+  id              String            @id @default(uuid())
   ownerId         String
-  owner           User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner           User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   provider        String
   providerSubject String
-  createdAt       DateTime @default(now())
+  createdAt       DateTime          @default(now())
   googleToken     GoogleOAuthToken?
 
   @@unique([provider, providerSubject])
-  @@index([ownerId, provider])
   @@unique([ownerId, provider])
+  @@index([ownerId, provider])
 }
 
 model GoogleOAuthState {
-  digest        String   @id
-  ownerId       String
-  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  authSessionId String
+  digest         String    @id
+  ownerId        String
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  authSessionId  String
   conversationId String
-  verifier      String
-  nonce         String
-  expiresAt     DateTime
-  consumedAt    DateTime?
-  createdAt     DateTime @default(now())
+  verifier       String
+  nonce          String
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime  @default(now())
 
   @@index([expiresAt])
   @@index([ownerId])
@@ -658,20 +690,20 @@ model GoogleOAuthState {
 
 // Operator-only rollback evidence. No application route exposes these snapshots.
 model LegacyOwnershipBatch {
-  id         String @id
+  id         String                  @id
   digest     String
   manifest   Json
-  appliedAt  DateTime @default(now())
+  appliedAt  DateTime                @default(now())
   restoredAt DateTime?
   records    LegacyOwnershipRecord[]
 }
 
 model LegacyOwnershipRecord {
-  batchId    String
-  batch      LegacyOwnershipBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  tableName  String
-  recordId   String
-  original   Json
+  batchId         String
+  batch           LegacyOwnershipBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  tableName       String
+  recordId        String
+  original        Json
   // Null means the record was removed from the live table into quarantine.
   assignedOwnerId String?
 
@@ -702,8 +734,8 @@ model Account {
   accessToken           String?
   refreshToken          String?
   idToken               String?
-  accessTokenExpiresAt   DateTime?
-  refreshTokenExpiresAt  DateTime?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
   scope                 String?
   password              String?
   createdAt             DateTime  @default(now())
@@ -735,22 +767,22 @@ model BetaInvite {
 
 // Inverse and expected post-state are recorded atomically with local changes.
 model CommandCompensation {
-  commandId String @id
-  command Command @relation(fields: [commandId], references: [id], onDelete: Restrict)
-  label String
-  changes Json
+  commandId  String    @id
+  command    Command   @relation(fields: [commandId], references: [id], onDelete: Restrict)
+  label      String
+  changes    Json
   consumedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 }
 
 model InboxReplyDraft {
-  ownerId String
+  ownerId        String
   conversationId String
-  conversation Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
-  messageId String
-  text String
-  version Int
-  updatedAt DateTime @updatedAt
+  conversation   Conversation @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  messageId      String
+  text           String
+  version        Int
+  updatedAt      DateTime     @updatedAt
 
   @@id([ownerId, conversationId, messageId])
 }
@@ -758,22 +790,22 @@ model InboxReplyDraft {
 // Minimal erasure receipt/tombstone survives deletion of User for restart/restore.
 // Credential payload is encrypted and never exposed by the receipt or export.
 model AccountErasureJob {
-  id String @id @default(uuid())
-  ownerId String @unique
-  receiptDigest String @unique
-  state String @default("queued")
-  revocationStatus String @default("pending")
-  encryptedTokens String?
-  attempts Int @default(0)
-  nextAttemptAt DateTime @default(now())
-  claimToken String?
-  claimedUntil DateTime?
-  requestedAt DateTime @default(now())
-  localDeletedAt DateTime?
-  completedAt DateTime?
+  id               String    @id @default(uuid())
+  ownerId          String    @unique
+  receiptDigest    String    @unique
+  state            String    @default("queued")
+  revocationStatus String    @default("pending")
+  encryptedTokens  String?
+  attempts         Int       @default(0)
+  nextAttemptAt    DateTime  @default(now())
+  claimToken       String?
+  claimedUntil     DateTime?
+  requestedAt      DateTime  @default(now())
+  localDeletedAt   DateTime?
+  completedAt      DateTime?
   receiptExpiresAt DateTime
-  retainedUntil DateTime
-  blockerCode String?
+  retainedUntil    DateTime
+  blockerCode      String?
 
   @@index([state, nextAttemptAt, claimedUntil])
   @@index([retainedUntil])

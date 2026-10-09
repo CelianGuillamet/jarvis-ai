@@ -1,3 +1,4 @@
+import { withModelOwner } from '../jarvis/providers/model-budget';
 import { InboxReplyDraftService } from './inbox-reply-draft.service';
 import {
   InboxReplyDraftResponseSchema,
@@ -159,9 +160,12 @@ export class InboxZeroController {
     body: InboxZeroDraftReplyDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.inboxZero.draftReply(
-      await this.conversations.resolve(request.identity.userId, body.sessionId),
-      body.messageId,
+    const conversationId = await this.conversations.resolve(
+      request.identity.userId,
+      body.sessionId,
+    );
+    return withModelOwner(request.identity.userId, () =>
+      this.inboxZero.draftReply(conversationId, body.messageId),
     );
   }
 }

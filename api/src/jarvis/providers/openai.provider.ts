@@ -5,6 +5,11 @@ import {
   readModelResponse,
 } from './model-response';
 import { LLMMessage, LLMProvider } from './llm.provider';
+import {
+  DEFAULT_MODEL_LIMITS,
+  ModelDeadlineError,
+  type ModelLimits,
+} from './model-limits';
 
 class OpenAIRequestError extends Error {
   constructor(
@@ -29,19 +34,29 @@ export class OpenAIProvider implements LLMProvider {
     private readonly timeoutMs = Number(
       process.env.OPENAI_TIMEOUT_MS || 30_000,
     ),
+    private readonly limits: ModelLimits = DEFAULT_MODEL_LIMITS,
   ) {}
 
   async chat(messages: LLMMessage[]): Promise<string> {
+    const deadline = Date.now() + this.limits.totalDeadlineMs;
     const tried: string[] = [];
     let firstError: unknown = null;
 
     try {
       tried.push(this.primaryModel);
-      const out = await this.chatWithModel(this.primaryModel, messages);
+      const out = await this.chatWithModel(
+        this.primaryModel,
+        messages,
+        deadline,
+      );
       if (out.trim()) return out;
       throw new Error(`Réponse vide sur ${this.primaryModel}`);
     } catch (error) {
-      if (error instanceof InvalidModelResponseError) throw error;
+      if (
+        error instanceof InvalidModelResponseError ||
+        error instanceof ModelDeadlineError
+      )
+        throw error;
       firstError = error;
     }
 
@@ -52,11 +67,18 @@ export class OpenAIProvider implements LLMProvider {
     ) {
       try {
         tried.push(this.fallbackModel);
-        const out = await this.chatWithModel(this.fallbackModel, messages);
+        const out = await this.chatWithModel(
+          this.fallbackModel,
+          messages,
+          deadline,
+        );
         if (out.trim()) return out;
         throw new Error(`Réponse vide sur ${this.fallbackModel}`);
       } catch (fallbackError) {
-        if (fallbackError instanceof InvalidModelResponseError)
+        if (
+          fallbackError instanceof InvalidModelResponseError ||
+          fallbackError instanceof ModelDeadlineError
+        )
           throw fallbackError;
         const firstMsg =
           firstError instanceof Error ? firstError.message : String(firstError);
@@ -78,9 +100,10 @@ export class OpenAIProvider implements LLMProvider {
   private async chatWithModel(
     model: string,
     messages: LLMMessage[],
+    deadline: number,
   ): Promise<string> {
     try {
-      const out = await this.chatWithCompletions(model, messages);
+      const out = await this.chatWithCompletions(model, messages, deadline);
       if (out.trim()) return out;
     } catch (error) {
       if (
@@ -90,20 +113,24 @@ export class OpenAIProvider implements LLMProvider {
         throw error;
       }
       // fallback on /responses for models/configs incompatible with chat/completions
-      const out = await this.chatWithResponses(model, messages);
+      const out = await this.chatWithResponses(model, messages, deadline);
       if (out.trim()) return out;
       throw error;
     }
 
-    return this.chatWithResponses(model, messages);
+    return this.chatWithResponses(model, messages, deadline);
   }
 
   private async chatWithCompletions(
     model: string,
     messages: LLMMessage[],
+    deadline: number,
   ): Promise<string> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(
+      () => controller.abort(),
+      this.requestBudgetMs(deadline),
+    );
 
     try {
       const res = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -115,6 +142,7 @@ export class OpenAIProvider implements LLMProvider {
         body: JSON.stringify({
           model,
           messages,
+          max_completion_tokens: this.limits.maxOutputTokens,
         }),
         signal: controller.signal,
       });
@@ -136,9 +164,13 @@ export class OpenAIProvider implements LLMProvider {
   private async chatWithResponses(
     model: string,
     messages: LLMMessage[],
+    deadline: number,
   ): Promise<string> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(
+      () => controller.abort(),
+      this.requestBudgetMs(deadline),
+    );
 
     try {
       const res = await fetch(`${this.baseUrl}/responses`, {
@@ -150,6 +182,7 @@ export class OpenAIProvider implements LLMProvider {
         body: JSON.stringify({
           model,
           input: messages.map((m) => ({ role: m.role, content: m.content })),
+          max_output_tokens: this.limits.maxOutputTokens,
         }),
         signal: controller.signal,
       });
@@ -165,5 +198,11 @@ export class OpenAIProvider implements LLMProvider {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private requestBudgetMs(deadline: number) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new ModelDeadlineError();
+    return Math.min(this.timeoutMs, remaining);
   }
 }

@@ -1022,3 +1022,77 @@ export const HomeEntitiesRequestSchema = z.strictObject({
   entityIds: z.array(HomeEntitySchema.shape.entityId).max(50),
 });
 export type HomeEntitiesRequest = z.infer<typeof HomeEntitiesRequestSchema>;
+export const RoutineStepStateSchema = z.enum([
+  'pending',
+  'executing',
+  'completed',
+  'failed',
+  'skipped',
+  'unknown',
+  'blocked',
+  'cancelled',
+]);
+export const RoutineRunStateSchema = z.enum([
+  'running',
+  'completed',
+  'failed',
+  'suspended',
+  'cancelled',
+]);
+export const RoutineStepSchema = z.strictObject({
+  id: z.string().min(1).max(40),
+  tool: z.string().min(1).max(80),
+  optional: z.boolean(),
+  state: RoutineStepStateSchema,
+  attempt: z.number().int().min(1).max(5),
+  commandId: z.string().min(1).max(128).nullable(),
+  text: z.string().max(2000).nullable(),
+  evidence: z.string().max(300).nullable(),
+});
+export const RoutineRunSchema = z.strictObject({
+  id: z.string().min(1),
+  routineKey: z.string().min(1).max(60),
+  state: RoutineRunStateSchema,
+  steps: z.array(RoutineStepSchema).max(8),
+  result: z.string().max(8000).nullable(),
+  cancelRequested: z.boolean(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type RoutineRun = z.infer<typeof RoutineRunSchema>;
+export const RoutineSummarySchema = z.strictObject({
+  key: z.string().min(1).max(60),
+  title: z.string().min(1).max(120),
+  description: z.string().min(1).max(400),
+  enabled: z.boolean(),
+  steps: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1).max(40),
+        tool: z.string().min(1).max(80),
+        optional: z.boolean(),
+        effect: z.literal('read-only'),
+      }),
+    )
+    .max(8),
+});
+export const RoutineListSchema = z.strictObject({
+  routines: z.array(RoutineSummarySchema).max(20),
+  runs: z.array(RoutineRunSchema).max(20),
+});
+export type RoutineList = z.infer<typeof RoutineListSchema>;
+export const RoutineEnabledRequestSchema = z.strictObject({
+  enabled: z.boolean(),
+});
+export const RoutineStartRequestSchema = z.strictObject({
+  sessionId: z.string().trim().min(1).max(128).optional(),
+  requestId: z.uuid(),
+});
+export const RoutineResumeRequestSchema = z.strictObject({
+  stepId: z.string().min(1).max(40),
+  resolution: z.enum(['retry', 'skip']),
+  evidence: z.string().trim().min(3).max(300),
+});
+export type RoutineEnabledRequest = z.infer<typeof RoutineEnabledRequestSchema>;
+export type RoutineStartRequest = z.infer<typeof RoutineStartRequestSchema>;
+export type RoutineResumeRequest = z.infer<typeof RoutineResumeRequestSchema>;
