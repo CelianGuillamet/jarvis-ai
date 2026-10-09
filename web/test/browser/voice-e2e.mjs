@@ -38,7 +38,7 @@ class Cdp {
   send(method, params = {}) {
     const id = this.next++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, message => { this.pending.delete(id); message.error ? reject(new Error(message.error.message)) : resolve(message.result); });
+      this.pending.set(id, message => { this.pending.delete(id); if (message.error) reject(new Error(message.error.message)); else resolve(message.result); });
       this.socket.send(JSON.stringify({ id, method, params }));
     });
   }
