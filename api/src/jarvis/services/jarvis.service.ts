@@ -23,6 +23,7 @@ import {
 import { tryDirectToolCall } from '../lib/direct-intent';
 import { isUntrustedOutputTool } from '../lib/untrusted-context';
 import { PrivateCacheFence } from './private-cache-fence';
+import type { RoutineStepOutcome } from '../../routines/routine-step-runner';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
 import { todayToolCall } from '../../today/today-tool-call';
@@ -38,6 +39,7 @@ import {
 } from '../../commands/command-compensation.service';
 import {
   BadRequestException,
+  ConflictException,
   NotFoundException,
   HttpException,
   Injectable,
@@ -1405,6 +1407,53 @@ export class JarvisService {
         ),
       () => 'Simulation : aucune modification effectuée.',
     );
+  }
+
+  async runRoutineStep(input: {
+    ownerId: string;
+    conversationId: string;
+    requestId: string;
+    call: ToolOnly;
+  }): Promise<RoutineStepOutcome> {
+    const context = await this.buildToolContext(input.conversationId);
+    if (context.prisma.ownerId !== input.ownerId)
+      throw new ConflictException('Propriétaire de commande invalide.');
+    const { call } = input;
+    if (
+      TOOL_META[call.name].sideEffect ||
+      TOOL_META[call.name].requiresConfirmation
+    )
+      throw new ConflictException(
+        'Une routine ne peut lancer que des lectures.',
+      );
+    const status = buildGoogleConnectionStatus(
+      (await this.googleTokenForConversation(input.conversationId))?.scope,
+    );
+    const gate = gateToolCall(call, status);
+    if (gate && !context.simulation)
+      return { state: 'failed', text: gate.message };
+    const result = await this.todayCommands.execute(
+      {
+        ownerId: input.ownerId,
+        conversationId: input.conversationId,
+        requestId: input.requestId,
+        call,
+        policy: {
+          ownerId: input.ownerId,
+          simulation: context.simulation,
+          capabilities: [call.name],
+          loadGoogleStatus: () => Promise.resolve(status),
+        },
+      },
+      () => Promise.resolve([]),
+      () => runTool(context, call),
+      () => 'Simulation : aucune lecture effectuée.',
+    );
+    return {
+      state: result.state,
+      commandId: result.commandId,
+      text: result.text,
+    };
   }
 
   private async persistMissionPlanIfNeeded(

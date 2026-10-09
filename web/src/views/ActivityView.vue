@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import BaseButton from '@/shared/ui/BaseButton.vue';
 import BaseCard from '@/shared/ui/BaseCard.vue';
+import RoutinesCard from '@/features/routines/RoutinesCard.vue';
 import { useAppStore } from '@/stores/appStore';
 import { usePreferencesStore } from '@/stores/preferencesStore';
 import type { ActivityResponse } from '@/core/contracts/v1';
@@ -60,6 +61,7 @@ onMounted(() => load());
       <div><h1 id="activity-title" class="text-2xl font-semibold">Activité</h1><p class="text-sm text-muted-foreground">Les résultats enregistrés de vos actions.</p></div>
       <BaseButton variant="secondary" :loading="loading" @click="load()">Actualiser</BaseButton>
     </header>
+    <RoutinesCard :key="`${app.accountEpoch}:${app.sessionId}`" />
     <BaseCard v-if="error" role="alert"><h2>Activité indisponible</h2><p>{{ error }}</p><p>Actualisez la lecture pour vérifier les résultats. Ne relancez pas une action pour cette seule raison.</p></BaseCard>
     <p v-if="loading" role="status">Chargement de l’activité…</p>
     <BaseCard v-else-if="loaded && !commands.length && !error"><h2>Aucune action enregistrée</h2><p>Vos prochaines actions apparaîtront ici.</p></BaseCard>

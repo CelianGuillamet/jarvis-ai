@@ -7,6 +7,11 @@ import {
   PersonalFactListSchema,
   PersonalFactSchema,
   ActivityResponseSchema,
+  RoutineEnabledRequestSchema,
+  RoutineListSchema,
+  RoutineResumeRequestSchema,
+  RoutineRunSchema,
+  RoutineStartRequestSchema,
   InboxReplyDraftResponseSchema,
   InboxReplyDraftSaveRequestSchema,
   TodayQuerySchema,
@@ -27,6 +32,7 @@ import {
   ConversationHistoryResponseSchema,
 } from "../contracts/v1";
 import type {
+  RoutineResumeRequest,
   AccountErasureRequest,
   InboxReplyDraftSaveRequest,
   TodayMutationRequest,
@@ -172,6 +178,29 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
           signal ? { signal } : {},
         ),
         JarvisChatResponseSchema,
+      ),
+    routines: () => validated(http.get<unknown>("/routines"), RoutineListSchema),
+    setRoutineEnabled: (key: string, enabled: boolean) =>
+      validated(
+        http.post<unknown>(`/routines/${encodeURIComponent(key)}/enabled`, checked({ enabled }, RoutineEnabledRequestSchema)),
+        RoutineListSchema,
+      ),
+    startRoutine: (key: string, requestId: string, sessionId?: string) =>
+      validated(
+        http.post<unknown>(
+          `/routines/${encodeURIComponent(key)}/runs`,
+          checked({ requestId, ...(sessionId ? { sessionId } : {}) }, RoutineStartRequestSchema),
+        ),
+        RoutineRunSchema,
+      ),
+    continueRoutine: (id: string) =>
+      validated(http.post<unknown>(`/routines/runs/${encodeURIComponent(id)}/continue`), RoutineRunSchema),
+    cancelRoutine: (id: string) =>
+      validated(http.post<unknown>(`/routines/runs/${encodeURIComponent(id)}/cancel`), RoutineRunSchema),
+    resumeRoutine: (id: string, input: RoutineResumeRequest) =>
+      validated(
+        http.post<unknown>(`/routines/runs/${encodeURIComponent(id)}/resume`, checked(input, RoutineResumeRequestSchema)),
+        RoutineRunSchema,
       ),
     activity: (input: ConversationHistoryQuery, signal?: AbortSignal) => {
       const query = checked(input, ConversationHistoryQuerySchema);
