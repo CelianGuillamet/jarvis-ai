@@ -285,6 +285,16 @@ describe('Engine runner and voice service with fake local executables', () => {
     expect(await leftovers()).toEqual(before);
   });
 
+  it('drops stock phrases invented on silence but keeps real speech', () => {
+    expect(
+      cleanTranscript("Sous-titres réalisés par la communauté d'Amara.org"),
+    ).toBe('');
+    expect(cleanTranscript('Merci d’avoir regardé cette vidéo !')).toBe('');
+    expect(cleanTranscript('Merci beaucoup pour hier')).toBe(
+      'Merci beaucoup pour hier',
+    );
+  });
+
   it('strips non-speech tags from transcripts', () => {
     expect(cleanTranscript(' [BLANC_AUDIO] ')).toBe('');
     expect(cleanTranscript('(musique)  Bonjour\n  tout le monde')).toBe(

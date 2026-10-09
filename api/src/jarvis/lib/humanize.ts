@@ -1,3 +1,4 @@
+import { addressee, formatEmptyReply, formatListReply } from './reply-format';
 import { DateTime } from 'luxon';
 import { getGmailCategoryLabel } from '../../gmail/gmail-category';
 import type { ToolExecutionPlan } from './execution-policy';
@@ -469,12 +470,17 @@ export function humanizeAskOrFinal(
     return `${intro}${trimmed}${profile.speechMode === 'vous' ? ', d’accord ?' : ', ok ?'}`;
   }
 
-  if (/^(ok|c['’]est fait|fait|bien note)/i.test(trimmed)) return trimmed;
+  if (
+    /^(ok|c['’]est fait|fait|bien noté|bien note|très bien|entendu)/i.test(
+      trimmed,
+    )
+  )
+    return trimmed;
   const intro =
     profile.speechMode === 'vous'
-      ? pick(profile, ['Bien note. ', "C'est fait. "])
-      : pick(profile, ['Bien note. ', "C'est fait. "]);
-  return maybeAddName(profile, `${intro}${trimmed}`);
+      ? pick(profile, ['Très bien. ', 'Entendu. ', 'Bien sûr. '])
+      : pick(profile, ['Bien noté. ', "C'est fait. "]);
+  return `${intro}${trimmed}`;
 }
 
 export function humanizePendingPrompt(
@@ -537,6 +543,11 @@ export function humanizeToolResult(
   const text = result.trim();
   if (!text) return result;
 
+  const empty = formatEmptyReply(text, profile);
+  if (empty !== text) return empty;
+  const laidOut = formatListReply(text, profile);
+  if (laidOut !== text) return laidOut;
+
   if (/^Briefing du jour/i.test(text)) {
     if (profile.verbosity === 'brief') return text;
     const intro =
@@ -568,10 +579,19 @@ export function humanizeToolResult(
     const core = text.replace(/^OK\.\s*/i, '');
     if (profile.verbosity === 'brief') return core;
 
+    const formal = profile.speechMode === 'vous';
+    const who = addressee(profile);
     const prefix = options?.fromConfirmation
-      ? pick(profile, ['Parfait, ', "C'est fait, "])
-      : pick(profile, ["C'est fait, ", 'Parfait, ']);
-    return `${prefix}${core}`;
+      ? pick(
+          profile,
+          formal ? ['Parfait', 'Entendu'] : ['Parfait', "C'est fait"],
+        )
+      : pick(
+          profile,
+          formal ? ['Très bien', 'C’est fait'] : ["C'est fait", 'Parfait'],
+        );
+    if (!formal) return `${prefix}, ${core}`;
+    return `${prefix}${who ? `, ${who}` : ''}. ${core}`;
   }
 
   if (

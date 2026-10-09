@@ -107,3 +107,56 @@ function wordErrorRate(expected: string, actual: string) {
     }, 120_000);
   },
 );
+
+const qwenRoot = join(homedir(), '.jarvis', 'voice', 'qwen');
+const qwenSettings = {
+  QWEN_TTS_PYTHON: join(qwenRoot, '.venv', 'bin', 'python'),
+  QWEN_TTS_REF_AUDIO: join(qwenRoot, 'jarvis-reference.wav'),
+  QWEN_TTS_REF_TEXT: join(qwenRoot, 'jarvis-reference.txt'),
+};
+const qwenPresent = Object.values(qwenSettings).every((p) => existsSync(p));
+
+/** The designed Jarvis voice through the real resident worker: skipped where it is not installed. */
+(qwenPresent ? describe : describe.skip)(
+  'designed voice with the real Qwen worker',
+  () => {
+    it('loads once, then speaks French sentences with a playable WAV and bounded latency', async () => {
+      const service = new VoiceService(
+        new ConfigService({
+          VOICE_TTS_ENABLED: 'true',
+          VOICE_TTS_ENGINE: 'qwen',
+          ...qwenSettings,
+        }),
+      );
+      const loadStarted = Date.now();
+      // The first request reports « loading » and starts the resident worker.
+      await expect(service.speak('Bonjour')).rejects.toMatchObject({
+        status: 503,
+      });
+      while (service.status().speech !== 'ready') {
+        if (Date.now() - loadStarted > 150_000)
+          throw new Error('worker never became ready');
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      const rows: string[] = [
+        `worker ready after ${Date.now() - loadStarted} ms`,
+      ];
+      for (const text of [
+        'Très bien, Monsieur.',
+        "Voici votre agenda : trois rendez-vous aujourd'hui, le premier à neuf heures trente.",
+      ]) {
+        const started = Date.now();
+        const wav = await service.speak(text);
+        const ms = Date.now() - started;
+        expect(wav.toString('ascii', 0, 4)).toBe('RIFF');
+        const seconds = (wav.length - 44) / 2 / wav.readUInt32LE(24);
+        expect(seconds).toBeGreaterThan(0.8);
+        rows.push(
+          `${String(ms).padStart(5)} ms for ${seconds.toFixed(1)} s of speech: « ${text} »`,
+        );
+      }
+      service.onModuleDestroy();
+      if (process.env.VOICE_BENCH) console.log(rows.join('\n'));
+    }, 240_000);
+  },
+);

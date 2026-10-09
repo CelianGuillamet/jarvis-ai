@@ -393,7 +393,7 @@ export class JarvisService {
     );
     this.defaultSpeechMode = parseSpeechMode(
       this.config.get<string>('JARVIS_DEFAULT_SPEECH_MODE'),
-      'tu',
+      'vous',
     );
     this.defaultVerbosity = parseVerbosity(
       this.config.get<string>('JARVIS_DEFAULT_VERBOSITY'),

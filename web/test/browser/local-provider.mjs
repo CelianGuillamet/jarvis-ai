@@ -104,6 +104,13 @@ async function voiceRoute(request, response, url) {
   } catch { return send(503, 'application/json', JSON.stringify({ code: 'UNAVAILABLE', message: 'Moteur vocal indisponible.' })); }
   finally { await rm(directory, { recursive: true, force: true }); }
 }
+// Layout samples equal to what the API formatter produces (api/src/jarvis/lib/reply-format.ts).
+function sampleReply(text) {
+  if (/agenda/i.test(text)) return 'Voici votre agenda, Monsieur : 3 rendez-vous.\n\n**Vendredi 09/10**\n- **09:30** — Réunion équipe (#1)\n- **12:30** — Déjeuner Marie (#2)\n\n**Samedi 10/10**\n- **10:00** — Dentiste (#3)\n\nSouhaitez-vous que je prépare ou déplace l’un d’eux ?';
+  if (/t[aâ]ches|todo/i.test(text)) return 'Voici vos tâches en cours, Monsieur :\n\n- **#1** Appeler Pepper\n- **#2** Envoyer le devis\n- **#3** Réserver le train pour Lyon';
+  if (/mail/i.test(text)) return 'Voici ce que j’ai trouvé, Monsieur — Emails non lus (2) :\n\n- **#1** [non lu] ven. 09/10 à 08:00 — Facture (a@b.c)\n  > Bonjour, veuillez trouver ci-joint la facture du mois…\n- **#2** [non lu] ven. 09/10 à 07:00 — Réunion (d@e.f)';
+  return 'Réponse du fournisseur local de vérification.';
+}
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1');
   response.setHeader('Content-Type', 'application/json');
@@ -156,7 +163,7 @@ const server = createServer(async (request, response) => {
     if (url.pathname === '/jarvis/chat') {
       const chat = contracts.ChatRequestSchema.parse(input);
       if (chat.text === 'Créer un rendez-vous de vérification') pendingAction = contracts.PendingActionViewSchema.parse({ id: randomUUID(), name: 'calendar.create', args: {}, summary: 'Créer le rendez-vous fictif', preview: 'Démonstration locale uniquement', risk: 'medium', sideEffect: true, planner: 'fixture', confidence: 'certain' });
-      const result = contracts.JarvisChatResponseSchema.parse({ ...(pendingAction ? { pending_action: pendingAction } : {}), text: pendingAction ? 'Veuillez confirmer le rendez-vous fictif.' : 'Réponse du fournisseur local de vérification.', meta: { simulation: true, sessionId: conversationId, historySaved: true } });
+      const result = contracts.JarvisChatResponseSchema.parse({ ...(pendingAction ? { pending_action: pendingAction } : {}), text: pendingAction ? 'Veuillez confirmer le rendez-vous fictif.' : sampleReply(chat.text), meta: { simulation: true, sessionId: conversationId, historySaved: true } });
       turns.push({ id: randomUUID(), kind: 'chat', inputText: chat.text, state: 'completed', response: result, command: null, createdAt: now(), updatedAt: now() });
       return reply(result);
     }

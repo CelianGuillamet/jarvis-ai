@@ -139,22 +139,31 @@
 /* Chat markdown styles */
 @layer components {
   .prose-chat {
-    @apply text-sm leading-relaxed;
+    @apply text-[15px] leading-7;
   }
   .prose-chat p {
-    @apply mb-2 last:mb-0;
+    @apply mb-3 last:mb-0;
   }
   .prose-chat ul {
-    @apply mb-2 list-disc pl-4 last:mb-0;
+    @apply mb-3 list-disc space-y-1.5 pl-5 marker:text-primary/60 last:mb-0;
   }
   .prose-chat ol {
-    @apply mb-2 list-decimal pl-4 last:mb-0;
+    @apply mb-3 list-decimal space-y-1.5 pl-5 marker:text-primary/60 last:mb-0;
   }
   .prose-chat li {
-    @apply mb-0.5;
+    @apply pl-0.5;
+  }
+  .prose-chat li > p {
+    @apply mb-1;
+  }
+  .prose-chat li > blockquote {
+    @apply my-1;
   }
   .prose-chat strong {
     @apply font-semibold text-foreground;
+  }
+  .prose-chat p > strong:only-child {
+    @apply mt-1 block text-[13px] uppercase tracking-wide text-primary/90;
   }
   .prose-chat em {
     @apply italic;

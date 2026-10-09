@@ -6,7 +6,8 @@ import type { VoiceStatus } from "@/core/contracts/v1";
 import { Dictation, type DictationPhase } from "./dictation";
 import { Speaker } from "./speaker";
 import { encodeWav16k } from "./wav";
-import { playWav, startBrowserCapture } from "./browserAudio";
+import { playWav, startBrowserCapture, openMicrophone } from "./browserAudio";
+import { Conversation, type ConversationState } from "./conversation";
 
 const emit = defineEmits<{ transcript: [text: string] }>();
 const app = useAppStore();
@@ -19,6 +20,8 @@ const speakAloud = ref(false);
 const error = ref("");
 const note = ref("");
 const elapsed = ref(0);
+const talking = ref<ConversationState>("off");
+const bargeIn = ref(false);
 let ticker: number | null = null;
 let alive = true;
 
@@ -53,6 +56,26 @@ const speaker = new Speaker({
   onError: message => { error.value = message; },
 });
 
+const conversation = new Conversation({
+  openMicrophone,
+  encode: encodeWav16k,
+  transcribe: (audio, signal) => app.jarvis.transcribe(audio, signal),
+  submit: async text => {
+    const before = chat.messages.length;
+    await chat.send(text);
+    const reply = chat.messages.slice(before).reverse().find(message => message.role === "assistant");
+    return reply ? reply.text : null;
+  },
+  speak: async reply => {
+    if (status.value?.speech === "ready") await speaker.speak(reply);
+  },
+  stopSpeaking: () => speaker.stop(),
+  onState: next => { talking.value = next; },
+  onHeard: () => { error.value = ""; },
+  onError: message => { error.value = message; },
+  bargeIn: () => bargeIn.value,
+});
+
 const lastAssistant = computed(() => {
   const last = chat.messages[chat.messages.length - 1];
   return last && last.role === "assistant" ? last : null;
@@ -62,6 +85,7 @@ let spokenId = lastAssistant.value?.id ?? null;
 watch(lastAssistant, message => {
   if (!message || message.id === spokenId) return;
   spokenId = message.id;
+  if (talking.value !== "off") return;
   if (speakAloud.value && status.value?.speech === "ready") void speaker.speak(message.text);
 });
 
@@ -71,6 +95,7 @@ watch(speakAloud, enabled => {
 });
 
 const purge = () => {
+  conversation.stop();
   dictation.cancel();
   speaker.stop();
   error.value = "";
@@ -78,6 +103,30 @@ const purge = () => {
 };
 
 watch(() => [app.accountEpoch, app.sessionId], purge, { flush: "sync" });
+
+const toggleConversation = () => {
+  error.value = "";
+  note.value = "";
+  if (talking.value === "off") {
+    dictation.cancel();
+    void conversation.start();
+  } else conversation.stop();
+};
+
+let loadingPoll: number | null = null;
+const refreshStatus = async () => {
+  try {
+    const next = await app.jarvis.voiceStatus();
+    if (!alive) return;
+    status.value = next;
+    if (next.speech !== "loading" && loadingPoll !== null) {
+      window.clearInterval(loadingPoll);
+      loadingPoll = null;
+    }
+  } catch {
+    /* Voice is optional: the chat works without it. */
+  }
+};
 
 const toggleListening = () => {
   error.value = "";
@@ -91,16 +140,13 @@ const toggleListening = () => {
 
 onMounted(async () => {
   window.addEventListener("jarvis:session-expired", purge);
-  try {
-    const next = await app.jarvis.voiceStatus();
-    if (alive) status.value = next;
-  } catch {
-    /* Voice is optional: the chat works without it. */
-  }
+  await refreshStatus();
+  if (status.value?.speech === "loading") loadingPoll = window.setInterval(() => void refreshStatus(), 3000);
 });
 
 onUnmounted(() => {
   alive = false;
+  if (loadingPoll !== null) window.clearInterval(loadingPoll);
   window.removeEventListener("jarvis:session-expired", purge);
   stopTicker();
   purge();
@@ -119,13 +165,29 @@ const available = computed(
         class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-border/60 transition hover:bg-muted/60 disabled:opacity-50"
         :class="phase === 'listening' ? 'bg-red-500/15 text-red-300' : 'text-muted-foreground hover:text-foreground'"
         :aria-pressed="phase === 'listening'"
-        :disabled="phase === 'requesting' || phase === 'transcribing'"
+        :disabled="phase === 'requesting' || phase === 'transcribing' || talking !== 'off'"
         @click="toggleListening"
       >
         <span v-if="phase === 'listening'" class="size-2 animate-pulse rounded-full bg-red-400" aria-hidden="true" />
         {{ phase === "listening" ? "Arrêter et transcrire" : "Parler" }}
       </button>
     </template>
+    <button
+      v-if="status?.transcription === 'ready'"
+      type="button"
+      class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-border/60 transition hover:bg-muted/60 disabled:opacity-50"
+      :class="talking !== 'off' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'"
+      :aria-pressed="talking !== 'off'"
+      :disabled="talking === 'starting'"
+      @click="toggleConversation"
+    >
+      <span v-if="talking !== 'off'" class="size-2 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+      {{ talking === "off" ? "Conversation" : "Terminer la conversation" }}
+    </button>
+    <label v-if="talking !== 'off' && status?.speech === 'ready'" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <input v-model="bargeIn" type="checkbox" />
+      Pouvoir m’interrompre (casque conseillé)
+    </label>
     <p v-else-if="status?.transcription === 'unavailable'" class="text-xs text-muted-foreground">
       Dictée indisponible : moteur local introuvable.
     </p>
@@ -150,6 +212,12 @@ const available = computed(
       <template v-if="phase === 'requesting'">Autorisation du micro…</template>
       <template v-else-if="phase === 'listening'">Écoute en cours ({{ elapsed }} s sur 30). Parlez, puis arrêtez.</template>
       <template v-else-if="phase === 'transcribing'">Transcription locale…</template>
+      <template v-else-if="talking === 'listening'">À l’écoute : parlez, j’envoie dès que vous marquez une pause.</template>
+      <template v-else-if="talking === 'hearing'">Je vous écoute…</template>
+      <template v-else-if="talking === 'transcribing'">Transcription locale…</template>
+      <template v-else-if="talking === 'thinking'">Jarvis réfléchit…</template>
+      <template v-else-if="talking === 'speaking'">Jarvis parle…</template>
+      <template v-else-if="status?.speech === 'loading'">La voix de Jarvis se prépare (quelques secondes)…</template>
       <template v-else-if="note">{{ note }}</template>
     </p>
     <p v-if="error" class="w-full text-xs" role="alert">{{ error }}</p>
