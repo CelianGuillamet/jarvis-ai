@@ -991,6 +991,37 @@ export const PrivacyDisclosureSchema = z
   .strict();
 export type PrivacyDisclosure = z.infer<typeof PrivacyDisclosureSchema>;
 
+export const HomeEntitySchema = z.strictObject({
+  entityId: z
+    .string()
+    .regex(/^(light|scene|sensor|binary_sensor)\.[a-z0-9_]{1,80}$/),
+  label: z.string().min(1).max(80),
+});
+export const HomeStatusSchema = z.strictObject({
+  enabled: z.boolean(),
+  connected: z.boolean(),
+  baseUrl: z.string().max(200).nullable(),
+  entities: z.array(HomeEntitySchema).max(50),
+});
+export type HomeStatus = z.infer<typeof HomeStatusSchema>;
+export const HomeConnectRequestSchema = z.strictObject({
+  baseUrl: z.string().trim().min(8).max(200),
+  token: z
+    .string()
+    .trim()
+    .min(20)
+    .max(4096)
+    .regex(/^[A-Za-z0-9._~+/=-]+$/),
+});
+export type HomeConnectRequest = z.infer<typeof HomeConnectRequestSchema>;
+export const HomeDiscoverySchema = z.strictObject({
+  entities: z.array(HomeEntitySchema).max(300),
+});
+export type HomeDiscovery = z.infer<typeof HomeDiscoverySchema>;
+export const HomeEntitiesRequestSchema = z.strictObject({
+  entityIds: z.array(HomeEntitySchema.shape.entityId).max(50),
+});
+export type HomeEntitiesRequest = z.infer<typeof HomeEntitiesRequestSchema>;
 export const RoutineStepStateSchema = z.enum([
   'pending',
   'executing',

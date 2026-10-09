@@ -4,6 +4,7 @@ import { deferredTools } from './deferred';
 import { dependencyTools } from './dependency';
 import { gmailTools } from './gmail';
 import { goalTools } from './goal';
+import { homeTools } from './home';
 import { knowledgeTools } from './knowledge';
 import { memoryTools } from './memory';
 import { missionTools } from './mission';
@@ -20,6 +21,7 @@ export const allToolDefinitions = [
   ...dependencyTools,
   ...gmailTools,
   ...goalTools,
+  ...homeTools,
   ...knowledgeTools,
   ...memoryTools,
   ...missionTools,

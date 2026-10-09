@@ -23,6 +23,7 @@ import {
 import { tryDirectToolCall } from '../lib/direct-intent';
 import { isUntrustedOutputTool } from '../lib/untrusted-context';
 import { PrivateCacheFence } from './private-cache-fence';
+import { HomeService } from '../../home/home.service';
 import type { RoutineStepOutcome } from '../../routines/routine-step-runner';
 import { TodayCommandService } from '../../today/today-command.service';
 import { TodayTargetService } from '../../today/today-target.service';
@@ -45,6 +46,7 @@ import {
   Injectable,
   Inject,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DateTime } from 'luxon';
@@ -325,6 +327,7 @@ export class JarvisService {
     @Inject(LLM_PROVIDER) private readonly llm: LLMProvider,
     @Inject(WEB_PROVIDER) private readonly web: WebProvider,
     @Inject(WEATHER_PROVIDER) private readonly weather: WeatherProvider,
+    @Optional() private readonly homeService?: HomeService,
   ) {
     this.simulation = configBool(this.config.get<string>('SIMULATION'), true);
     this.allowDefaultSession = configBool(
@@ -1191,6 +1194,8 @@ export class JarvisService {
     confirmedCall?: ToolOnly,
     targets?: Prisma.JsonValue,
   ): Promise<ToolContext> {
+    const prisma = await this.prisma.forConversation(sessionId);
+    const ownerId = prisma.ownerId;
     return {
       ...(confirmedCall &&
       requiresLocalTargets(confirmedCall) &&
@@ -1209,7 +1214,7 @@ export class JarvisService {
       ...(confirmedCall?.name === 'undo.last_action' && targets !== undefined
         ? { undoPreview: readUndoPreview(targets) }
         : {}),
-      prisma: await this.prisma.forConversation(sessionId),
+      prisma,
       memory: this.memoryStore,
       simulation: this.simulation,
       tz: this.tz,
@@ -1217,6 +1222,7 @@ export class JarvisService {
       calendar: this.calendar,
       web: this.web,
       weather: this.weather,
+      ...(this.homeService ? { home: this.homeService.forOwner(ownerId) } : {}),
       gmail: this.gmail,
       goals: this.goalStore,
       conflicts: this.conflictStore,

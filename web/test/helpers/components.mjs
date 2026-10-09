@@ -22,6 +22,7 @@ export async function loadAccountComponents() {
       export { default as AccountDataControls } from './src/features/privacy/AccountDataControls.vue';
       export { default as DeletionStatusView } from './src/views/DeletionStatusView.vue';
       export { default as SettingsView } from './src/views/SettingsView.vue';
+      export { default as HomeAssistantCard } from './src/features/home/HomeAssistantCard.vue';
       export { default as RoutinesCard } from './src/features/routines/RoutinesCard.vue';
       export { default as PersonalMemoryCard } from './src/features/memory/PersonalMemoryCard.vue';
       export { usePreferencesStore } from './src/stores/preferencesStore.ts';

@@ -7,6 +7,10 @@ import {
   PersonalFactListSchema,
   PersonalFactSchema,
   ActivityResponseSchema,
+  HomeConnectRequestSchema,
+  HomeDiscoverySchema,
+  HomeEntitiesRequestSchema,
+  HomeStatusSchema,
   RoutineEnabledRequestSchema,
   RoutineListSchema,
   RoutineResumeRequestSchema,
@@ -179,6 +183,13 @@ export function createJarvisApi(options: JarvisApiOptions = {}) {
         ),
         JarvisChatResponseSchema,
       ),
+    homeStatus: () => validated(http.get<unknown>("/home"), HomeStatusSchema),
+    homeConnect: (baseUrl: string, token: string) =>
+      validated(http.post<unknown>("/home/connect", checked({ baseUrl, token }, HomeConnectRequestSchema)), HomeStatusSchema),
+    homeDisconnect: () => validated(http.post<unknown>("/home/disconnect"), HomeStatusSchema),
+    homeDiscover: () => validated(http.get<unknown>("/home/discover"), HomeDiscoverySchema),
+    homeSetEntities: (entityIds: string[]) =>
+      validated(http.post<unknown>("/home/entities", checked({ entityIds }, HomeEntitiesRequestSchema)), HomeStatusSchema),
     routines: () => validated(http.get<unknown>("/routines"), RoutineListSchema),
     setRoutineEnabled: (key: string, enabled: boolean) =>
       validated(

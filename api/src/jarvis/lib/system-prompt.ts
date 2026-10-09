@@ -107,6 +107,22 @@ export function buildJarvisBaseSystemPrompt() {
       ],
     },
     {
+      title: 'Maison (Home Assistant)',
+      examples: [
+        { type: 'tool', name: 'home.list', args: {} },
+        {
+          type: 'tool',
+          name: 'home.light',
+          args: { entity: 'Lampe du salon', action: 'on', brightnessPct: 40 },
+        },
+        { type: 'tool', name: 'home.scene', args: { entity: 'Soirée film' } },
+      ],
+      notes: [
+        'Seuls les appareils autorisés par l’utilisateur sont accessibles ; utilise leur nom exact tel que listé par home.list.',
+        'Les lumières et scènes demandent une confirmation. Si l’intégration est désactivée ou non connectée, l’outil l’indique : ne prétends pas avoir agi.',
+      ],
+    },
+    {
       title: 'Notes',
       examples: [
         {

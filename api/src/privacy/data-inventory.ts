@@ -19,6 +19,7 @@ export const RETAINED_DATA_INVENTORY = {
   Note: { scope: 'owner', export: 'data' },
   ShoppingItem: { scope: 'owner', export: 'data' },
   PersonalFact: { scope: 'owner', export: 'data' },
+  HomeAssistantConnection: { scope: 'owner', export: 'data' },
   RoutineSetting: { scope: 'owner', export: 'data' },
   RoutineRun: { scope: 'owner', export: 'data' },
   PendingAction: { scope: 'conversation', export: 'data' },
