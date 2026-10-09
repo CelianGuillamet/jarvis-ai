@@ -1,3 +1,4 @@
+import type { HomeToolPort } from '../../home/home.service';
 import { TOOL_DEFINITIONS } from './tool-definitions';
 import type { ToolDefinition } from './define-tool';
 import { buildToolEnv } from './support/tool-env';
@@ -57,6 +58,13 @@ export {
 } from './support/tool-resolvers';
 
 export type ToolCall =
+  | { type: 'tool'; name: 'home.list'; args: Record<string, never> }
+  | {
+      type: 'tool';
+      name: 'home.light';
+      args: { entity: string; action: 'on' | 'off'; brightnessPct?: number };
+    }
+  | { type: 'tool'; name: 'home.scene'; args: { entity: string } }
   | { type: 'tool'; name: 'todo.add'; args: { text: string } }
   | { type: 'tool'; name: 'todo.list'; args: { show?: 'open' | 'all' } }
   | { type: 'tool'; name: 'todo.done'; args: { query: string } }
@@ -558,6 +566,7 @@ export type ToolContext = {
   calendar: CalendarProvider;
   web: WebProvider;
   weather: WeatherProvider;
+  home?: HomeToolPort;
   gmail: GmailProvider;
   goals?: JarvisGoalService;
   conflicts?: ConflictDetectionService;

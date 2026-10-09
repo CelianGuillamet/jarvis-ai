@@ -42,6 +42,7 @@ export const ERASURE_DELETE_ORDER = [
   'Note',
   'ShoppingItem',
   'PersonalFact',
+  'HomeAssistantConnection',
   'Command',
   'GoogleOAuthToken',
   'GoogleOAuthState',

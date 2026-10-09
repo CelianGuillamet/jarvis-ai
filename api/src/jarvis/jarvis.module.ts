@@ -1,3 +1,4 @@
+import { HomeModule } from '../home/home.module';
 import { ActivityService } from './services/activity.service';
 import { TodayController } from '../today/today.controller';
 import { TodayReadService } from '../today/today-read.service';
@@ -43,7 +44,7 @@ import { PersonalMemoryService } from '../memory/personal-memory.service';
 import { PersonalMemoryController } from '../memory/personal-memory.controller';
 
 @Module({
-  imports: [AuthModule, CommandJournalModule],
+  imports: [AuthModule, CommandJournalModule, HomeModule],
   providers: [
     {
       provide: LLM_PROVIDER,

@@ -71,6 +71,7 @@ export function validateRuntimeConfig(input: Record<string, unknown>) {
     }
   }
   enumeration('PRIVACY_WORKER_ENABLED', ['true', 'false'], 'true');
+  enumeration('HOME_ASSISTANT_ENABLED', ['true', 'false'], 'false');
   enumeration('NODE_ENV', ['development', 'test', 'production'], 'development');
   if (env.NODE_ENV === 'production' && !env.PRIVACY_LEDGER_DIR)
     errors.push('PRIVACY_LEDGER_DIR');

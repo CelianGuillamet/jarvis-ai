@@ -2,6 +2,7 @@
 import AccountDataControls from "@/features/privacy/AccountDataControls.vue";
 import AccountPrivacyCard from "@/features/privacy/AccountPrivacyCard.vue";
 import PersonalMemoryCard from "@/features/memory/PersonalMemoryCard.vue";
+import HomeAssistantCard from "@/features/home/HomeAssistantCard.vue";
 import { computed, onMounted, ref, watch } from "vue";
 
 import { TimezoneSchema } from "@/core/contracts/v1";
@@ -167,6 +168,7 @@ const connectGoogle = () => {
     </BaseCard>
 
     <PersonalMemoryCard v-if="!props.onboarding" />
+    <HomeAssistantCard v-if="!props.onboarding" />
     <AccountPrivacyCard />
     <AccountDataControls
       v-if="!props.onboarding && account"

@@ -118,6 +118,7 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/today/mutations' && request.method === 'POST') return reply(mutate(input));
     if (url.pathname === '/jarvis/history') return reply(contracts.ConversationHistoryResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, pendingCommand: null, turns }));
+    if (url.pathname === '/home' && request.method === 'GET') return reply(contracts.HomeStatusSchema.parse({ enabled: false, connected: false, baseUrl: null, entities: [] }));
     if (url.pathname === '/jarvis/activity') return reply(contracts.ActivityResponseSchema.parse({ conversationId, fetchedAt: now(), nextCursor: null, commands: [] }));
     response.statusCode = 404; reply({ error: 'Unsupported verification route' });
   } catch (error) { response.statusCode = 400; response.end(JSON.stringify({ error: error.message })); }

@@ -41,6 +41,16 @@ model Note {
 }
 
 // Facts the owner explicitly approved; never inferred from conversation text.
+model HomeAssistantConnection {
+  ownerId        String   @id
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  baseUrl        String
+  encryptedToken String
+  entities       Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model PersonalFact {
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -507,6 +517,7 @@ model User {
   shoppingItems ShoppingItem[]
   calendarEvents CalendarEvent[]
   personalFacts PersonalFact[]
+  homeAssistant HomeAssistantConnection?
   conversations Conversation[]
   integrations  IntegrationAccount[]
   googleOAuthStates GoogleOAuthState[]

@@ -67,6 +67,53 @@ export function parseToolCall(jsonText: string): ToolCall | null {
   const name = x.name as ToolName;
   const args = x.args;
 
+  if (name === 'home.list') {
+    if (Object.keys(args).length) return null;
+    return { type: 'tool', name, args: {} };
+  }
+
+  if (name === 'home.light') {
+    const { entity, action, brightnessPct } = args;
+    if (
+      typeof entity !== 'string' ||
+      !entity.trim() ||
+      entity.length > 100 ||
+      !isOneOf(action, ['on', 'off'] as const) ||
+      Object.keys(args).some(
+        (key) => !['entity', 'action', 'brightnessPct'].includes(key),
+      )
+    )
+      return null;
+    if (brightnessPct !== undefined) {
+      if (
+        action !== 'on' ||
+        typeof brightnessPct !== 'number' ||
+        !Number.isInteger(brightnessPct) ||
+        brightnessPct < 1 ||
+        brightnessPct > 100
+      )
+        return null;
+      return {
+        type: 'tool',
+        name,
+        args: { entity: entity.trim(), action, brightnessPct },
+      };
+    }
+    return { type: 'tool', name, args: { entity: entity.trim(), action } };
+  }
+
+  if (name === 'home.scene') {
+    const { entity } = args;
+    if (
+      typeof entity !== 'string' ||
+      !entity.trim() ||
+      entity.length > 100 ||
+      Object.keys(args).length !== 1
+    )
+      return null;
+    return { type: 'tool', name, args: { entity: entity.trim() } };
+  }
+
   if (name === 'todo.add') {
     if (typeof args.text !== 'string') return null;
     return { type: 'tool', name, args: { text: args.text } };

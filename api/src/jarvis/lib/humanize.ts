@@ -204,6 +204,12 @@ export function describeToolCallForHuman(
       return `supprimer tous les todos`;
     case 'todo.list':
       return `afficher ${possPlural} todos`;
+    case 'home.list':
+      return `afficher l’état de la maison`;
+    case 'home.light':
+      return `${call.args.action === 'on' ? 'allumer' : 'éteindre'} "${call.args.entity}"`;
+    case 'home.scene':
+      return `activer la scène "${call.args.entity}"`;
     case 'note.add':
       return call.args.title
         ? `ajouter la note "${call.args.title}"`

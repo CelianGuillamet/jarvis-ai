@@ -17,6 +17,13 @@ export const EXPORT_PROJECTIONS = {
   Note: ['ownerId', 'id', 'title', 'text', 'createdAt'],
   ShoppingItem: ['ownerId', 'id', 'text', 'bought', 'boughtAt', 'createdAt'],
   PersonalFact: ['ownerId', 'id', 'text', 'origin', 'createdAt', 'updatedAt'],
+  HomeAssistantConnection: [
+    'ownerId',
+    'baseUrl',
+    'entities',
+    'createdAt',
+    'updatedAt',
+  ],
   PendingAction: [
     'id',
     'sessionId',
