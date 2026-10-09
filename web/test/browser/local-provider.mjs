@@ -1,5 +1,10 @@
 // Isolated browser verification provider. Never connects to a real account or service.
 import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import * as contracts from '../../src/core/contracts/v1.ts';
 
@@ -54,10 +59,56 @@ function mutate(input) {
   results.set(requestId, result);
   return result;
 }
+// Voice bench: the real local engines when installed (see docs/product/local-voice.md), otherwise disabled.
+const voiceRoot = join(homedir(), '.jarvis', 'voice', 'models');
+const engines = {
+  whisper: process.env.WHISPER_CLI_PATH ?? '/opt/homebrew/bin/whisper-cli',
+  model: join(voiceRoot, 'ggml-small-q5_1.bin'),
+  piper: process.env.PIPER_PATH ?? join(homedir(), '.local', 'bin', 'piper'),
+  voice: join(voiceRoot, 'fr_FR-siwis-medium.onnx'),
+};
+const sttReady = existsSync(engines.whisper) && existsSync(engines.model);
+const ttsReady = existsSync(engines.piper) && existsSync(engines.voice);
+const run = (command, args, input) => new Promise((resolve, reject) => {
+  const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+  const out = [];
+  child.stdout.on('data', chunk => out.push(chunk));
+  child.on('error', reject);
+  child.on('close', code => code === 0 ? resolve(Buffer.concat(out)) : reject(new Error(`engine exit ${code}`)));
+  child.stdin.end(input ?? '');
+});
+async function voiceRoute(request, response, url) {
+  const send = (status, type, payload) => { response.statusCode = status; response.setHeader('Content-Type', type); response.end(payload); };
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) { size += chunk.length; if (size > 1_000_000) return send(413, 'application/json', '{}'); chunks.push(chunk); }
+  const body = Buffer.concat(chunks);
+  requests.push({ path: url.pathname, method: request.method, at: now() });
+  if (url.pathname === '/voice') return send(200, 'application/json', JSON.stringify(contracts.VoiceStatusSchema.parse({ transcription: sttReady ? 'ready' : 'disabled', speech: ttsReady ? 'ready' : 'disabled' })));
+  const directory = await mkdtemp(join(tmpdir(), 'jarvis-bench-'));
+  try {
+    if (url.pathname === '/voice/transcribe' && sttReady) {
+      const file = join(directory, 'audio.wav');
+      await writeFile(file, body);
+      if (process.env.VOICE_DEBUG_COPY) await writeFile(process.env.VOICE_DEBUG_COPY, body);
+      const text = (await run(engines.whisper, ['-m', engines.model, '-l', 'fr', '-nt', '-np', '-f', file])).toString('utf8').replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+      return send(201, 'application/json', JSON.stringify(contracts.VoiceTranscriptSchema.parse({ text })));
+    }
+    if (url.pathname === '/voice/speak' && ttsReady) {
+      const { text } = contracts.VoiceSpeakRequestSchema.parse(JSON.parse(body.toString('utf8')));
+      const file = join(directory, 'speech.wav');
+      await run(engines.piper, ['-m', engines.voice, '-f', file], text);
+      return send(200, 'audio/wav', await readFile(file));
+    }
+    return send(409, 'application/json', JSON.stringify({ code: 'CONFLICT', message: 'Voix désactivée.' }));
+  } catch { return send(503, 'application/json', JSON.stringify({ code: 'UNAVAILABLE', message: 'Moteur vocal indisponible.' })); }
+  finally { await rm(directory, { recursive: true, force: true }); }
+}
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1');
   response.setHeader('Content-Type', 'application/json');
   response.setHeader('Cache-Control', 'no-store');
+  if (url.pathname.startsWith('/voice')) return voiceRoute(request, response, url).catch(() => { response.statusCode = 500; response.end('{}'); });
   try {
     let body = '';
     for await (const chunk of request) { body += chunk; if (body.length > 65536) throw new Error('Fixture request too large'); }

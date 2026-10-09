@@ -12,6 +12,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { validateRuntimeConfig } from './config/runtime-config';
+import { VoiceModule } from './voice/voice.module';
 import { OpsModule } from './ops/ops.module';
 import { CommandJournalModule } from './commands/command-journal.module';
 
@@ -32,6 +33,7 @@ import { CommandJournalModule } from './commands/command-journal.module';
     InboxZeroModule,
     PrivacyModule,
     OpsModule,
+    VoiceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

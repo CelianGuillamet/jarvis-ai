@@ -3,6 +3,7 @@ import { errorCodeForStatus } from '../contracts/v1';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { REQUEST_LIMITS, REQUEST_QUOTAS } from './request-limits';
+import { VOICE_MAX_BYTES } from '../voice/wav';
 import { requestIdMiddleware } from '../ops/request-context';
 import { RequestQuotaService } from './request-quota.service';
 
@@ -35,7 +36,14 @@ export function configureHttpSafety(app: NestExpressApplication): void {
       });
       return;
     }
-    if (Number(req.headers['content-length']) > REQUEST_LIMITS.bodyBytes) {
+    const voiceUpload =
+      req.method === 'POST' &&
+      req.path === '/voice/transcribe' &&
+      !!req.is('audio/wav');
+    if (
+      Number(req.headers['content-length']) >
+      (voiceUpload ? VOICE_MAX_BYTES : REQUEST_LIMITS.bodyBytes)
+    ) {
       res.status(413).json({
         code: 'REQUEST_TOO_LARGE',
         message: 'Requête trop volumineuse.',
@@ -47,6 +55,7 @@ export function configureHttpSafety(app: NestExpressApplication): void {
       !!req.headers['transfer-encoding'];
     if (
       hasBody &&
+      !voiceUpload &&
       !req.is(['application/json', 'application/x-www-form-urlencoded'])
     ) {
       res.status(415).json({
@@ -73,6 +82,11 @@ export function configureHttpSafety(app: NestExpressApplication): void {
   });
   app.useBodyParser('json', {
     limit: REQUEST_LIMITS.bodyBytes,
+    inflate: false,
+  });
+  app.useBodyParser('raw', {
+    type: 'audio/wav',
+    limit: VOICE_MAX_BYTES,
     inflate: false,
   });
   app.useBodyParser('urlencoded', {

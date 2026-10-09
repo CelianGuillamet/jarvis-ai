@@ -2,6 +2,7 @@
 import { computed, nextTick, ref } from 'vue';
 import BaseButton from '@/shared/ui/BaseButton.vue';
 import BaseTextarea from '@/shared/ui/BaseTextarea.vue';
+import VoiceControls from '@/features/voice/VoiceControls.vue';
 
 const props = defineProps<{
   busy: boolean;
@@ -28,6 +29,11 @@ const send = () => {
   if (!text || props.busy) return;
   emit('send', text);
   draft.value = '';
+  focusComposer();
+};
+
+const addTranscript = (text: string) => {
+  draft.value = draft.value.trim() ? `${draft.value.trim()} ${text}` : text;
   focusComposer();
 };
 
@@ -110,6 +116,9 @@ const sendChoice = (choice: string) => {
             Envoyer
           </BaseButton>
         </div>
+      </div>
+      <div class="border-t border-border/30 px-3 py-1.5 empty:hidden">
+        <VoiceControls @transcript="addTranscript" />
       </div>
       <div class="flex items-center justify-between border-t border-border/30 px-3 py-1.5">
         <span class="text-[11px] text-muted-foreground">

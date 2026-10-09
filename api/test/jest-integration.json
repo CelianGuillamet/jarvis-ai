@@ -1,8 +1,15 @@
 {
   "rootDir": "..",
   "testEnvironment": "node",
-  "testMatch": ["<rootDir>/test/integration/**/*.integration-spec.ts"],
-  "setupFilesAfterEnv": ["<rootDir>/test/fixtures/integration-safety.ts"],
-  "transform": {"^.+\\.ts$": "ts-jest"},
+  "testMatch": [
+    "<rootDir>/test/integration/**/*.integration-spec.ts"
+  ],
+  "setupFilesAfterEnv": [
+    "<rootDir>/test/fixtures/integration-safety.ts",
+    "<rootDir>/test/fixtures/voice-env.ts"
+  ],
+  "transform": {
+    "^.+\\.ts$": "ts-jest"
+  },
   "testTimeout": 30000
 }
