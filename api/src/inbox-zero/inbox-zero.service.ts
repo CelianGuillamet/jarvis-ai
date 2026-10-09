@@ -27,8 +27,7 @@ import type {
 } from '../gmail/providers/gmail.provider';
 import { asGoogleIntegrationError } from '../google/google-integration.error';
 import type { LLMProvider } from '../jarvis/providers/llm.provider';
-import { OllamaProvider } from '../jarvis/providers/ollama.provider';
-import { OpenAIProvider } from '../jarvis/providers/openai.provider';
+import { createLlmProvider } from '../jarvis/providers/create-llm-provider';
 import { resolveWhenWindow } from '../jarvis/lib/resolve-when';
 
 import { InboxZeroApplyDto } from './dto/inbox-zero-apply.dto';
@@ -146,39 +145,7 @@ export class InboxZeroService {
   ) {
     this.tz = this.config.get<string>('JARVIS_TZ')?.trim() || 'Europe/Paris';
 
-    const llmProvider = (
-      this.config.get<string>('LLM_PROVIDER') || ''
-    ).toLowerCase();
-    const openAiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
-    const shouldUseOpenAi =
-      llmProvider === 'openai' || (!!openAiKey && llmProvider !== 'ollama');
-
-    if (shouldUseOpenAi && openAiKey) {
-      this.llm = new OpenAIProvider(
-        openAiKey,
-        this.config.get<string>('OPENAI_MODEL_PRIMARY') || 'gpt-5-nano',
-        this.config.get<string>('OPENAI_MODEL_FALLBACK') || 'gpt-5-mini',
-        this.config.get<string>('OPENAI_BASE_URL') ||
-          'https://api.openai.com/v1',
-        Number(this.config.get<string>('OPENAI_TIMEOUT_MS') || 30_000),
-      );
-      this.logger.log(
-        `LLM provider (InboxZero): openai (${this.config.get<string>('OPENAI_MODEL_PRIMARY') || 'gpt-5-nano'} -> ${this.config.get<string>('OPENAI_MODEL_FALLBACK') || 'gpt-5-mini'})`,
-      );
-    } else {
-      if (shouldUseOpenAi && !openAiKey) {
-        this.logger.warn(
-          'LLM_PROVIDER=openai mais OPENAI_API_KEY est vide. Fallback vers Ollama.',
-        );
-      }
-      this.llm = new OllamaProvider(
-        this.config.get('OLLAMA_URL') || 'http://localhost:11434',
-        this.config.get('OLLAMA_MODEL') || 'llama3.1:latest',
-      );
-      this.logger.log(
-        `LLM provider (InboxZero): ollama (${this.config.get('OLLAMA_MODEL') || 'llama3.1:latest'})`,
-      );
-    }
+    this.llm = createLlmProvider(this.config);
   }
 
   async scan(input: {

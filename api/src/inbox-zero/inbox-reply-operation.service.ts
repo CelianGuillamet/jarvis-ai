@@ -1,3 +1,4 @@
+import { assertMutationsAllowed } from '../ops/mutation-kill-switch';
 import {
   BadRequestException,
   ConflictException,
@@ -33,6 +34,7 @@ export class InboxReplyOperationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(input: InboxReplyIntent, steps: InboxReplySteps) {
+    assertMutationsAllowed();
     // A fixed property order gives equivalent requests the same immutable digest.
     const intent = {
       conversationId: input.conversationId,

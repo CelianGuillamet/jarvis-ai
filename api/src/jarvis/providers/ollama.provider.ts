@@ -1,5 +1,6 @@
 import { OllamaResponseSchema, readModelResponse } from './model-response';
 import { LLMMessage, LLMProvider } from './llm.provider';
+import { DEFAULT_MODEL_LIMITS, type ModelLimits } from './model-limits';
 
 export class OllamaProvider implements LLMProvider {
   readonly providerName = 'ollama';
@@ -8,6 +9,7 @@ export class OllamaProvider implements LLMProvider {
     private readonly baseUrl = process.env.OLLAMA_URL ||
       'http://localhost:11434',
     private readonly model = process.env.OLLAMA_MODEL || 'llama3.1:latest',
+    private readonly limits: ModelLimits = DEFAULT_MODEL_LIMITS,
   ) {}
 
   async chat(messages: LLMMessage[]): Promise<string> {
@@ -18,7 +20,9 @@ export class OllamaProvider implements LLMProvider {
         model: this.model,
         messages,
         stream: false,
+        options: { num_predict: this.limits.maxOutputTokens },
       }),
+      signal: AbortSignal.timeout(this.limits.totalDeadlineMs),
     });
 
     // si Ollama renvoie une erreur, on la remonte clairement
