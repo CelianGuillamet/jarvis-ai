@@ -191,8 +191,8 @@ describe('Routines on PostgreSQL', () => {
     expect(resumed.steps[1]).toMatchObject({
       state: 'completed',
       attempt: 2,
-      evidence: expect.stringContaining('Vérifié'),
     });
+    expect(resumed.steps[1].evidence).toContain('Vérifié');
     expect(effects.filter((e) => e.startsWith('todo.list'))).toEqual([
       'todo.list:1',
       'todo.list:2',
